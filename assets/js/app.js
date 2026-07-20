@@ -595,26 +595,40 @@
   /* ================= ORDER PLANNER ================= */
   // Interactive Esthemax procurement planner. Required Stock is authoritative
   // from the workbook (accessories carry manual targets); we recompute
-  //   toBuy   = max(0, requiredStock − currentStock)
+  //   need    = max(0, requiredStock − currentStock)
+  //   toBuy   = need rounded to the minimum order lot (JAR 25, Retail 50),
+  //             round-to-nearest lot: round(need / lot) × lot
   //   landing = unitUSD × usdInr × (1 + customs) + transport
   //   money   = toBuy × landing
-  // live as the user edits FX / customs / current stock.
-  const orderState = { usdInr: null, customs: null, stock: {}, cat: "All", q: "" };
+  // live as the user edits FX / customs / current stock / lot sizes.
+  const MOQ_JAR = 25, MOQ_RETAIL = 50;
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, cat: "All", q: "" };
 
   function orderInit() {
     const p = D.esthemaxOrder.params;
     if (orderState.usdInr == null) orderState.usdInr = p.usdInr;
     if (orderState.customs == null) orderState.customs = p.customsRate;
+    if (orderState.moqJar == null) orderState.moqJar = MOQ_JAR;
+    if (orderState.moqRetail == null) orderState.moqRetail = MOQ_RETAIL;
+  }
+
+  function moqFor(cat) {
+    if (cat === "JAR") return orderState.moqJar;
+    if (cat === "RETAIL") return orderState.moqRetail;
+    return 1; // accessories / samples: no lot rounding
   }
 
   function orderCompute() {
     const usd = orderState.usdInr, cus = orderState.customs;
     return D.esthemaxOrder.items.map((it, i) => {
       const current = orderState.stock[i] != null ? orderState.stock[i] : it.currentStock;
-      const toBuy = Math.max(0, Math.round((it.requiredStock - current) * 100) / 100);
+      const need = Math.max(0, Math.round((it.requiredStock - current) * 100) / 100);
+      const lot = moqFor(it.category) || 1;
+      // round-to-nearest lot: 37→25, 38→50 (jar); 51→50, 76→100 (retail)
+      const toBuy = lot > 1 ? Math.round(need / lot) * lot : need;
       const landing = it.unitUSD * usd * (1 + cus) + it.transport;
       const money = toBuy * landing;
-      return { it, i, current, toBuy, landing, money };
+      return { it, i, current, need, lot, toBuy, landing, money };
     });
   }
 
@@ -638,6 +652,8 @@
       };
       wire("ordUsd", "usdInr", false);
       wire("ordCustoms", "customs", true);
+      wire("ordMoqJar", "moqJar", false);
+      wire("ordMoqRetail", "moqRetail", false);
       const s = document.getElementById("ordSearch");
       if (s) s.oninput = (e) => { orderState.q = e.target.value.toLowerCase(); orderPaint(); };
       document.querySelectorAll("[data-ocat]").forEach((b) => {
@@ -650,7 +666,8 @@
       const reset = document.getElementById("ordReset");
       if (reset) reset.onclick = () => {
         const p = D.esthemaxOrder.params;
-        orderState.usdInr = p.usdInr; orderState.customs = p.customsRate; orderState.stock = {};
+        orderState.usdInr = p.usdInr; orderState.customs = p.customsRate;
+        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {};
         renderTab("order");
       };
       orderPaint();
@@ -663,13 +680,15 @@
     return `
       <div class="section-head">
         <h1>Esthemax Order Planner</h1>
-        <p>Reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon months. Adjust FX, customs and current stock to recompute the buy quantity and money required live.</p>
+        <p>Reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon months. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail} — to the nearest lot. Adjust FX, customs, lot sizes and current stock to recompute live.</p>
       </div>
 
       <div class="card" style="margin-bottom:18px">
         <div class="order-params">
           <label class="ord-field"><span>USD → INR</span><input id="ordUsd" type="number" step="0.01" value="${orderState.usdInr}"></label>
           <label class="ord-field"><span>Customs rate (%)</span><input id="ordCustoms" type="number" step="1" value="${+(orderState.customs * 100).toFixed(2)}"></label>
+          <label class="ord-field"><span>JAR min order</span><input id="ordMoqJar" type="number" step="1" min="1" value="${orderState.moqJar}"></label>
+          <label class="ord-field"><span>Retail min order</span><input id="ordMoqRetail" type="number" step="1" min="1" value="${orderState.moqRetail}"></label>
           <div class="ord-field"><span>Coverage</span><b>${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon mo</b></div>
           <button id="ordReset" class="ghost-btn" type="button">Reset</button>
         </div>
@@ -692,7 +711,7 @@
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      <div class="muted-note">Current stock is editable — type a new value to re-plan. Money Required = To Buy × Landing/Unit. Landing = (Unit USD × FX) + customs + transport.</div>`;
+      <div class="muted-note">Current stock is editable — type a new value to re-plan. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Money Required = To Buy × Landing/Unit. Landing = (Unit USD × FX) + customs + transport.</div>`;
   }
 
   function orderPaint() {
@@ -724,7 +743,7 @@
         <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
-        <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}</td>
+        <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
         <td class="num">${rupee(r.landing, { decimals: 0 })}</td>
         <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>
       </tr>`;
