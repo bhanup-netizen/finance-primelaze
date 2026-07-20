@@ -508,7 +508,7 @@
     return `
       <div class="section-head">
         <h1>Esthemax Market Pricing</h1>
-        <p>Full salon and doctor market price structures — old vs new (+15% MRP hike) with bulk offer tiers and effective net prices (incl. GST) per box.</p>
+        <p>Salon and doctor market pricing on the New Structure (+15% MRP hike), with bulk offer tiers and effective net prices (incl. GST) per box.</p>
       </div>
       <div class="controls">
         <div class="seg">
@@ -529,34 +529,34 @@
     const rows = (m.groups[mktGroup] || []);
     if (!rows.length) return `<div class="empty">No rows in this group.</div>`;
 
-    // Build header: skip the two identity cols we render separately (0 Sr No handled, 1 Name).
-    // Column 9 (index) is a blank spacer between Old & New — detect blanks.
-    const colIdx = [];
-    cols.forEach((c, i) => { if (i >= 2 && String(c).trim() !== "") colIdx.push(i); });
-
-    // Band grouping (Old vs New) using row-1 band markers.
+    // Only the "New Structure @15% Hike in MRP" columns are shown — the old
+    // structure is dropped. Pack Size (index 2) is product info, kept.
     const band = m.band || [];
-    let oldEnd = band.findIndex((b, i) => i > 2 && String(b).toLowerCase().includes("new"));
-    if (oldEnd < 0) oldEnd = Math.floor(cols.length / 2);
+    let newStart = band.findIndex((b, i) => i > 2 && String(b).toLowerCase().includes("new"));
+    if (newStart < 0) newStart = Math.floor(cols.length / 2);
+
+    const colIdx = [];
+    if (String(cols[2] || "").trim() !== "") colIdx.push(2); // Pack Size
+    cols.forEach((c, i) => { if (i >= newStart && String(c).trim() !== "") colIdx.push(i); });
 
     const headCells = ["<th>Sr</th>", "<th>Name</th>"].concat(
       colIdx.map((i) => {
-        const isNew = i >= oldEnd;
         const label = String(cols[i]).replace(/\n/g, " ").trim();
-        return `<th class="num" title="${esc(label)}"><span class="badge ${isNew ? "b-teal" : "b-neutral"}" style="margin-bottom:3px">${isNew ? "New" : "Old"}</span><br>${esc(label)}</th>`;
+        return `<th class="${i === 2 ? "" : "num"}" title="${esc(label)}">${esc(label)}</th>`;
       })
     ).join("");
 
     const body = rows.map((r) => {
       const cells = colIdx.map((i) => {
         const v = r.values[i];
-        return `<td class="num">${isNum(v) ? inr(v, { decimals: v % 1 ? 0 : 0 }) : (v == null ? "—" : esc(v))}</td>`;
+        if (i === 2) return `<td class="t-muted">${v == null ? "—" : esc(v)}</td>`;
+        return `<td class="num">${isNum(v) ? inr(v) : (v == null ? "—" : esc(v))}</td>`;
       }).join("");
       return `<tr><td class="num t-muted">${r.srNo}</td><td class="t-name">${esc(r.name)}</td>${cells}</tr>`;
     }).join("");
 
     return `
-      <div class="callout">${esc(mkt === "salon" ? "Salon Market" : "Doctor Market")} · ${mktGroup === "HYDROJELLYMASK" ? "Hydrojelly Mask (850ml)" : "Retail Hydrojelly (2 masks/box)"}. <b>Old</b> = current structure; <b>New</b> = +15% MRP hike structure. Offer columns show bill/MRP value and effective net price (incl. GST).</div>
+      <div class="callout teal">${esc(mkt === "salon" ? "Salon Market" : "Doctor Market")} · ${mktGroup === "HYDROJELLYMASK" ? "Hydrojelly Mask (850ml)" : "Retail Hydrojelly (2 masks/box)"} — New Structure (+15% MRP hike). Offer columns show bill/MRP value and effective net price (incl. GST) per box.</div>
       ${table(headCells, body)}
       <div class="muted-note">Scroll horizontally to see all offer tiers. Effective net prices are per box, inclusive of GST.</div>`;
   }
