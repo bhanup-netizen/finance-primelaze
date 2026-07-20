@@ -9,6 +9,28 @@
   <link rel="stylesheet" href="assets/css/styles.css" />
 </head>
 <body>
+  <!-- Login gate: the dashboard data stays AES-256-GCM encrypted until the
+       correct password decrypts it in the browser. -->
+  <div id="lockScreen" class="lock-screen">
+    <form id="lockForm" class="lock-card" autocomplete="off">
+      <div class="lock-mark">P</div>
+      <h1>Primelaze Dashboard</h1>
+      <p class="lock-sub">Enter your credentials to unlock FY 2026-27 data.</p>
+      <label class="lock-field">
+        <span>Username</span>
+        <input id="lockUser" type="text" autocomplete="username" placeholder="username" autofocus />
+      </label>
+      <label class="lock-field">
+        <span>Password</span>
+        <input id="lockPass" type="password" autocomplete="current-password" placeholder="password" />
+      </label>
+      <button id="lockBtn" type="submit" class="lock-btn">Unlock</button>
+      <div id="lockError" class="lock-error" role="alert"></div>
+    </form>
+    <div class="lock-foot">Data is encrypted at rest and decrypted locally in your browser.</div>
+  </div>
+
+  <div id="app" hidden>
   <header class="topbar">
     <div class="brand">
       <div class="brand-mark">P</div>
@@ -34,8 +56,9 @@
     <span class="dot">•</span>
     <span>Data-only management view. Figures excl. GST unless stated. Verify against source workbooks before use.</span>
   </footer>
+  </div><!-- /#app -->
 
-  <script src="assets/js/data.js"></script>
+  <script src="assets/js/data.enc.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
 </html>

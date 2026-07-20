@@ -5,6 +5,7 @@ roster, per-HQ device & Celluma targets, incentive schemes, the full price book,
 and the Esthemax salon/doctor market pricing. It is built from two source
 workbooks and runs as a **static site** with no backend and no build step.
 
+![Login](docs/login.png)
 ![Overview](docs/preview.png)
 
 ## What's inside
@@ -22,19 +23,61 @@ workbooks and runs as a **static site** with no backend and no build step.
 Light and dark themes, responsive layout, keyboard-free navigation, deep-linkable
 tabs (`#overview`, `#incentives`, …).
 
+## 🔒 Password protection
+
+The dashboard is gated behind a login screen, and — because this is a static
+site with no server — the protection is **real encryption, not a cosmetic form**:
+
+- The data payload (`assets/js/data.enc.js`) is **AES-256-GCM encrypted**. The
+  password is the decryption key (PBKDF2-SHA-256, 200 000 iterations).
+- Nothing sensitive is readable until the correct password decrypts it *locally
+  in the browser* via the Web Crypto API. Viewing page source only reveals
+  ciphertext.
+- A wrong password fails the GCM authentication tag — there is no plaintext
+  fallback.
+
+**Default credentials**
+
+| Username | Password |
+| --- | --- |
+| `primelaze` | `prime@1986` |
+
+### Changing the password
+
+```bash
+PRIMELAZE_PW='your-new-password' node scripts/encrypt_data.js
+```
+
+Then update `EXPECTED_USER` in `assets/js/app.js` if you also want a different
+username, and commit the regenerated `assets/js/data.enc.js`.
+
+### Security model (please read)
+
+- Web Crypto requires a **secure context** — the site works over `https://`
+  (GitHub Pages) and `http://localhost`, but **not** plain `http://` on a LAN IP.
+- Strength rests entirely on password secrecy: anyone with the password can
+  decrypt, and the ciphertext is downloadable, so a weak password is
+  brute-forceable offline. Use a strong password for anything truly sensitive.
+- The Pages workflow publishes **only** the encrypted app — the plaintext
+  `data.json` and the source `.xlsx` workbooks are **never** deployed to the
+  public site. They remain in the (assumed private) repository for regeneration.
+  If your repository is public, remove `source_workbooks/` and `src/data/` too.
+
 ## Project structure
 
 ```
 finance-primelaze/
 ├── index.html                 # App shell
 ├── assets/
-│   ├── css/styles.css         # Design system (light + dark)
+│   ├── css/styles.css         # Design system (light + dark) + login screen
 │   └── js/
-│       ├── app.js             # All rendering / routing (vanilla JS)
-│       └── data.js            # GENERATED — window.APP_DATA payload
-├── src/data/data.json         # GENERATED — same data, pretty JSON (easy to diff)
-├── scripts/extract_data.py    # Excel → JSON/JS extraction
-├── source_workbooks/          # The two source .xlsx files
+│       ├── app.js             # Rendering / routing + login gate (vanilla JS)
+│       └── data.enc.js        # GENERATED — AES-256-GCM encrypted data payload
+├── src/data/data.json         # GENERATED — plaintext data (private, not deployed)
+├── scripts/
+│   ├── extract_data.py        # Excel → data.json
+│   └── encrypt_data.js        # data.json → encrypted data.enc.js
+├── source_workbooks/          # The two source .xlsx files (private, not deployed)
 └── .github/workflows/pages.yml
 ```
 
@@ -51,20 +94,24 @@ python3 -m http.server 8080
 # → http://localhost:8080
 ```
 
-Data is embedded in `assets/js/data.js` as `window.APP_DATA`, so the app works
-straight from `file://` with no fetch/CORS issues.
+Because the data is encrypted and decrypted with the Web Crypto API, serve the
+site over `http://localhost` (as above) rather than opening `file://` directly —
+some browsers disable Web Crypto on `file://`. GitHub Pages serves it over
+`https://`, which always works.
 
 ## Regenerating the data
 
 The app data is derived from the two workbooks in `source_workbooks/`. After
-updating either workbook, re-run the extractor:
+updating either workbook, re-run the extractor **and** the encryptor:
 
 ```bash
 pip install openpyxl
-python3 scripts/extract_data.py
+python3 scripts/extract_data.py            # xlsx  -> src/data/data.json
+node    scripts/encrypt_data.js            # data.json -> assets/js/data.enc.js
 ```
 
-This rewrites `src/data/data.json` and `assets/js/data.js`. Commit both.
+Commit the regenerated `assets/js/data.enc.js` (and, in a private repo,
+`src/data/data.json`).
 
 **Sources**
 

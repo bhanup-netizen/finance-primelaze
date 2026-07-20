@@ -298,4 +298,46 @@ tr.total-row:hover td { background: var(--surface-3); }
 .footer .dot { color: var(--border-strong); }
 
 .pill-inline { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: var(--surface-3); color: var(--text-2); margin-left: 6px; }
+
+/* ---------- Lock screen ---------- */
+.lock-screen {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 24px;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    var(--bg);
+}
+.lock-card {
+  width: 100%; max-width: 380px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 18px; box-shadow: var(--shadow);
+  padding: 30px 28px; text-align: center;
+  display: flex; flex-direction: column; gap: 12px;
+  animation: fade .3s ease;
+}
+.lock-mark {
+  width: 52px; height: 52px; border-radius: 14px; margin: 0 auto 4px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--accent), #6d5efc);
+  color: #fff; font-weight: 800; font-size: 26px; box-shadow: var(--shadow-sm);
+}
+.lock-card h1 { font-size: 19px; margin: 0; letter-spacing: -.2px; }
+.lock-sub { margin: 0 0 6px; color: var(--text-2); font-size: 13.5px; }
+.lock-field { display: flex; flex-direction: column; gap: 5px; text-align: left; }
+.lock-field span { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.lock-field input {
+  padding: 11px 13px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font-size: 15px; font-family: inherit;
+}
+.lock-field input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.lock-btn {
+  margin-top: 6px; padding: 11px 16px; border: none; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: .15s;
+}
+.lock-btn:hover { filter: brightness(1.06); }
+.lock-btn:disabled { opacity: .6; cursor: progress; }
+.lock-error { color: var(--bad); font-size: 13px; min-height: 18px; font-weight: 600; }
+.lock-foot { color: var(--text-3); font-size: 12px; max-width: 380px; text-align: center; }
 .empty { color: var(--text-3); font-style: italic; padding: 18px; text-align: center; }

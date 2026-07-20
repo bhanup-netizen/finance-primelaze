@@ -30,11 +30,22 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Assemble public site
+        # Publish ONLY the encrypted app. The source workbooks and the
+        # plaintext data.json must never reach the public Pages site.
+        run: |
+          mkdir -p _site/assets/css _site/assets/js _site/docs
+          cp index.html _site/
+          cp assets/css/styles.css _site/assets/css/
+          cp assets/js/app.js _site/assets/js/
+          cp assets/js/data.enc.js _site/assets/js/
+          cp docs/login.png docs/preview.png _site/docs/ 2>/dev/null || true
+          echo "Published files:"; find _site -type f
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # The whole repo is a static site; root contains index.html.
-          path: "."
+          path: "_site"
 
       - name: Deploy to GitHub Pages
         id: deployment

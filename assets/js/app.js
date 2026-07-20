@@ -6,12 +6,8 @@
 (function () {
   "use strict";
 
-  const D = window.APP_DATA;
-  if (!D) {
-    document.getElementById("view").innerHTML =
-      '<div class="empty">Data failed to load. Run <code>python scripts/extract_data.py</code>.</div>';
-    return;
-  }
+  // Populated after the password decrypts the data payload (see the gate below).
+  let D = null;
 
   /* ---------------- helpers ---------------- */
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -614,9 +610,72 @@
     };
   }
 
-  // boot
-  $("#fyPill").textContent = D.meta.fiscalYear;
+  function bootApp() {
+    $("#fyPill").textContent = D.meta.fiscalYear;
+    mountTabs();
+    go(location.hash.slice(1) || "overview");
+  }
+
+  /* ---------------- login gate / decryption ---------------- */
+  const EXPECTED_USER = "primelaze";
+
+  function b64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function decryptData(password) {
+    const E = window.APP_DATA_ENC;
+    if (!E) throw new Error("Encrypted data not found. Run scripts/encrypt_data.js.");
+    if (!(window.crypto && window.crypto.subtle)) {
+      throw new Error("This browser blocks Web Crypto here. Open the site over https:// or http://localhost.");
+    }
+    const salt = b64ToBytes(E.salt), iv = b64ToBytes(E.iv), ct = b64ToBytes(E.ct);
+    const baseKey = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: E.iter, hash: E.hash || "SHA-256" },
+      baseKey, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+
+  function initGate() {
+    const screen = $("#lockScreen");
+    const app = $("#app");
+    const form = $("#lockForm");
+    const errEl = $("#lockError");
+    const btn = $("#lockBtn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.textContent = "";
+      const user = ($("#lockUser").value || "").trim();
+      const pass = $("#lockPass").value || "";
+      if (user.toLowerCase() !== EXPECTED_USER) {
+        errEl.textContent = "Invalid username or password.";
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "Unlocking…";
+      try {
+        D = await decryptData(pass); // GCM auth fails on a wrong password
+        bootApp();
+        screen.remove();
+        app.hidden = false;
+      } catch (err) {
+        errEl.textContent = "Invalid username or password.";
+        btn.disabled = false;
+        btn.textContent = "Unlock";
+        $("#lockPass").value = "";
+        $("#lockPass").focus();
+      }
+    });
+  }
+
+  // boot: theme applies immediately; data stays locked until decrypted.
   initTheme();
-  mountTabs();
-  go((location.hash.slice(1)) || "overview");
+  initGate();
 })();

@@ -7,6 +7,12 @@ npm-debug.log*
 # Verification artifacts
 .verify/
 .verify*.js
+.gate_test.js
+.shot*.js
+_site/
+
+# Plaintext data payload (superseded by the encrypted assets/js/data.enc.js)
+assets/js/data.js
 
 # OS / editor
 .DS_Store
