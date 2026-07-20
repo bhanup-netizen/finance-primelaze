@@ -12,36 +12,36 @@
   "kpis": {
     "devices": 229,
     "celluma": 120,
-    "activeReps": 12,
-    "vacant": 4,
+    "activeReps": 11,
+    "vacant": 5,
     "devicesNote": "229 machines / yr",
     "cellumaNote": "120 units / yr (new rule)",
     "repsNote": "+ Ibrahim demo; Lubdha & D.Siva joined 2 Jun",
-    "vacantNote": "Delhi/Gujarat/Kerala/Hyderabad ASM"
+    "vacantNote": "Delhi/Gujarat/Kerala/Hyderabad ASM + North-1 ZSM (Chandigarh)"
   },
   "zones": [
     {
       "name": "NORTH 1 ZONE — Punjab • Haryana P1 • J&K • Ladakh • HP • Uttarakhand • Chandigarh",
       "hqs": [
         {
-          "name": "Chandigarh HQ — Kuldeep Singh (ZSM) + Akshay Jain (ASM Jalandhar)",
+          "name": "Chandigarh HQ — Vacant ZSM (Kuldeep resigned) + Akshay Jain (ASM Jalandhar)",
           "people": [
             {
               "num": 1,
-              "name": "Kuldeep Singh",
+              "name": "Vacant North-1 ZSM",
               "role": "Zonal Sales Manager",
               "baseHQ": "Chandigarh",
               "reportsTo": "Arjun",
               "devices": 30,
               "celluma": 20,
-              "notes": "Punjab HQ Celluma 12 (Akshay IC). Kuldeep ZSM monitors — no separate count."
+              "notes": "Kuldeep Singh resigned — backfill pending (HIGH PRIORITY). Targets held on the vacant seat until backfilled. Punjab HQ Celluma 12 (Akshay IC). Kuldeep ZSM monitors — no separate count."
             },
             {
               "num": 2,
               "name": "Akshay Jain",
               "role": "Area Sales Manager",
               "baseHQ": "Jalandhar",
-              "reportsTo": "Kuldeep Singh",
+              "reportsTo": "Vacant North-1 ZSM",
               "devices": null,
               "celluma": null,
               "notes": null
@@ -250,19 +250,19 @@
     "people": [
       {
         "num": 1,
-        "name": "Kuldeep Singh",
+        "name": "Vacant North-1 ZSM",
         "designation": "Zonal Sales Manager",
         "baseHQ": "Chandigarh",
         "reportsTo": "Arjun",
         "zone": "North 1 — Chandigarh",
-        "notes": "Punjab IC (covers Chandigarh, HP, J&K, UK)"
+        "notes": "Kuldeep Singh resigned — backfill pending (HIGH PRIORITY). Was Punjab IC: Chandigarh, HP, J&K, Uttarakhand."
       },
       {
         "num": 2,
         "name": "Akshay Jain",
         "designation": "Area Sales Manager",
         "baseHQ": "Jalandhar",
-        "reportsTo": "Kuldeep Singh",
+        "reportsTo": "Vacant North-1 ZSM",
         "zone": "North 1 — Chandigarh",
         "notes": "Punjab/Haryana sub-region"
       },
@@ -412,8 +412,8 @@
       }
     ],
     "summary": {
-      "Active personnel": 12,
-      "Vacant positions": 4,
+      "Active personnel": 11,
+      "Vacant positions": 5,
       "Total roster": 18,
       "To join": 2
     }
@@ -1286,7 +1286,7 @@
     {
       "sheet": "Punjab HQ",
       "title": "Punjab HQ — North 1 (Punjab + Haryana P1 + J&K + Ladakh + HP + Uttarakhand + Chandigarh)",
-      "subtitle": "Held by: Kuldeep Singh (ZSM, Chandigarh) + Akshay Jain (ASM, Jalandhar). UPDATED: Kuldeep is pure ZSM — no separate IC target. Combined HQ = Akshay 30 only. Haryana P1 = Rohtak, Hisar, Sikar.",
+      "subtitle": "Held by: Vacant ZSM (Kuldeep resigned) + Akshay Jain (ASM, Jalandhar). UPDATED: the seat is now vacant (Kuldeep resigned) — no separate IC target. Combined HQ = Akshay 30 only. Haryana P1 = Rohtak, Hisar, Sikar.",
       "summary": [
         {
           "label": "FY25-26 Actual",
@@ -1495,13 +1495,13 @@
         }
       ],
       "highlights": [
-        "📊 Punjab HQ FY26-27: 30 machines / ₹6.66 Cr — Akshay IC only. Kuldeep ZSM (no separate IC).",
+        "📊 Punjab HQ FY26-27: 30 machines / ₹6.66 Cr — Akshay IC only. the vacant ZSM (no separate IC).",
         "💎 Largest bets: Cellina PR 8 (+700%), Biaxis Nano 8 (+700%), Magic Pulse 7 (+250%).",
         "💰 Biaxis Nano 8 × ₹38 L = ₹3.04 Cr. Biggest std value contribution at almost half the plan.",
         "🆕 New for Akshay: Polylase ND, Blauman. Each at 1 unit.",
         "🎯 Total demos: 104. Heavy demo load on demo-required products (102 + 2 direct).",
-        "👥 Kuldeep ZSM joint visits + coaching for all of Akshay's territory; no separate sales target.",
-        "🗺 Haryana split clarified: Kuldeep takes Rohtak, Hisar, Sikar; Ambika (Delhi) takes Bahadurgarh, Rewari, Faridabad, Gurgaon, Panipat."
+        "👥 the vacant ZSM joint visits + coaching for all of Akshay's territory; no separate sales target.",
+        "🗺 Haryana split clarified: the vacant ZSM covers Rohtak, Hisar, Sikar; Ambika (Delhi) takes Bahadurgarh, Rewari, Faridabad, Gurgaon, Panipat."
       ]
     },
     {
@@ -3182,6 +3182,15 @@
       "comment": "Reduce 1/person/month; quarterly.",
       "resolution": "RULE SET: 1 Celluma / IC / month (12/yr). Manager carries reportee rollup (no double-count) and covers a vacant slot at 1/mo until filled. New joinees start 3 months after joining. Quarterly 25% each. Company total = 123 units.",
       "status": "🔵 Decision"
+    },
+    {
+      "num": 22,
+      "raisedBy": "HR",
+      "location": "Team Roster · C8",
+      "topic": "North-1 ZSM resignation",
+      "comment": "Kuldeep Singh resigned.",
+      "resolution": "Seat marked vacant (North-1 ZSM, Chandigarh). Active 12→11, vacant 4→5. FY26-27 targets (30 devices / 20 Celluma) held on the vacant seat; Akshay Jain now reports to the vacant ZSM until backfill.",
+      "status": "✅ Done"
     }
   ],
   "esthemaxPrices": {

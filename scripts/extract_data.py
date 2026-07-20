@@ -501,6 +501,102 @@ def parse_order(ws):
     return {"params": params, "months": months, "items": items}
 
 
+def apply_amendments(data):
+    """Post-extraction corrections for events that happened after the source
+    workbook was authored. Applied here (not by editing the .xlsx) because an
+    openpyxl round-trip would strip the workbook's 131 cached formula values.
+    Deterministic: extraction always starts from the pristine workbook, so each
+    run reproduces the same amended result.
+
+    -- Kuldeep Singh (North-1 ZSM, Chandigarh) resigned. --
+    Seat marked vacant (matches how the workbook already shows vacancies);
+    resignation recorded in notes; FY26-27 targets held on the vacant seat
+    until backfill; Akshay Jain re-points to the vacant ZSM; headcounts move
+    active 12->11, vacant 4->5.
+    """
+    RESIGNED = "Kuldeep Singh"
+    VACANT = "Vacant North-1 ZSM"
+    NOTE = "Kuldeep Singh resigned — backfill pending (HIGH PRIORITY)."
+
+    def swap_k(s):
+        # Ordered longest-first replacements in a single pass. Substituted text
+        # uses a sentinel so later rules can't re-hit it (chained str.replace
+        # would otherwise mangle "(Kuldeep resigned)").
+        if not isinstance(s, str) or "Kuldeep" not in s:
+            return s
+        reps = [
+            (RESIGNED + " (ZSM, Chandigarh)", "Vacant ZSM «KR»"),
+            (RESIGNED + " (ZSM)", "Vacant ZSM «KR»"),
+            ("Kuldeep is pure ZSM", "the seat is now vacant «KR»"),
+            ("Kuldeep is the Zonal Sales Manager", "This ZSM seat is vacant «KR»"),
+            ("Kuldeep ZSM", "the vacant ZSM"),
+            ("Kuldeep takes", "the vacant ZSM covers"),
+            (RESIGNED, "Vacant ZSM «KR»"),
+            ("Kuldeep", "the vacant ZSM"),
+        ]
+        for a, b in reps:
+            s = s.replace(a, b)
+        return s.replace("«KR»", "(Kuldeep resigned)")
+
+    # KPIs
+    k = data["kpis"]
+    if isinstance(k.get("activeReps"), (int, float)):
+        k["activeReps"] = k["activeReps"] - 1
+    k["vacant"] = (k.get("vacant") or 0) + 1
+    vn = k.get("vacantNote") or ""
+    k["vacantNote"] = (vn + " + North-1 ZSM (Chandigarh)") if vn else "North-1 ZSM (Chandigarh)"
+
+    # Team roster
+    for p in data["roster"]["people"]:
+        if p.get("name") == RESIGNED:
+            p["name"] = VACANT
+            p["notes"] = NOTE + " Was Punjab IC: Chandigarh, HP, J&K, Uttarakhand."
+        if p.get("reportsTo") == RESIGNED:
+            p["reportsTo"] = VACANT
+    summ = data["roster"].get("summary", {})
+    for key, val in list(summ.items()):
+        if not isinstance(val, (int, float)):
+            continue
+        if "Active" in key:
+            summ[key] = val - 1
+        elif "Vacant" in key:
+            summ[key] = val + 1
+
+    # Master Dashboard zones (HQ name + person rows)
+    for z in data["zones"]:
+        for hq in z["hqs"]:
+            hq["name"] = swap_k(hq.get("name"))
+            for p in hq["people"]:
+                if p.get("name") == RESIGNED:
+                    p["name"] = VACANT
+                    p["notes"] = NOTE + " Targets held on the vacant seat until backfilled. " + (p.get("notes") or "")
+                if p.get("reportsTo") == RESIGNED:
+                    p["reportsTo"] = VACANT
+
+    # Punjab HQ target sheet (descriptive text)
+    for h in data["hqTargets"]:
+        if "Punjab" in (h.get("sheet") or ""):
+            h["subtitle"] = swap_k(h.get("subtitle"))
+            h["highlights"] = [swap_k(x) for x in h.get("highlights", [])]
+            for pl in h.get("plans", []):
+                pl["label"] = swap_k(pl.get("label"))
+
+    # Comments log audit entry
+    next_num = max((c.get("num") or 0 for c in data["comments"]), default=0) + 1
+    data["comments"].append({
+        "num": next_num,
+        "raisedBy": "HR",
+        "location": "Team Roster · C8",
+        "topic": "North-1 ZSM resignation",
+        "comment": "Kuldeep Singh resigned.",
+        "resolution": ("Seat marked vacant (North-1 ZSM, Chandigarh). Active 12→11, vacant 4→5. "
+                       "FY26-27 targets (30 devices / 20 Celluma) held on the vacant seat; Akshay "
+                       "Jain now reports to the vacant ZSM until backfill."),
+        "status": "✅ Done",
+    })
+    return data
+
+
 def main():
     dash = load_workbook(DASHBOARD, data_only=True)
     prices = load_workbook(PRICES, data_only=True)
@@ -541,6 +637,8 @@ def main():
         },
         "esthemaxOrder": parse_order(order_wb["Order Summary"]),
     }
+
+    apply_amendments(data)
 
     out_json = os.path.join(ROOT, "src", "data", "data.json")
     os.makedirs(os.path.dirname(out_json), exist_ok=True)
