@@ -18,6 +18,7 @@ workbooks and runs as a **static site** with no backend and no build step.
 | **Incentives** | Device value-slab, Celluma per-model and Esthemax 6-tier slab plans for both Sales Person and Manager, plus the master T&C. |
 | **Price Book** | Landing / quotation / standard / minimum prices for devices, Celluma models and Esthemax skincare. |
 | **Esthemax Market** | Full salon & doctor pricing matrices — old vs new (+15% MRP) structures with bulk-offer tiers and effective net prices. |
+| **Order Planner** | Interactive Esthemax procurement plan from 15 months of sales — required stock, buy quantity and landed money required, recomputing live as you edit FX, customs rate and current stock. |
 | **Review Log** | Every review comment raised by Surya / HR / management, with resolution and status. |
 
 Light and dark themes, responsive layout, keyboard-free navigation, deep-linkable
@@ -118,6 +119,10 @@ Commit the regenerated `assets/js/data.enc.js` (and, in a private repo,
 - `Primelaze_Unified_Dashboard_FY2627.xlsx` — master dashboard, roster,
   incentive/cost tabs and the 9 regional HQ sheets.
 - `Esthemax_prices_working.xlsx` — Salon Market and Doctor Market price tables.
+- `Esthemax_Order_Calculation.xlsx` — 15 months of Esthemax sales, stock levels
+  and landed-cost inputs behind the Order Planner. Required stock is taken as
+  authoritative from the workbook (accessory targets are manual, not derivable
+  from the average); the app recomputes to-buy and money required from it.
 
 ## Deploying to GitHub Pages
 

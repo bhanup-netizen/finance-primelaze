@@ -39,7 +39,7 @@ jobs:
           cp assets/css/styles.css _site/assets/css/
           cp assets/js/app.js _site/assets/js/
           cp assets/js/data.enc.js _site/assets/js/
-          cp docs/login.png docs/preview.png _site/docs/ 2>/dev/null || true
+          cp docs/*.png _site/docs/ 2>/dev/null || true
           echo "Published files:"; find _site -type f
 
       - name: Upload artifact

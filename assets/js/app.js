@@ -69,8 +69,17 @@
     { id: "incentives", label: "Incentives", render: renderIncentives },
     { id: "prices", label: "Price Book", render: renderPrices },
     { id: "esthemax", label: "Esthemax Market", render: renderEsthemax },
+    { id: "order", label: "Order Planner", render: renderOrder },
     { id: "review", label: "Review Log", render: renderReview },
   ];
+
+  // rupees → short ₹ Cr / ₹ L / ₹ form
+  function rupeeShort(v) {
+    if (!isNum(v)) return "—";
+    if (v >= 1e7) return "₹" + (v / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 2 }) + " Cr";
+    if (v >= 1e5) return "₹" + (v / 1e5).toLocaleString("en-IN", { maximumFractionDigits: 2 }) + " L";
+    return "₹" + inr(v);
+  }
 
   /* ================= OVERVIEW ================= */
   function renderOverview() {
@@ -583,7 +592,161 @@
       ${table(head, rows)}`;
   }
 
+  /* ================= ORDER PLANNER ================= */
+  // Interactive Esthemax procurement planner. Required Stock is authoritative
+  // from the workbook (accessories carry manual targets); we recompute
+  //   toBuy   = max(0, requiredStock − currentStock)
+  //   landing = unitUSD × usdInr × (1 + customs) + transport
+  //   money   = toBuy × landing
+  // live as the user edits FX / customs / current stock.
+  const orderState = { usdInr: null, customs: null, stock: {}, cat: "All", q: "" };
+
+  function orderInit() {
+    const p = D.esthemaxOrder.params;
+    if (orderState.usdInr == null) orderState.usdInr = p.usdInr;
+    if (orderState.customs == null) orderState.customs = p.customsRate;
+  }
+
+  function orderCompute() {
+    const usd = orderState.usdInr, cus = orderState.customs;
+    return D.esthemaxOrder.items.map((it, i) => {
+      const current = orderState.stock[i] != null ? orderState.stock[i] : it.currentStock;
+      const toBuy = Math.max(0, Math.round((it.requiredStock - current) * 100) / 100);
+      const landing = it.unitUSD * usd * (1 + cus) + it.transport;
+      const money = toBuy * landing;
+      return { it, i, current, toBuy, landing, money };
+    });
+  }
+
+  function sparkline(monthly) {
+    const vals = monthly.map((v) => (isNum(v) ? v : 0));
+    const max = Math.max(...vals, 1);
+    const w = 84, h = 22, n = vals.length;
+    const pts = vals.map((v, i) => `${((i / (n - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 3) - 1.5).toFixed(1)}`).join(" ");
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg>`;
+  }
+
+  function renderOrder() {
+    orderInit();
+    setTimeout(() => {
+      const wire = (id, key, factor) => {
+        const el = document.getElementById(id);
+        if (el) el.oninput = (e) => {
+          const v = parseFloat(e.target.value);
+          if (!isNaN(v)) { orderState[key] = factor ? v / 100 : v; orderPaint(); }
+        };
+      };
+      wire("ordUsd", "usdInr", false);
+      wire("ordCustoms", "customs", true);
+      const s = document.getElementById("ordSearch");
+      if (s) s.oninput = (e) => { orderState.q = e.target.value.toLowerCase(); orderPaint(); };
+      document.querySelectorAll("[data-ocat]").forEach((b) => {
+        b.onclick = () => {
+          orderState.cat = b.dataset.ocat;
+          document.querySelectorAll("[data-ocat]").forEach((x) => x.classList.toggle("active", x === b));
+          orderPaint();
+        };
+      });
+      const reset = document.getElementById("ordReset");
+      if (reset) reset.onclick = () => {
+        const p = D.esthemaxOrder.params;
+        orderState.usdInr = p.usdInr; orderState.customs = p.customsRate; orderState.stock = {};
+        renderTab("order");
+      };
+      orderPaint();
+    }, 0);
+
+    const cats = ["All"].concat(Array.from(new Set(D.esthemaxOrder.items.map((x) => x.category))));
+    const catSeg = cats.map((c) => `<button data-ocat="${esc(c)}" class="${orderState.cat === c ? "active" : ""}">${esc(c)}</button>`).join("");
+    const p = D.esthemaxOrder.params;
+
+    return `
+      <div class="section-head">
+        <h1>Esthemax Order Planner</h1>
+        <p>Reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon months. Adjust FX, customs and current stock to recompute the buy quantity and money required live.</p>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="order-params">
+          <label class="ord-field"><span>USD → INR</span><input id="ordUsd" type="number" step="0.01" value="${orderState.usdInr}"></label>
+          <label class="ord-field"><span>Customs rate (%)</span><input id="ordCustoms" type="number" step="1" value="${+(orderState.customs * 100).toFixed(2)}"></label>
+          <div class="ord-field"><span>Coverage</span><b>${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon mo</b></div>
+          <button id="ordReset" class="ghost-btn" type="button">Reset</button>
+        </div>
+      </div>
+
+      <div id="orderKpis" class="grid kpi-grid" style="margin-bottom:18px"></div>
+
+      <div class="controls">
+        <input id="ordSearch" class="search" type="search" placeholder="Search item…" value="${esc(orderState.q)}" />
+        <div class="seg">${catSeg}</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Item</th><th>Category</th><th class="num">6-mo avg</th><th>Trend</th>
+            <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
+            <th class="num">Landing/Unit</th><th class="num">Money Required</th>
+          </tr></thead>
+          <tbody id="orderBody"></tbody>
+        </table>
+      </div>
+      <div class="muted-note">Current stock is editable — type a new value to re-plan. Money Required = To Buy × Landing/Unit. Landing = (Unit USD × FX) + customs + transport.</div>`;
+  }
+
+  function orderPaint() {
+    const rows = orderCompute();
+    const q = orderState.q, cat = orderState.cat;
+    const filtered = rows.filter((r) =>
+      (cat === "All" || r.it.category === cat) &&
+      (!q || r.it.name.toLowerCase().includes(q)));
+
+    // KPIs from the *filtered* set so category views make sense
+    const toOrder = filtered.filter((r) => r.toBuy > 0).length;
+    const units = filtered.reduce((s, r) => s + r.toBuy, 0);
+    const money = filtered.reduce((s, r) => s + r.money, 0);
+    const kpis = [
+      { cls: "", label: "SKUs to order", value: inr(toOrder), note: `of ${filtered.length} shown` },
+      { cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "across shown items" },
+      { cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" },
+    ].map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
+    const kEl = document.getElementById("orderKpis");
+    if (kEl) kEl.innerHTML = kpis;
+
+    const sorted = filtered.slice().sort((a, b) => b.money - a.money || b.toBuy - a.toBuy);
+    const body = sorted.map((r) => {
+      const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
+      return `<tr>
+        <td class="t-name">${esc(r.it.name)}</td>
+        <td><span class="badge ${catCls}">${esc(r.it.category)}</span></td>
+        <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
+        <td class="spark-cell">${sparkline(r.it.monthly)}</td>
+        <td class="num">${inr(r.it.requiredStock)}</td>
+        <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
+        <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}</td>
+        <td class="num">${rupee(r.landing, { decimals: 0 })}</td>
+        <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="9" class="empty">No matching items.</td></tr>`;
+    const bEl = document.getElementById("orderBody");
+    if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
+  }
+
+  function orderBindStockInputs() {
+    document.querySelectorAll(".stock-input").forEach((inp) => {
+      inp.onchange = (e) => {
+        const idx = +e.target.dataset.idx;
+        const v = parseFloat(e.target.value);
+        orderState.stock[idx] = isNaN(v) ? 0 : v;
+        orderPaint();
+      };
+    });
+  }
+
   /* ---------------- shell / routing ---------------- */
+  function renderTab(id) { go(id); }
+
   function mountTabs() {
     const nav = $("#tabs");
     nav.innerHTML = TABS.map((t) => `<button class="tab" data-tab="${t.id}" role="tab">${t.label}</button>`).join("");

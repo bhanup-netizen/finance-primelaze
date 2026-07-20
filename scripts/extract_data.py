@@ -24,6 +24,7 @@ ROOT = os.path.dirname(HERE)
 WB_DIR = os.path.join(ROOT, "source_workbooks")
 DASHBOARD = os.path.join(WB_DIR, "Primelaze_Unified_Dashboard_FY2627.xlsx")
 PRICES = os.path.join(WB_DIR, "Esthemax_prices_working.xlsx")
+ORDER = os.path.join(WB_DIR, "Esthemax_Order_Calculation.xlsx")
 
 
 def rows_of(ws):
@@ -448,9 +449,62 @@ def parse_price_market(ws):
     return {"band": band, "columns": header, "groups": groups}
 
 
+def parse_order(ws):
+    """Esthemax procurement planner (Order Summary sheet).
+
+    Required = round(avg*dermaMonths) + round(avg*salonMonths)
+    Landing/unit = unitUSD*usdInr*(1+customsRate) + transport
+    To buy = max(0, Required - currentStock);  Money = toBuy * landing
+    We keep the 15 months of raw sales so the app can recompute the 6-mo
+    average (and everything downstream) when the parameters are changed.
+    """
+    r = rows_of(ws)
+    params = {"dermaMonths": 3, "salonMonths": 1.5, "usdInr": 96.99, "customsRate": 0.44}
+    for row in r[:8]:
+        label = clean(row[1])
+        if label == "Derma months":
+            params["dermaMonths"] = num(row[3]); params["usdInr"] = num(row[7])
+        elif label == "Salon months":
+            params["salonMonths"] = num(row[3]); params["customsRate"] = num(row[7])
+
+    # header row containing 'Item'
+    head_i = None
+    for i, row in enumerate(r):
+        if clean(row[1]) == "Item" and clean(row[2]) == "Category":
+            head_i = i; break
+    months = [clean(c) for c in r[head_i][3:18]] if head_i is not None else []
+
+    items = []
+    for row in r[(head_i + 1):]:
+        name = clean(row[1])
+        if not name:
+            continue
+        if str(name).upper().startswith("TOTAL"):
+            break
+        monthly = [num(row[j]) if isinstance(row[j], (int, float)) else None for j in range(3, 18)]
+        val = lambda j, default=0: num(row[j]) if isinstance(row[j], (int, float)) else default
+        # requiredStock is authoritative from the workbook: product masks follow
+        # round(avg*derma)+round(avg*salon), but accessories carry a manually-set
+        # target that isn't derivable from the average — so we store it as-is.
+        items.append({
+            "name": name,
+            "category": clean(row[2]) or "Other",
+            "monthly": monthly,
+            "sixMoAvg": val(18),
+            "requiredStock": val(21),
+            "currentStock": val(22),
+            "toBuyRef": val(23),
+            "unitUSD": val(24),
+            "transport": val(27),
+            "moneyRef": val(29),
+        })
+    return {"params": params, "months": months, "items": items}
+
+
 def main():
     dash = load_workbook(DASHBOARD, data_only=True)
     prices = load_workbook(PRICES, data_only=True)
+    order_wb = load_workbook(ORDER, data_only=True)
 
     hq_sheets = [s for s in dash.sheetnames if s.endswith("HQ")]
 
@@ -462,6 +516,7 @@ def main():
             "source": [
                 "Primelaze_Unified_Dashboard_FY2627.xlsx",
                 "Esthemax_prices_working.xlsx",
+                "Esthemax_Order_Calculation.xlsx",
             ],
         },
         "kpis": parse_kpis(dash["Master Dashboard"]),
@@ -484,6 +539,7 @@ def main():
             "salon": parse_price_market(prices["Salon Market"]),
             "doctor": parse_price_market(prices["Doctor Market"]),
         },
+        "esthemaxOrder": parse_order(order_wb["Order Summary"]),
     }
 
     out_json = os.path.join(ROOT, "src", "data", "data.json")
@@ -500,6 +556,7 @@ def main():
     print(f"Roster: {len(data['roster']['people'])} people")
     print(f"Device incentive SP rows: {len(data['incentives']['device']['salesperson'])}")
     print(f"Esthemax cost hydrojelly: {len(data['costs']['esthemax']['hydrojelly'])}")
+    print(f"Order planner items: {len(data['esthemaxOrder']['items'])}  params: {data['esthemaxOrder']['params']}")
 
 
 if __name__ == "__main__":
