@@ -183,8 +183,8 @@ a { color: var(--accent); text-decoration: none; }
 .bars { display: flex; flex-direction: column; gap: 9px; }
 .bar-row { display: grid; grid-template-columns: 150px 1fr 54px; align-items: center; gap: 12px; font-size: 13px; }
 .bar-row .bar-label { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar-track { height: 10px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6d5efc); }
+.bar-track { display: block; height: 11px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; min-width: 5px; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6d5efc); }
 .bar-fill.teal { background: linear-gradient(90deg, var(--accent-2), #38d9c8); }
 .bar-row .bar-val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 
@@ -368,3 +368,64 @@ tr.total-row:hover td { background: var(--surface-3); }
 .spark-cell { color: var(--accent); width: 90px; }
 .spark { display: block; opacity: .85; }
 .buy-pos { color: var(--good); font-weight: 800; }
+
+/* ============================================================
+   Mobile / small screens
+   ============================================================ */
+/* Give horizontal-scroll tables momentum + a visible edge hint. */
+.table-wrap { -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 680px) {
+  /* Denser KPI cards: 2-up instead of one giant card per row. */
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card { padding: 15px; }
+  .kpi { padding: 14px 14px 14px 16px; }
+  .kpi .kpi-value { font-size: 27px; }
+  .kpi .kpi-label { font-size: 11px; }
+  .kpi .kpi-note { font-size: 11.5px; overflow-wrap: anywhere; }
+
+  /* Quarter tiles are tiny — 2-up is fine. Zone cards carry a 3-metric row
+     and long territory lists, so they stay full-width on phones. */
+  .quarter-grid { grid-template-columns: 1fr 1fr; }
+  .zone-grid { grid-template-columns: 1fr; }
+  .zone-card .zone-hqs { overflow-wrap: anywhere; }
+
+  /* Tighter, more legible data tables; still horizontally scrollable. */
+  thead th { padding: 9px 10px; font-size: 11px; }
+  tbody td { padding: 8px 10px; }
+  table { font-size: 12.5px; }
+
+  /* Bar charts: smaller label gutter so the bar itself has room. */
+  .bar-row { grid-template-columns: 96px 1fr 42px; gap: 8px; font-size: 12px; }
+
+  /* Terms list stacks instead of a cramped two-column grid. */
+  .acc-body dl { grid-template-columns: 1fr; gap: 3px 0; }
+  .acc-body dt { margin-top: 8px; }
+  .acc-body dd { margin-bottom: 4px; }
+
+  /* Stat rows wrap tighter. */
+  .stat-row { gap: 10px 18px; }
+  .stat b { font-size: 18px; }
+
+  /* Order planner params: inputs go full-width and stack cleanly. */
+  .order-params { gap: 12px 16px; }
+  .ord-field { flex: 1 1 130px; }
+  .ord-field input { width: 100%; }
+
+  .section-head p { font-size: 13.5px; }
+  .callout { font-size: 13px; }
+}
+
+/* Prevent iOS Safari from auto-zooming when a form field is focused:
+   any input under 16px triggers the zoom, so bump form text on touch. */
+@media (max-width: 680px) {
+  .search, .select, .stock-input, .lock-field input,
+  .ord-field input { font-size: 16px; }
+  .stock-input { width: 76px; }
+}
+
+@media (max-width: 380px) {
+  .kpi .kpi-value { font-size: 24px; }
+  .brand-text span { display: none; }        /* drop subtitle on very small screens */
+  .tab { padding: 8px 12px; font-size: 13px; }
+}
