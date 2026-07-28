@@ -365,6 +365,12 @@ tr.total-row:hover td { background: var(--surface-3); }
   font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .stock-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.eta-input {
+  padding: 5px 8px; border-radius: 7px; border: 1px dashed var(--border-strong);
+  background: var(--surface-2); color: var(--text); font-size: 12.5px;
+  font-family: inherit; min-width: 132px;
+}
+.eta-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); border-style: solid; }
 .spark-cell { color: var(--accent); width: 90px; }
 .spark { display: block; opacity: .85; }
 .buy-pos { color: var(--good); font-weight: 800; }
@@ -460,7 +466,7 @@ tr.total-row:hover td { background: var(--surface-3); }
    any input under 16px triggers the zoom, so bump form text on touch. */
 @media (max-width: 680px) {
   .search, .select, .stock-input, .lock-field input,
-  .ord-field input { font-size: 16px; }
+  .ord-field input, .eta-input, .tgt-input { font-size: 16px; }
   .stock-input { width: 76px; }
 }
 

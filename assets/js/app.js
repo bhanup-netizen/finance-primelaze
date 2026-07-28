@@ -758,7 +758,7 @@
   //   money   = toBuy × landing
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
-  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, cat: "All", q: "" };
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, eta: {}, cat: "All", q: "" };
   // Which product line's inventory is shown. Only Esthemax has stock data today.
   const INVENTORY_LINES = [
     { id: "esthemax", label: "Esthemax", ready: true },
@@ -838,7 +838,7 @@
       if (reset) reset.onclick = () => {
         const p = D.esthemaxOrder.params;
         orderState.usdInr = p.usdInr; orderState.customs = p.customsRate;
-        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {};
+        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.eta = {};
         renderTab("order");
       };
       orderPaint();
@@ -899,7 +899,7 @@
           <thead><tr>
             <th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
             <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
-            <th class="num">Landing/Unit</th><th class="num">Money Required</th>
+            <th>ETA (arrival)</th><th class="num">Landing/Unit</th><th class="num">Money Required</th>
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
@@ -943,10 +943,11 @@
         <td class="num">${inr(r.it.requiredStock)}</td>
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
         <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
+        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>
         <td class="num">${rupee(r.landing, { decimals: 0 })}</td>
         <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="10" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="11" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
   }
@@ -959,6 +960,10 @@
         orderState.stock[idx] = isNaN(v) ? 0 : v;
         orderPaint();
       };
+    });
+    // ETA (expected arrival at Primelaze) — informational, no recompute needed.
+    document.querySelectorAll(".eta-input").forEach((inp) => {
+      inp.onchange = (e) => { orderState.eta[+e.target.dataset.idx] = e.target.value; };
     });
   }
 
