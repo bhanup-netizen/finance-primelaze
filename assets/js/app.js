@@ -69,7 +69,7 @@
     { id: "incentives", label: "Incentives", render: renderIncentives },
     { id: "prices", label: "Price Book", render: renderPrices },
     { id: "esthemax", label: "Esthemax Market", render: renderEsthemax },
-    { id: "order", label: "Order Planner", render: renderOrder },
+    { id: "order", label: "Inventory", render: renderOrder },
     { id: "review", label: "Review Log", render: renderReview },
   ];
 
@@ -184,7 +184,7 @@
   }
 
   /* ================= TEAM ROSTER ================= */
-  let teamFilter = "all", teamSearch = "";
+  let teamFilter = "all", teamSearch = "", teamDivision = "all";
   function renderTeam() {
     const people = D.roster.people;
     const summary = D.roster.summary || {};
@@ -195,8 +195,9 @@
       const rows = people.filter((p) => {
         const st = statusFromNotes(p);
         if (teamFilter !== "all" && teamFilter !== st) return false;
+        if (teamDivision !== "all" && (p.division || "Derma") !== teamDivision) return false;
         if (teamSearch) {
-          const hay = `${p.name} ${p.designation} ${p.baseHQ} ${p.zone} ${p.reportsTo} ${p.notes || ""}`.toLowerCase();
+          const hay = `${p.name} ${p.designation} ${p.baseHQ} ${p.zone} ${p.reportsTo} ${p.division || ""} ${p.notes || ""}`.toLowerCase();
           if (!hay.includes(teamSearch.toLowerCase())) return false;
         }
         return true;
@@ -206,10 +207,13 @@
         const badge = st === "vacant" ? `<span class="badge b-bad">Vacant</span>`
           : st === "tojoin" ? `<span class="badge b-info">To join</span>`
           : `<span class="badge ${rc.cls}">${rc.label}</span>`;
+        const div = p.division || "Derma";
+        const divBadge = `<span class="badge ${div === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(div)}</span>`;
         return `<tr>
           <td class="num t-muted">${p.num}</td>
           <td class="t-name">${esc(p.name)}</td>
           <td>${esc(p.designation)}</td>
+          <td>${divBadge}</td>
           <td>${esc(p.baseHQ)}</td>
           <td>${esc(p.reportsTo)}</td>
           <td>${esc(p.zone)}</td>
@@ -217,10 +221,10 @@
           <td class="cell-note">${esc(p.notes || "")}</td>
         </tr>`;
       }).join("");
-      return rows || `<tr><td colspan="8" class="empty">No matching personnel.</td></tr>`;
+      return rows || `<tr><td colspan="9" class="empty">No matching personnel.</td></tr>`;
     };
 
-    const head = ["#", "Name", "Designation", "Base HQ", "Reports To", "Zone", "Status", "Notes"]
+    const head = ["#", "Name", "Designation", "Division", "Base HQ", "Reports To", "Zone", "Status", "Notes"]
       .map((h, i) => `<th class="${i === 0 ? "num" : ""}">${h}</th>`).join("");
 
     setTimeout(() => {
@@ -233,6 +237,13 @@
           $("#teamBody").innerHTML = view();
         };
       });
+      document.querySelectorAll("[data-tdiv]").forEach((b) => {
+        b.onclick = () => {
+          teamDivision = b.dataset.tdiv;
+          document.querySelectorAll("[data-tdiv]").forEach((x) => x.classList.toggle("active", x === b));
+          $("#teamBody").innerHTML = view();
+        };
+      });
     }, 0);
 
     return `
@@ -242,12 +253,17 @@
       </div>
       <div class="card" style="margin-bottom:20px"><div class="stat-row">${summaryCards}</div></div>
       <div class="controls">
-        <input id="teamSearch" class="search" type="search" placeholder="Search name, HQ, zone, notes…" />
+        <input id="teamSearch" class="search" type="search" placeholder="Search name, HQ, zone, division…" />
         <div class="seg">
           <button data-tfilter="all" class="${teamFilter === "all" ? "active" : ""}">All</button>
           <button data-tfilter="active" class="${teamFilter === "active" ? "active" : ""}">Active</button>
           <button data-tfilter="tojoin" class="${teamFilter === "tojoin" ? "active" : ""}">To join</button>
           <button data-tfilter="vacant" class="${teamFilter === "vacant" ? "active" : ""}">Vacant</button>
+        </div>
+        <div class="seg">
+          <button data-tdiv="all" class="${teamDivision === "all" ? "active" : ""}">All div.</button>
+          <button data-tdiv="Derma" class="${teamDivision === "Derma" ? "active" : ""}">Derma</button>
+          <button data-tdiv="Salon/Spa" class="${teamDivision === "Salon/Spa" ? "active" : ""}">Salon/Spa</button>
         </div>
       </div>
       <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody id="teamBody">${view()}</tbody></table></div>`;
@@ -255,24 +271,67 @@
 
   /* ================= HQ TARGETS ================= */
   let hqIndex = 0;
+  const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
+  const idfor = (s) => s.replace(/[^a-z0-9]/gi, "_");
+
   function renderTargets() {
     const opts = D.hqTargets.map((h, i) =>
       `<option value="${i}" ${i === hqIndex ? "selected" : ""}>${esc(h.title.split("—")[0].trim())}</option>`).join("");
 
     setTimeout(() => {
       const sel = $("#hqSelect");
-      if (sel) sel.onchange = (e) => { hqIndex = +e.target.value; $("#hqDetail").innerHTML = hqDetail(D.hqTargets[hqIndex]); };
+      if (sel) sel.onchange = (e) => { hqIndex = +e.target.value; mountHqDetail(D.hqTargets[hqIndex]); };
+      const dl = document.getElementById("hqDownload");
+      if (dl) dl.onclick = () => downloadHqPdf(D.hqTargets[hqIndex]);
+      wireHqDetail();
     }, 0);
 
     return `
       <div class="section-head">
         <h1>Regional HQ Targets</h1>
-        <p>FY26-27 device &amp; Celluma plans per regional headquarters, with quarterly splits and plan highlights.</p>
+        <p>FY26-27 device &amp; Celluma plans per regional headquarters. FY26-27 quantities are editable — totals recompute live. Download a PDF of the plan with the matching incentive tables and terms.</p>
       </div>
       <div class="controls">
         <select id="hqSelect" class="select">${opts}</select>
+        <div class="hq-actions"><button id="hqDownload" class="dl-btn" type="button">⤓ Download PDF</button></div>
       </div>
       <div id="hqDetail">${hqDetail(D.hqTargets[hqIndex])}</div>`;
+  }
+
+  function mountHqDetail(h) {
+    $("#hqDetail").innerHTML = hqDetail(h);
+    wireHqDetail();
+  }
+
+  function wireHqDetail() {
+    document.querySelectorAll(".tgt-input").forEach((inp) => {
+      inp.oninput = () => {
+        const v = parseFloat(inp.value);
+        hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = isNaN(v) ? null : v;
+        recomputeHqPlan(inp.dataset.pk);
+      };
+    });
+  }
+
+  // Only rows with a numeric Device Value count toward the plan TOTAL (matches
+  // the source: Celluma and demo-only rows are excluded from the device total).
+  function recomputeHqPlan(pk) {
+    const pid = idfor(pk);
+    let units = 0, value = 0;
+    document.querySelectorAll(".tgt-input").forEach((inp) => {
+      if (inp.dataset.pk !== pk) return;
+      const v = parseFloat(inp.value) || 0;
+      const dv = parseFloat(inp.dataset.dv);
+      const tvCell = document.getElementById(`tv_${pid}_${inp.dataset.ri}`);
+      if (!isNaN(dv)) {
+        units += v; value += v * dv;
+        if (tvCell) tvCell.textContent = inr(v * dv);
+      }
+    });
+    const uEl = document.getElementById(`totu_${pid}`);
+    const vEl = document.getElementById(`totv_${pid}`);
+    if (uEl) uEl.textContent = inr(units);
+    if (vEl) vEl.textContent = inr(value);
   }
 
   function hqDetail(h) {
@@ -282,19 +341,39 @@
         <span>${esc(s.label)}${s.note ? " · " + esc(s.note) : ""}</span>
       </div>`).join("");
 
-    const plans = (h.plans && h.plans.length ? h.plans : []).map((pl) => {
+    const effVal = (pk, ri, orig) => {
+      const e = hqEdits[pk + "#" + ri];
+      return e != null ? e : orig;
+    };
+
+    const plans = (h.plans && h.plans.length ? h.plans : []).map((pl, pi) => {
+      const pk = h.sheet + "#" + pi;
+      const pid = idfor(pk);
       const head = ["Product", "FY25-26", "FY26-27", "Device Value (L)", "Total Value (L)", "Notes"]
         .map((x, i) => `<th class="${i >= 1 && i <= 4 ? "num" : ""}">${x}</th>`).join("");
-      const rows = pl.rows.map((r) => {
+      // running totals over device rows (numeric deviceValue) using edited values
+      let tu = 0, tv = 0;
+      pl.rows.forEach((r, ri) => {
+        if (r.isTotal || !isNum(r.deviceValue)) return;
+        const v = effVal(pk, ri, r.fy2627);
+        if (isNum(v)) { tu += v; tv += v * r.deviceValue; }
+      });
+      const rows = pl.rows.map((r, ri) => {
         if (r.isTotal) return `<tr class="total-row">
-          <td>TOTAL</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${r.fy2627 ?? "—"}</td>
-          <td class="num"></td><td class="num">${isNum(r.totalValue) ? inr(r.totalValue) : "—"}</td><td></td></tr>`;
+          <td>TOTAL</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num" id="totu_${pid}">${inr(tu)}</td>
+          <td class="num"></td><td class="num" id="totv_${pid}">${inr(tv)}</td><td></td></tr>`;
+        const editable = isNum(r.fy2627);
+        const v = effVal(pk, ri, r.fy2627);
+        const fyCell = editable
+          ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" />`
+          : (r.fy2627 ?? "—");
+        const rowTv = (isNum(v) && isNum(r.deviceValue)) ? v * r.deviceValue : (isNum(r.totalValue) ? r.totalValue : null);
         return `<tr>
           <td class="t-name">${esc(r.product)}</td>
           <td class="num">${r.fy2526 ?? "—"}</td>
-          <td class="num">${r.fy2627 ?? "—"}</td>
+          <td class="num">${fyCell}</td>
           <td class="num">${isNum(r.deviceValue) ? inr(r.deviceValue) : "—"}</td>
-          <td class="num">${isNum(r.totalValue) ? inr(r.totalValue) : "—"}</td>
+          <td class="num" id="tv_${pid}_${ri}">${isNum(rowTv) ? inr(rowTv) : "—"}</td>
           <td class="cell-note">${esc(r.notes || "")}</td></tr>`;
       }).join("");
       return `${pl.label ? `<div class="subplan-title">${esc(pl.label)}</div>` : ""}${table(head, rows)}`;
@@ -317,6 +396,83 @@
       ${plans || `<div class="empty">No product plan — placeholder HQ pending hire.</div>`}
       ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}
       ${highlights ? `<div class="block"><h2>Plan highlights</h2><ul class="hq-highlights" style="padding:0;margin:0">${highlights}</ul></div>` : ""}`;
+  }
+
+  /* ---- HQ target PDF (targets + incentives + T&C) ---- */
+  function pTable(headers, bodyRows) {
+    const h = headers.map((x) => `<th class="${x.num ? "num" : ""}">${esc(x.label)}</th>`).join("");
+    return `<table><thead><tr>${h}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+  }
+
+  function buildHqPrint(h) {
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+
+    const summary = (h.summary || []).map((s) =>
+      `<tr><td>${esc(s.label)}</td><td class="num">${isNum(s.value) ? inr(s.value) : esc(s.value)}</td><td>${esc(s.note || "")}</td></tr>`).join("");
+
+    const plansHtml = (h.plans || []).map((pl, pi) => {
+      const pk = h.sheet + "#" + pi;
+      let tu = 0, tv = 0;
+      const body = pl.rows.filter((r) => !r.isTotal).map((r, ri) => {
+        const v = hqEdits[pk + "#" + ri] != null ? hqEdits[pk + "#" + ri] : r.fy2627;
+        const rowTv = (isNum(v) && isNum(r.deviceValue)) ? v * r.deviceValue : (isNum(r.totalValue) ? r.totalValue : null);
+        if (isNum(v) && isNum(r.deviceValue)) { tu += v; tv += v * r.deviceValue; }
+        return `<tr><td>${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${isNum(v) ? inr(v) : esc(v ?? "—")}</td><td class="num">${isNum(r.deviceValue) ? inr(r.deviceValue) : "—"}</td><td class="num">${isNum(rowTv) ? inr(rowTv) : "—"}</td></tr>`;
+      }).join("");
+      const headers = [{ label: "Product" }, { label: "FY25-26", num: 1 }, { label: "FY26-27", num: 1 }, { label: "Device Value (L)", num: 1 }, { label: "Total Value (L)", num: 1 }];
+      return `<h3>${esc(pl.label || "Product plan")}</h3>${pTable(headers, body + `<tr><td><b>TOTAL</b></td><td></td><td class="num"><b>${inr(tu)}</b></td><td></td><td class="num"><b>${inr(tv)}</b></td></tr>`)}`;
+    }).join("");
+
+    const qHtml = (h.quarterly || []).length
+      ? `<h3>Quarterly split</h3>${pTable([{ label: "Basis" }, { label: "Annual", num: 1 }, { label: "Q1", num: 1 }, { label: "Q2", num: 1 }, { label: "Q3", num: 1 }, { label: "Q4", num: 1 }],
+          h.quarterly.map((q) => `<tr><td>${esc(q.basis)}</td><td class="num">${isNum(q.annual) ? inr(q.annual) : esc(q.annual)}</td>${["q1", "q2", "q3", "q4"].map((k) => `<td class="num">${isNum(q[k]) ? inr(q[k]) : esc(q[k] ?? "—")}</td>`).join("")}</tr>`).join(""))}`
+      : "";
+
+    // ---- Incentives ----
+    const dev = D.incentives.device;
+    const devTbl = (rows) => pTable(
+      [{ label: "Device" }, { label: "Std Sell (L)", num: 1 }, { label: "Min (L)", num: 1 }, { label: "Std Incentive", num: 1 }, { label: "Min Incentive", num: 1 }, { label: "Above-Std" }],
+      rows.map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td><td class="num">${rupee(r.stdIncentive)}</td><td class="num">${rupee(r.minIncentive)}</td><td>${esc(r.aboveStd || "—")}</td></tr>`).join(""));
+    const cel = pTable(
+      [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: "SP Incentive", num: 1 }, { label: "Mgr Incentive", num: 1 }],
+      D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.sellingPrice)}</td><td class="num">${rupee(r.salespersonIncentive)}</td><td class="num">${rupee(r.managerIncentive)}</td></tr>`).join(""));
+    const esthTiers = (t) => pTable(
+      [{ label: "Tier" }, { label: "Boxes min", num: 1 }, { label: "Boxes max", num: 1 }, { label: "₹/Box", num: 1 }, { label: "Label" }],
+      t.map((x) => `<tr><td>${esc(x.tier)}</td><td class="num">${x.min}</td><td class="num">${esc(x.max)}</td><td class="num">${rupee(x.incentive)}</td><td>${esc(x.label)}</td></tr>`).join(""));
+
+    const terms = (D.incentives.terms || []).map((sec) =>
+      `<h3>${esc(sec.title)}</h3><dl>${sec.items.map((it) => `<dt>${esc(it.term)}</dt><dd>${esc(it.detail)}</dd>`).join("")}</dl>`).join("");
+
+    return `
+      <div class="p-section">
+        <h1>${esc(D.meta.company)} — ${esc(h.title.split("—")[0].trim())} — FY 2026-27 Targets</h1>
+        <div class="p-sub">${esc(h.subtitle || h.title)}</div>
+        <p class="p-meta">Generated ${esc(stamp)} · Figures excl. GST · FY26-27 quantities as edited in the dashboard.</p>
+        ${summary ? `<h2>Summary</h2>${pTable([{ label: "Metric" }, { label: "Value", num: 1 }, { label: "Note" }], summary)}` : ""}
+        ${plansHtml}
+        ${qHtml}
+      </div>
+      <div class="p-section p-break">
+        <h2>Incentive reference — Devices (Sales Person)</h2>${devTbl(dev.salesperson)}
+        <h2>Incentive reference — Devices (Sales Manager · flat 50% of Std)</h2>${devTbl(dev.manager)}
+        <h2>Incentive reference — Celluma</h2>${cel}
+        <h2>Incentive reference — Esthemax (Sales Person slab)</h2>${esthTiers(D.incentives.esthemax.salesperson)}
+        <h2>Incentive reference — Esthemax (Sales Manager slab)</h2>${esthTiers(D.incentives.esthemax.manager)}
+      </div>
+      <div class="p-section p-break">
+        <h2>Incentive terms &amp; conditions</h2>
+        ${terms}
+      </div>`;
+  }
+
+  function downloadHqPdf(h) {
+    let area = document.getElementById("printArea");
+    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
+    area.innerHTML = buildHqPrint(h);
+    document.body.classList.add("printing");
+    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 40);
   }
 
   /* ================= INCENTIVES ================= */
@@ -603,6 +759,13 @@
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
   const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, cat: "All", q: "" };
+  // Which product line's inventory is shown. Only Esthemax has stock data today.
+  const INVENTORY_LINES = [
+    { id: "esthemax", label: "Esthemax", ready: true },
+    { id: "celluma", label: "Celluma", ready: false },
+    { id: "devices", label: "Devices", ready: false },
+  ];
+  let inventoryLine = "esthemax";
 
   function orderInit() {
     const p = D.esthemaxOrder.params;
@@ -628,7 +791,8 @@
       const toBuy = lot > 1 ? Math.round(need / lot) * lot : need;
       const landing = it.unitUSD * usd * (1 + cus) + it.transport;
       const money = toBuy * landing;
-      return { it, i, current, need, lot, toBuy, landing, money };
+      const canSell = current >= it.requiredStock; // enough stock to sell / advertise
+      return { it, i, current, need, lot, toBuy, landing, money, canSell };
     });
   }
 
@@ -642,7 +806,14 @@
 
   function renderOrder() {
     orderInit();
+    const lineOpts = INVENTORY_LINES.map((l) =>
+      `<option value="${l.id}" ${l.id === inventoryLine ? "selected" : ""}>${esc(l.label)}${l.ready ? "" : " — no data yet"}</option>`).join("");
+    const line = INVENTORY_LINES.find((l) => l.id === inventoryLine) || INVENTORY_LINES[0];
+
     setTimeout(() => {
+      const lineSel = document.getElementById("invLine");
+      if (lineSel) lineSel.onchange = (e) => { inventoryLine = e.target.value; renderTab("order"); };
+      if (!line.ready) return; // placeholder view has no other controls to wire
       const wire = (id, key, factor) => {
         const el = document.getElementById(id);
         if (el) el.oninput = (e) => {
@@ -673,15 +844,37 @@
       orderPaint();
     }, 0);
 
+    const lineSelector = `
+      <div class="controls">
+        <label class="inv-line"><span>Inventory line</span>
+          <select id="invLine" class="select">${lineOpts}</select>
+        </label>
+      </div>`;
+
+    if (!line.ready) {
+      return `
+      <div class="section-head">
+        <h1>Inventory</h1>
+        <p>Stock, reorder planning and sell-status across product lines. Select a line to view its inventory.</p>
+      </div>
+      ${lineSelector}
+      <div class="card" style="text-align:center;padding:44px 20px">
+        <div style="font-size:34px;margin-bottom:8px">📦</div>
+        <h2 style="margin:0 0 6px">No inventory data yet for ${esc(line.label)}</h2>
+        <p class="t-muted" style="max-width:52ch;margin:0 auto">Add ${esc(line.label)} stock &amp; sales data (like the Esthemax order sheet) to enable reorder planning and sell-status here.</p>
+      </div>`;
+    }
+
     const cats = ["All"].concat(Array.from(new Set(D.esthemaxOrder.items.map((x) => x.category))));
     const catSeg = cats.map((c) => `<button data-ocat="${esc(c)}" class="${orderState.cat === c ? "active" : ""}">${esc(c)}</button>`).join("");
     const p = D.esthemaxOrder.params;
 
     return `
       <div class="section-head">
-        <h1>Esthemax Order Planner</h1>
-        <p>Reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon months. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail} — to the nearest lot. Adjust FX, customs, lot sizes and current stock to recompute live.</p>
+        <h1>Inventory — Esthemax</h1>
+        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon months. Items with stock ≥ required are marked <b>Can sell</b>; others <b>Reorder</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
       </div>
+      ${lineSelector}
 
       <div class="card" style="margin-bottom:18px">
         <div class="order-params">
@@ -704,7 +897,7 @@
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>Item</th><th>Category</th><th class="num">6-mo avg</th><th>Trend</th>
+            <th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
             <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
             <th class="num">Landing/Unit</th><th class="num">Money Required</th>
           </tr></thead>
@@ -725,9 +918,11 @@
     const toOrder = filtered.filter((r) => r.toBuy > 0).length;
     const units = filtered.reduce((s, r) => s + r.toBuy, 0);
     const money = filtered.reduce((s, r) => s + r.money, 0);
+    const canSell = filtered.filter((r) => r.canSell).length;
     const kpis = [
-      { cls: "", label: "SKUs to order", value: inr(toOrder), note: `of ${filtered.length} shown` },
-      { cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "across shown items" },
+      { cls: "k-good", label: "Can sell now", value: inr(canSell), note: `of ${filtered.length} shown` },
+      { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
+      { cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" },
       { cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" },
     ].map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
@@ -736,9 +931,13 @@
     const sorted = filtered.slice().sort((a, b) => b.money - a.money || b.toBuy - a.toBuy);
     const body = sorted.map((r) => {
       const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
+      const status = r.canSell
+        ? `<span class="badge b-good">Can sell</span>`
+        : `<span class="badge b-warn">Reorder</span>`;
       return `<tr>
         <td class="t-name">${esc(r.it.name)}</td>
         <td><span class="badge ${catCls}">${esc(r.it.category)}</span></td>
+        <td>${status}</td>
         <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
         <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
@@ -747,7 +946,7 @@
         <td class="num">${rupee(r.landing, { decimals: 0 })}</td>
         <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="9" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="10" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
   }

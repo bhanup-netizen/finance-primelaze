@@ -13,12 +13,12 @@ workbooks and runs as a **static site** with no backend and no build step.
 | Tab | Contents |
 | --- | --- |
 | **Overview** | Company KPIs (229 devices, 120 Celluma, reps, vacancies), zone rollups, device-by-zone and HQ-value charts. |
-| **Team Roster** | All 18 personnel with role, base HQ, reporting line, zone and status. Search + filter by Active / To-join / Vacant. |
-| **HQ Targets** | Per-HQ FY26-27 product plans (multi-plan where an HQ has several reps), quarterly splits and plan highlights. |
+| **Team Roster** | All personnel with role, **division (Derma / Salon-Spa)**, base HQ, reporting line, zone and status. Search + filter by status and division. |
+| **HQ Targets** | Per-HQ FY26-27 product plans (multi-plan where an HQ has several reps), quarterly splits and highlights. **FY26-27 quantities are editable** (totals recompute live) and the plan can be **downloaded as a PDF** with the matching incentive tables and terms. |
 | **Incentives** | Device value-slab, Celluma per-model and Esthemax 6-tier slab plans for both Sales Person and Manager, plus the master T&C. |
 | **Price Book** | Landing / quotation / standard / minimum prices for devices, Celluma models and Esthemax skincare. |
 | **Esthemax Market** | Full salon & doctor pricing matrices — old vs new (+15% MRP) structures with bulk-offer tiers and effective net prices. |
-| **Order Planner** | Interactive Esthemax procurement plan from 15 months of sales — required stock, buy quantity and landed money required, recomputing live as you edit FX, customs rate and current stock. |
+| **Inventory** | Product-line inventory & reorder planning (Esthemax loaded; Celluma / Devices are add-later). Per-SKU **sell status** (stock ≥ required → *Can sell*, else *Reorder*), required stock, minimum-order-lot buy quantity and landed money required — all recomputing live as you edit FX, customs, lot sizes and current stock. |
 | **Review Log** | Every review comment raised by Surya / HR / management, with resolution and status. |
 
 Light and dark themes, responsive layout, keyboard-free navigation, deep-linkable

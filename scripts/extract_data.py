@@ -581,6 +581,28 @@ def apply_amendments(data):
             for pl in h.get("plans", []):
                 pl["label"] = swap_k(pl.get("label"))
 
+    # -- Divisions: Lubdha & Puneet in Salon/Spa, everyone else Derma. --
+    SALON = {"Ms. Lubdha", "Puneet"}
+    for p in data["roster"]["people"]:
+        p["division"] = "Salon/Spa" if p.get("name") in SALON else "Derma"
+    # Add Puneet as a new Salon/Spa person (not present in the source workbook).
+    next_roster = max((p.get("num") or 0 for p in data["roster"]["people"]), default=0) + 1
+    data["roster"]["people"].append({
+        "num": next_roster,
+        "name": "Puneet",
+        "designation": "Sales – Salon/Spa",
+        "baseHQ": "—",
+        "reportsTo": "Arjun",
+        "zone": "Salon/Spa Division",
+        "division": "Salon/Spa",
+        "notes": "Salon/Spa division. Details pending (base HQ / territory).",
+    })
+    for key, val in list(summ.items()):
+        if not isinstance(val, (int, float)):
+            continue
+        if "Active" in key or "Total" in key:
+            summ[key] = val + 1  # Puneet joins as active
+
     # Comments log audit entry
     next_num = max((c.get("num") or 0 for c in data["comments"]), default=0) + 1
     data["comments"].append({

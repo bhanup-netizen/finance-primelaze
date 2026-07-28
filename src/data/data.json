@@ -255,7 +255,8 @@
         "baseHQ": "Chandigarh",
         "reportsTo": "Arjun",
         "zone": "North 1 — Chandigarh",
-        "notes": "Kuldeep Singh resigned — backfill pending (HIGH PRIORITY). Was Punjab IC: Chandigarh, HP, J&K, Uttarakhand."
+        "notes": "Kuldeep Singh resigned — backfill pending (HIGH PRIORITY). Was Punjab IC: Chandigarh, HP, J&K, Uttarakhand.",
+        "division": "Derma"
       },
       {
         "num": 2,
@@ -264,7 +265,8 @@
         "baseHQ": "Jalandhar",
         "reportsTo": "Vacant North-1 ZSM",
         "zone": "North 1 — Chandigarh",
-        "notes": "Punjab/Haryana sub-region"
+        "notes": "Punjab/Haryana sub-region",
+        "division": "Derma"
       },
       {
         "num": 3,
@@ -273,7 +275,8 @@
         "baseHQ": "Delhi",
         "reportsTo": "Arjun",
         "zone": "North 2 — Delhi",
-        "notes": "Delhi NCR + UP + Raj + Kolkata cross"
+        "notes": "Delhi NCR + UP + Raj + Kolkata cross",
+        "division": "Derma"
       },
       {
         "num": 4,
@@ -282,7 +285,8 @@
         "baseHQ": "Delhi",
         "reportsTo": "Ambika Anand",
         "zone": "North 2 — Delhi",
-        "notes": "HIGH PRIORITY — hire pending"
+        "notes": "HIGH PRIORITY — hire pending",
+        "division": "Derma"
       },
       {
         "num": 5,
@@ -291,7 +295,8 @@
         "baseHQ": "Kolkata",
         "reportsTo": "Ambika Anand",
         "zone": "East + Northeast",
-        "notes": "East zone solo coverage"
+        "notes": "East zone solo coverage",
+        "division": "Derma"
       },
       {
         "num": 6,
@@ -300,7 +305,8 @@
         "baseHQ": "Chennai",
         "reportsTo": "Arjun",
         "zone": "South — Chennai",
-        "notes": "Tamil Nadu outside Chennai metro"
+        "notes": "Tamil Nadu outside Chennai metro",
+        "division": "Derma"
       },
       {
         "num": 7,
@@ -309,7 +315,8 @@
         "baseHQ": "Chennai",
         "reportsTo": "Harani S",
         "zone": "South — Chennai",
-        "notes": "Chennai metro"
+        "notes": "Chennai metro",
+        "division": "Derma"
       },
       {
         "num": 8,
@@ -318,7 +325,8 @@
         "baseHQ": "Bengaluru",
         "reportsTo": "Arjun",
         "zone": "South — Bengaluru",
-        "notes": "Soundaram joining ~15 May 2026"
+        "notes": "Soundaram joining ~15 May 2026",
+        "division": "Derma"
       },
       {
         "num": 9,
@@ -327,7 +335,8 @@
         "baseHQ": "Kochi",
         "reportsTo": "Arjun",
         "zone": "South — Kochi",
-        "notes": "Karnataka (Sandeep coaches)"
+        "notes": "Karnataka (Sandeep coaches)",
+        "division": "Derma"
       },
       {
         "num": 10,
@@ -336,7 +345,8 @@
         "baseHQ": "Vijayawada",
         "reportsTo": "Arjun",
         "zone": "South — Vijayawada",
-        "notes": "HIGH PRIORITY — Kerala launch"
+        "notes": "HIGH PRIORITY — Kerala launch",
+        "division": "Derma"
       },
       {
         "num": 11,
@@ -345,7 +355,8 @@
         "baseHQ": "Hyderabad",
         "reportsTo": "Arjun",
         "zone": "South — Hyderabad",
-        "notes": "Andhra Pradesh"
+        "notes": "Andhra Pradesh",
+        "division": "Derma"
       },
       {
         "num": 12,
@@ -354,7 +365,8 @@
         "baseHQ": "Hyderabad",
         "reportsTo": "Arjun",
         "zone": "South — Hyderabad",
-        "notes": "New joinee — Telangana"
+        "notes": "New joinee — Telangana",
+        "division": "Derma"
       },
       {
         "num": 13,
@@ -363,7 +375,8 @@
         "baseHQ": "Hyderabad",
         "reportsTo": "Arjun",
         "zone": "South — Hyderabad",
-        "notes": "Demo support for Vamshi (AP)"
+        "notes": "Demo support for Vamshi (AP)",
+        "division": "Derma"
       },
       {
         "num": 14,
@@ -372,7 +385,8 @@
         "baseHQ": "Mumbai",
         "reportsTo": "Arjun",
         "zone": "West + Central",
-        "notes": "2nd ASM hire pending"
+        "notes": "2nd ASM hire pending",
+        "division": "Derma"
       },
       {
         "num": 15,
@@ -381,7 +395,8 @@
         "baseHQ": "Mumbai",
         "reportsTo": "Sandeep Kukadiya",
         "zone": "West + Central",
-        "notes": "Gujarat IC + coaches team"
+        "notes": "Gujarat IC + coaches team",
+        "division": "Derma"
       },
       {
         "num": 16,
@@ -390,7 +405,8 @@
         "baseHQ": "Indore",
         "reportsTo": "Sandeep Kukadiya",
         "zone": "West + Central",
-        "notes": "West Maharashtra + Goa"
+        "notes": "West Maharashtra + Goa",
+        "division": "Derma"
       },
       {
         "num": 17,
@@ -399,7 +415,8 @@
         "baseHQ": "Mumbai",
         "reportsTo": "Arjun",
         "zone": "West + Central",
-        "notes": "MP + CG + Vidarbha"
+        "notes": "MP + CG + Vidarbha",
+        "division": "Salon/Spa"
       },
       {
         "num": 18,
@@ -408,13 +425,24 @@
         "baseHQ": "Mumbai",
         "reportsTo": "Sandeep Kukadiya",
         "zone": "West + Central",
-        "notes": "HIGH PRIORITY — covers ~₹0.95 L FY26-27 stretch"
+        "notes": "HIGH PRIORITY — covers ~₹0.95 L FY26-27 stretch",
+        "division": "Derma"
+      },
+      {
+        "num": 19,
+        "name": "Puneet",
+        "designation": "Sales – Salon/Spa",
+        "baseHQ": "—",
+        "reportsTo": "Arjun",
+        "zone": "Salon/Spa Division",
+        "division": "Salon/Spa",
+        "notes": "Salon/Spa division. Details pending (base HQ / territory)."
       }
     ],
     "summary": {
-      "Active personnel": 11,
+      "Active personnel": 12,
       "Vacant positions": 5,
-      "Total roster": 18,
+      "Total roster": 19,
       "To join": 2
     }
   },
