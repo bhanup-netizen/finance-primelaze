@@ -275,6 +275,8 @@ thead th {
 tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--surface-2); }
+@keyframes rowFlash { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
+tbody tr.row-flash td { animation: rowFlash 1.8s ease-out; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 tr.total-row td { font-weight: 800; background: var(--surface-3); border-top: 2px solid var(--border-strong); }
 tr.total-row:hover td { background: var(--surface-3); }

@@ -529,13 +529,24 @@
     });
     const add = document.getElementById("rosterAddBtn");
     if (add) add.onclick = () => {
-      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "", zone: "" });
+      const aid = "r" + (rosterAddSeq++);
+      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "", zone: "" });
       saveEdits();
-      // Reset filters so the freshly-added (Active) row is actually visible —
-      // otherwise an active filter like "Vacant" hides it and it looks broken.
-      teamFilter = "all"; teamDivision = "all"; teamSearch = "";
+      // Reset filters/sub-tab so the freshly-added (Active) row is visible —
+      // otherwise an active filter (e.g. "Vacant") hides it and it looks broken.
+      teamTab = "roster"; teamFilter = "all"; teamDivision = "all"; teamSearch = "";
       go("team");
+      flashRow(aid); // scroll it into view (table is a scroll box) and highlight
     };
+  }
+
+  // After adding a row, scroll the table to it and flash it so it's obvious.
+  function flashRow(aid) {
+    setTimeout(() => {
+      const cell = document.querySelector(`#teamBody [data-aid="${aid}"]`);
+      const tr = cell && cell.closest("tr");
+      if (tr) { tr.scrollIntoView({ behavior: "smooth", block: "center" }); tr.classList.add("row-flash"); }
+    }, 60);
   }
 
   /* ================= VACANCIES ================= */
