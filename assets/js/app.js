@@ -86,6 +86,7 @@
   const TABS = [
     { id: "overview", label: "Overview", render: renderOverview },
     { id: "team", label: "Team Roster", render: renderTeam },
+    { id: "vacancies", label: "Vacancies", render: renderVacancies },
     { id: "targets", label: "HQ Targets", render: renderTargets },
     { id: "incentives", label: "Incentives", render: renderIncentives },
     { id: "prices", label: "Device", render: renderPrices },
@@ -229,6 +230,25 @@
     if (ov) return ov;
     return statusFromNotes({ name: rval(p, "name"), notes: p.notes });
   };
+
+  /* ---- Vacancy planning (priority / remark / target-fill date) ---- */
+  const PRIORITY_OPTIONS = [
+    { id: "high", label: "High", cls: "b-bad", rank: 0 },
+    { id: "medium", label: "Medium", cls: "b-warn", rank: 1 },
+    { id: "low", label: "Low", cls: "b-neutral", rank: 2 },
+  ];
+  const vacancyEdits = {}; // `${vkey}` -> { priority, remark, fillBy }
+  const vkey = (p) => (p._aid != null ? "a:" + p._aid : "n:" + p.num);
+  const vget = (p, field) => {
+    const v = vacancyEdits[vkey(p)];
+    return (v && v[field] != null) ? v[field] : "";
+  };
+  const vset = (p, field, value) => {
+    const k = vkey(p);
+    (vacancyEdits[k] || (vacancyEdits[k] = {}))[field] = value;
+  };
+  const vacantPeople = () =>
+    D.roster.people.concat(rosterAdds).filter((p) => estatus(p) === "vacant");
 
   function renderTeam() {
     const people = D.roster.people;
@@ -378,6 +398,98 @@
       saveEdits();
       go("team");
     };
+  }
+
+  /* ================= VACANCIES ================= */
+  let vacancySort = "priority"; // "priority" | "fillBy"
+  function renderVacancies() {
+    const list = vacantPeople();
+    const prMeta = (id) => PRIORITY_OPTIONS.find((o) => o.id === id) || PRIORITY_OPTIONS[1];
+    // default priority Medium when not yet set
+    const effPr = (p) => vget(p, "priority") || "medium";
+
+    const sorted = list.slice().sort((a, b) => {
+      if (vacancySort === "fillBy") {
+        const fa = vget(a, "fillBy") || "9999-12-31", fb = vget(b, "fillBy") || "9999-12-31";
+        return fa < fb ? -1 : fa > fb ? 1 : 0;
+      }
+      return prMeta(effPr(a)).rank - prMeta(effPr(b)).rank;
+    });
+
+    const ed = isAdmin();
+    const open = list.filter((p) => !vget(p, "fillBy")).length;
+    const high = list.filter((p) => effPr(p) === "high").length;
+
+    const rows = sorted.map((p, i) => {
+      const name = rval(p, "name"), pr = effPr(p);
+      const prCell = ed
+        ? `<td><select class="vac-in" data-k="${vkey(p)}" data-field="priority">${
+            PRIORITY_OPTIONS.map((o) => `<option value="${o.id}"${o.id === pr ? " selected" : ""}>${o.label}</option>`).join("")
+          }</select></td>`
+        : `<td><span class="badge ${prMeta(pr).cls}">${prMeta(pr).label}</span></td>`;
+      const fillCell = ed
+        ? `<td><input class="vac-in" type="date" data-k="${vkey(p)}" data-field="fillBy" value="${esc(vget(p, "fillBy"))}" /></td>`
+        : `<td>${vget(p, "fillBy") ? esc(vget(p, "fillBy")) : "<span class='t-muted'>—</span>"}</td>`;
+      const remarkCell = ed
+        ? `<td><input class="vac-in vac-remark" type="text" data-k="${vkey(p)}" data-field="remark" placeholder="Add remark…" value="${esc(vget(p, "remark"))}" /></td>`
+        : `<td>${vget(p, "remark") ? esc(vget(p, "remark")) : "<span class='t-muted'>—</span>"}</td>`;
+      return `<tr>
+        <td class="num t-muted">${i + 1}</td>
+        <td class="t-name">${esc(name)}</td>
+        <td>${esc(rval(p, "designation") || "—")}</td>
+        <td>${esc(rval(p, "baseHQ") || "—")}</td>
+        <td>${esc(rval(p, "zone") || "—")}</td>
+        <td>${esc(rval(p, "reportsTo") || "—")}</td>
+        ${prCell}
+        ${fillCell}
+        ${remarkCell}
+      </tr>`;
+    }).join("") || `<tr><td colspan="9" class="empty">No vacant positions — every seat is filled. 🎉</td></tr>`;
+
+    const head = ["#", "Position / Name", "Designation", "Base HQ", "Zone", "Reports To", "Priority", "Target fill by", "Remark"]
+      .map((h, i) => `<th class="${i === 0 ? "num" : ""}">${h}</th>`).join("");
+
+    setTimeout(() => {
+      document.querySelectorAll("[data-vsort]").forEach((b) => {
+        b.onclick = () => {
+          vacancySort = b.dataset.vsort;
+          document.querySelectorAll("[data-vsort]").forEach((x) => x.classList.toggle("active", x === b));
+          go("vacancies");
+        };
+      });
+      wireVacancyEdit();
+    }, 0);
+
+    return `
+      <div class="section-head">
+        <h1>Vacancies</h1>
+        <p>Open positions across the team${ed ? " — set a priority, a target date to fill, and a remark. Changes save for everyone." : ". An administrator prioritises and schedules these."}</p>
+      </div>
+      <div class="card" style="margin-bottom:20px"><div class="stat-row">
+        <div class="stat"><b>${list.length}</b><span>Vacant positions</span></div>
+        <div class="stat"><b>${high}</b><span>High priority</span></div>
+        <div class="stat"><b>${open}</b><span>No target date yet</span></div>
+      </div></div>
+      <div class="controls">
+        <div class="seg">
+          <button data-vsort="priority" class="${vacancySort === "priority" ? "active" : ""}">By priority</button>
+          <button data-vsort="fillBy" class="${vacancySort === "fillBy" ? "active" : ""}">By target date</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function wireVacancyEdit() {
+    if (!isAdmin()) return;
+    document.querySelectorAll(".vac-in").forEach((el) => {
+      const commit = () => {
+        const k = el.dataset.k;
+        (vacancyEdits[k] || (vacancyEdits[k] = {}))[el.dataset.field] = el.value;
+        saveEdits();
+      };
+      el.onchange = commit;
+      if (el.tagName === "INPUT" && el.type === "text") el.onblur = commit;
+    });
   }
 
   /* ================= HQ TARGETS ================= */
@@ -1781,6 +1893,7 @@
         const ids = rosterAdds.map((x) => +String(x._aid).slice(1)).filter((n) => !isNaN(n));
         rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
+      if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
     } catch (err) { console.warn("edits read failed", err); }
@@ -1798,7 +1911,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
