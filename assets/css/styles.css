@@ -398,6 +398,12 @@ tr.total-row:hover td { background: var(--surface-3); }
 }
 .lock-btn:hover { filter: brightness(1.06); }
 .lock-btn:disabled { opacity: .6; cursor: progress; }
+.lock-forgot {
+  background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; padding: 2px; margin: -4px auto 0; align-self: center;
+}
+.lock-forgot:hover { text-decoration: underline; }
+.lock-forgot:disabled { opacity: .6; cursor: default; }
 .lock-error { color: var(--bad); font-size: 13px; min-height: 18px; font-weight: 600; }
 .lock-foot { color: var(--text-3); font-size: 12px; max-width: 380px; text-align: center; }
 .empty { color: var(--text-3); font-style: italic; padding: 18px; text-align: center; }

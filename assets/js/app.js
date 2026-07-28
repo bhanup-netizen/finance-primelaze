@@ -1527,6 +1527,8 @@
   function initLocalDev(form, errEl, btn) {
     errEl.textContent = "Local dev mode — Firebase not loaded. Enter the data password.";
     btn.textContent = "Dev sign in";
+    const forgot = document.getElementById("forgotLink");
+    if (forgot) forgot.hidden = true; // reset email needs Firebase
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errEl.textContent = ""; btn.disabled = true;
@@ -1552,14 +1554,30 @@
     }
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      errEl.textContent = ""; btn.disabled = true; btn.textContent = "Signing in…";
+      errEl.style.color = ""; errEl.textContent = ""; btn.disabled = true; btn.textContent = "Signing in…";
       try {
         await auth.signInWithEmailAndPassword(($("#lockUser").value || "").trim(), $("#lockPass").value || "");
         // onAuthStateChanged finishes the flow
       } catch (err) {
-        errEl.textContent = authErr(err); btn.disabled = false; btn.textContent = "Sign in";
+        errEl.style.color = ""; errEl.textContent = authErr(err); btn.disabled = false; btn.textContent = "Sign in";
       }
     });
+
+    // Forgot password → Firebase sends a reset link to the email.
+    const forgot = document.getElementById("forgotLink");
+    if (forgot) forgot.onclick = async () => {
+      const email = ($("#lockUser").value || "").trim();
+      errEl.style.color = "";
+      if (!email) { errEl.textContent = "Enter your email above, then tap “Forgot password”."; return; }
+      forgot.disabled = true;
+      try {
+        await auth.sendPasswordResetEmail(email);
+        errEl.style.color = "var(--good)";
+        errEl.textContent = "Reset link sent to " + email + " — check your inbox (and spam).";
+      } catch (err) {
+        errEl.textContent = authErr(err);
+      } finally { forgot.disabled = false; }
+    };
     auth.onAuthStateChanged(async (user) => {
       if (!user) { showLogin(); return; }
       try { await loadSession(user); showApp(); }
