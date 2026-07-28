@@ -263,6 +263,66 @@
     return Array.from(s).sort((a, b) => a.localeCompare(b));
   };
 
+  // Sales hierarchy rank (National → Zonal → Regional → Area → Executive → Trainee)
+  function orgRank(desig) {
+    const d = (desig || "").toLowerCase();
+    if (d.includes("national")) return 0;
+    if (d.includes("zonal")) return 1;
+    if (d.includes("regional")) return 2;
+    if (d.includes("area sales manager")) return 3;
+    if (d.includes("area sales executive")) return 4;
+    if (d.includes("executive")) return 4;
+    if (d.includes("salon") || d.includes("spa")) return 4;
+    if (d.includes("mt") || d.includes("trainee") || d.includes("management")) return 5;
+    return 3;
+  }
+
+  // Build the reporting-hierarchy tree from Reports-To + designation data.
+  function renderOrgChart() {
+    const ROOT = "Arjun";
+    const all = D.roster.people.concat(rosterAdds).map((p) => ({
+      name: (rval(p, "name") || "").trim(),
+      desig: rval(p, "designation") || "",
+      rep: (rval(p, "reportsTo") || "").trim(),
+      hq: rval(p, "baseHQ") || "",
+      div: rval(p, "division") || "Derma",
+      st: estatus(p),
+    })).filter((x) => x.name);
+    const byName = {}; all.forEach((x) => { byName[x.name] = x; });
+    const childrenOf = (mgr) => all.filter((x) => x.rep === mgr && x.name !== mgr)
+      .sort((a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name));
+
+    const node = (x, seen) => {
+      if (seen.has(x.name)) return "";
+      seen.add(x.name);
+      const kids = childrenOf(x.name);
+      const cls = x.st === "vacant" ? "org-vacant" : x.st === "tojoin" ? "org-tojoin" : (x.div === "Salon/Spa" ? "org-spa" : "");
+      const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
+      return `<li class="org-node">
+        <div class="org-card ${cls}">
+          <span class="org-name">${esc(x.name)}</span>
+          <span class="org-desig">${esc(x.desig)}</span>${hq}
+        </div>
+        ${kids.length ? `<ul class="org-children">${kids.map((k) => node(k, seen)).join("")}</ul>` : ""}
+      </li>`;
+    };
+
+    const seen = new Set([ROOT]);
+    // Direct reports to Arjun + any orphans whose manager isn't in the roster.
+    const roots = all.filter((x) => x.name !== ROOT && (x.rep === ROOT || !byName[x.rep]))
+      .sort((a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name));
+
+    return `<ul class="org-tree">
+      <li class="org-node">
+        <div class="org-card org-root">
+          <span class="org-name">Arjun</span>
+          <span class="org-desig">National Sales Manager</span>
+        </div>
+        <ul class="org-children">${roots.map((k) => node(k, seen)).join("")}</ul>
+      </li>
+    </ul>`;
+  }
+
   function renderTeam() {
     const people = D.roster.people;
     const summary = D.roster.summary || {};
@@ -361,6 +421,10 @@
         <p>All sales personnel across zones for ${esc(D.meta.fiscalYear)}, including vacant positions and new joinees.${isAdmin() ? " Click any cell to edit — changes save for everyone." : ""}</p>
       </div>
       <div class="card" style="margin-bottom:20px"><div class="stat-row">${summaryCards}</div></div>
+      <details class="card org-wrap" style="margin-bottom:20px" open>
+        <summary class="org-summary">Reporting hierarchy</summary>
+        <div class="org-scroll">${renderOrgChart()}</div>
+      </details>
       <div class="controls">
         <input id="teamSearch" class="search" type="search" placeholder="Search name, HQ, zone, division…" />
         <div class="seg">

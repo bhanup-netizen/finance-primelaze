@@ -317,6 +317,39 @@ tr.total-row:hover td { background: var(--surface-3); }
   background: var(--surface); color: var(--text); font-size: 14px; font-family: inherit; cursor: pointer;
 }
 
+/* ---------- Org chart (reporting hierarchy) ---------- */
+.org-wrap { padding: 16px 18px; }
+.org-summary {
+  cursor: pointer; font-weight: 700; font-size: 14.5px; color: var(--text);
+  list-style: none; display: flex; align-items: center; gap: 8px;
+}
+.org-summary::-webkit-details-marker { display: none; }
+.org-summary::before { content: "▸"; color: var(--text-3); transition: transform .15s; }
+.org-wrap[open] .org-summary::before { transform: rotate(90deg); }
+.org-scroll { overflow-x: auto; margin-top: 14px; padding-bottom: 4px; }
+.org-tree, .org-children { list-style: none; margin: 0; padding: 0; }
+.org-children { margin-left: 22px; border-left: 1.5px solid var(--border-strong); padding-left: 18px; }
+.org-node { position: relative; margin: 7px 0; }
+.org-children > .org-node::before {
+  content: ""; position: absolute; left: -18px; top: 17px;
+  width: 13px; height: 1.5px; background: var(--border-strong);
+}
+.org-card {
+  display: inline-flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  padding: 7px 13px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface-2);
+}
+.org-card .org-name { font-weight: 700; color: var(--text); font-size: 13.5px; }
+.org-card .org-desig { font-size: 11.5px; color: var(--text-2); text-transform: uppercase; letter-spacing: .3px; }
+.org-card .org-hq { font-size: 11.5px; color: var(--text-3); }
+.org-card.org-root {
+  background: linear-gradient(135deg, var(--accent), #6d5efc); border-color: transparent;
+}
+.org-card.org-root .org-name, .org-card.org-root .org-desig { color: #fff; }
+.org-card.org-vacant { border-color: #f3b0b0; background: color-mix(in srgb, #ef4444 12%, var(--surface)); }
+.org-card.org-tojoin { border-color: #a9c3f5; background: color-mix(in srgb, #3b82f6 12%, var(--surface)); }
+.org-card.org-spa { border-color: #9fd8d6; background: color-mix(in srgb, #0ea5a4 12%, var(--surface)); }
+
 /* ---------- Accordion ---------- */
 .accordion { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); box-shadow: var(--shadow-sm); }
 .acc-item + .acc-item { border-top: 1px solid var(--border); }
