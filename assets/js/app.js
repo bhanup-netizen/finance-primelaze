@@ -88,7 +88,7 @@
     { id: "team", label: "Team Roster", render: renderTeam },
     { id: "targets", label: "HQ Targets", render: renderTargets },
     { id: "incentives", label: "Incentives", render: renderIncentives },
-    { id: "prices", label: "Price Book", render: renderPrices },
+    { id: "prices", label: "Device", render: renderPrices },
     { id: "esthemax", label: "Esthemax Market", render: renderEsthemax },
     { id: "order", label: "Inventory", render: renderOrder },
     { id: "demo", label: "Demo Machines", render: renderDemo },
@@ -323,7 +323,14 @@
   /* ================= HQ TARGETS ================= */
   let hqIndex = 0;
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
+  const hqAdds = {};  // `${sheet}#${planIdx}` -> [{product, fy2627, deviceValue}]
+  const newDevices = []; // admin-added devices for the Device (price book) tab
   const idfor = (s) => s.replace(/[^a-z0-9]/gi, "_");
+
+  // All devices available for pricing & target selection = price book + added.
+  const deviceList = () => (D && D.costs ? D.costs.device : []).concat(newDevices);
+  const deviceNames = () => deviceList().map((d) => d.device).filter(Boolean);
+  const deviceByName = (n) => deviceList().find((d) => d.device === n);
 
   function hqAllowed(h) {
     const a = allowedHQs();
@@ -367,10 +374,40 @@
   function wireHqDetail() {
     document.querySelectorAll(".tgt-input").forEach((inp) => {
       inp.oninput = () => {
-        const v = parseFloat(inp.value);
-        hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = isNaN(v) ? null : v;
+        if (inp.dataset.add != null) {
+          const arr = hqAdds[inp.dataset.pk] || [];
+          const a = arr[+inp.dataset.add];
+          if (a) a.fy2627 = inp.value === "" ? "" : parseFloat(inp.value);
+        } else {
+          const v = parseFloat(inp.value);
+          hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = isNaN(v) ? null : v;
+        }
         recomputeHqPlan(inp.dataset.pk);
         saveEdits();
+      };
+    });
+    // Add a product row from the Device list
+    document.querySelectorAll(".hq-add-btn").forEach((b) => {
+      b.onclick = () => {
+        const pk = b.dataset.pk;
+        const sel = document.querySelector('.hq-add-select[data-pk="' + pk + '"]');
+        const val = document.querySelector('.hq-add-val[data-pk="' + pk + '"]');
+        const name = sel && sel.value;
+        if (!name) { if (sel) sel.focus(); return; }
+        const dev = deviceByName(name);
+        const deviceValue = dev && isNum(dev.standard) ? dev.standard : (dev && isNum(dev.minimum) ? dev.minimum : null);
+        const qty = parseFloat(val && val.value);
+        (hqAdds[pk] = hqAdds[pk] || []).push({ product: name, fy2627: isNaN(qty) ? 0 : qty, deviceValue });
+        saveEdits();
+        mountHqDetail(D.hqTargets[hqIndex]);
+      };
+    });
+    document.querySelectorAll(".hq-add-rm").forEach((b) => {
+      b.onclick = () => {
+        const arr = hqAdds[b.dataset.pk];
+        if (arr) arr.splice(+b.dataset.ai, 1);
+        saveEdits();
+        mountHqDetail(D.hqTargets[hqIndex]);
       };
     });
   }
@@ -413,27 +450,43 @@
       const pid = idfor(pk);
       const head = ["Product", "FY25-26", "FY26-27"]
         .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
-      // units total over device rows (numeric deviceValue) using edited values
+      const productRows = pl.rows.filter((r) => !r.isTotal);
+      const adds = hqAdds[pk] || [];
+      // units total over device rows (numeric deviceValue) incl. added products
       let tu = 0;
-      pl.rows.forEach((r, ri) => {
-        if (r.isTotal || !isNum(r.deviceValue)) return;
-        const v = effVal(pk, ri, r.fy2627);
-        if (isNum(v)) tu += v;
-      });
-      const rows = pl.rows.map((r, ri) => {
-        if (r.isTotal) return `<tr class="total-row">
-          <td>TOTAL</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num" id="totu_${pid}">${inr(tu)}</td></tr>`;
+      productRows.forEach((r, ri) => { if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; } });
+      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; });
+
+      const prodHtml = productRows.map((r, ri) => {
         const editable = isNum(r.fy2627);
         const v = effVal(pk, ri, r.fy2627);
         const fyCell = editable
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
-        return `<tr>
-          <td class="t-name">${esc(r.product)}</td>
-          <td class="num">${r.fy2526 ?? "—"}</td>
-          <td class="num">${fyCell}</td></tr>`;
+        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td></tr>`;
       }).join("");
-      return `${pl.label ? `<div class="subplan-title">${esc(pl.label)}</div>` : ""}${table(head, rows)}`;
+
+      const addHtml = adds.map((a, ai) => {
+        const fyCell = isAdmin()
+          ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
+          : esc(a.fy2627);
+        const rm = isAdmin() ? ` <button class="linkish hq-add-rm" data-pk="${esc(pk)}" data-ai="${ai}" title="Remove">✕</button>` : "";
+        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td></tr>`;
+      }).join("");
+
+      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td></tr>`;
+
+      const addCtrl = isAdmin() ? `
+        <div class="hq-add-row">
+          <select class="hq-add-select select" data-pk="${esc(pk)}">
+            <option value="">＋ Add product from Device list…</option>
+            ${deviceNames().map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
+          </select>
+          <input class="hq-add-val" type="number" placeholder="FY26-27 qty" data-pk="${esc(pk)}">
+          <button class="ghost-btn hq-add-btn" data-pk="${esc(pk)}" type="button">Add</button>
+        </div>` : "";
+
+      return `${pl.label ? `<div class="subplan-title">${esc(pl.label)}</div>` : ""}${table(head, prodHtml + addHtml + totalHtml)}${addCtrl}`;
     }).join("");
 
     const quarters = (h.quarterly || []).map((q) => `
@@ -645,12 +698,14 @@
           priceView = b.dataset.price;
           document.querySelectorAll("[data-price]").forEach((x) => x.classList.toggle("active", x === b));
           $("#priceBody").innerHTML = priceBody();
+          wirePriceAdd();
         };
       });
+      wirePriceAdd();
     }, 0);
     return `
       <div class="section-head">
-        <h1>Price Book</h1>
+        <h1>Device</h1>
         <p>Landing cost, quotation, standard and minimum selling prices across devices, Celluma models and Esthemax skincare. All values excl. GST.</p>
       </div>
       <div class="controls">
@@ -667,13 +722,28 @@
     if (priceView === "device") {
       const cols = ["Device"].concat(canSeeLanding() ? ["Landing Cost (L)"] : []).concat(["Quotation (L)", "Standard (L)", "Minimum (L)"]);
       const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
-      const body = D.costs.device.map((r) => `<tr>
+      const body = deviceList().map((r) => `<tr>
         <td class="t-name">${esc(r.device)}</td>
         ${canSeeLanding() ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}
         <td class="num">${r.quotation ?? "—"}</td>
         <td class="num">${r.standard ?? "—"}</td>
         <td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
-      return `<div class="callout">${canSeeLanding() ? "Landing = EXW + ~30% (customs + transport). " : "Landing cost is admin-only. "}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}`;
+      const addForm = isAdmin() ? `
+        <div class="card" style="margin-top:16px">
+          <h2 style="margin-top:0">Add device</h2>
+          <form id="addDeviceForm" class="admin-form">
+            <div class="ch-grid">
+              <label class="ord-field"><span>Device name</span><input id="adName" required placeholder="e.g. New Laser X"></label>
+              <label class="ord-field"><span>Landing cost (L)</span><input id="adLanding" type="number" step="0.01"></label>
+              <label class="ord-field"><span>Quotation (L)</span><input id="adQuote" type="number" step="0.01"></label>
+              <label class="ord-field"><span>Standard (L)</span><input id="adStd" type="number" step="0.01"></label>
+              <label class="ord-field"><span>Minimum (L)</span><input id="adMin" type="number" step="0.01"></label>
+            </div>
+            <button type="submit" class="dl-btn">Add device</button>
+            <div id="adMsg" class="lock-error" style="min-height:16px"></div>
+          </form>
+        </div>` : "";
+      return `<div class="callout">${canSeeLanding() ? "Landing = EXW + ~30% (customs + transport). " : "Landing cost is admin-only. "}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}${addForm}`;
     }
     if (priceView === "celluma") {
       const head = ["Model", "Quotation (₹)", "Selling Price (₹)"]
@@ -704,6 +774,22 @@
       ${sec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
       ${sec("Retail Hydrojelly (2 masks / box)", e.retail)}
       ${sec("Collagen Foot Mask", e.footMask)}`;
+  }
+
+  function wirePriceAdd() {
+    const f = document.getElementById("addDeviceForm");
+    if (!f) return;
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      const name = document.getElementById("adName").value.trim();
+      const msg = document.getElementById("adMsg");
+      if (!name) { msg.style.color = "var(--bad)"; msg.textContent = "Device name is required."; return; }
+      const numOr = (id) => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; };
+      newDevices.push({ device: name, landingCost: numOr("adLanding"), quotation: numOr("adQuote"), standard: numOr("adStd"), minimum: numOr("adMin") });
+      saveEdits();
+      $("#priceBody").innerHTML = priceBody();
+      wirePriceAdd();
+    };
   }
 
   /* ================= ESTHEMAX MARKET ================= */
@@ -777,24 +863,54 @@
   const demoEdits = { status: {}, movement: {} };
   let demoView = "status";
 
+  const STATUS_COLS = ["Status"];
+  const CONDITION_COLS = ["Condition", "Cond. Out", "Cond. Return"];
+
   function demoStatusClass(col, val) {
-    if (col !== "Status" && col !== "Demo Status" && col !== "Condition" && col !== "Cond. Return") return "";
+    if (!STATUS_COLS.includes(col) && !CONDITION_COLS.includes(col) && col !== "Demo Status") return "";
     const t = String(val || "").toLowerCase();
-    if (t.includes("not working") || t.includes("booked") || t.includes("pending") || t.includes("damage")) return "demo-bad";
-    if (t.includes("working") || t.includes("okay") || t.includes("ok") || t.includes("free") || t.includes("good") || t.includes("returned")) return "demo-good";
+    if (/(not working|booked|pending|damage|missing|repair|out of service|maintenance|cleaning|foam)/.test(t)) return "demo-bad";
+    if (/(working|okay|ok|free|good|excellent|returned|ready for dispatch|completed)/.test(t)) return "demo-good";
     return "";
+  }
+
+  // Option list for an editable demo cell: Status/Condition come from the
+  // workbook "Drop Down" sheet; other columns list the distinct values already
+  // used in that column. The current value is always included.
+  function demoOptions(colName, colIdx, current) {
+    let base = [];
+    const dd = D.dropdowns || {};
+    if (STATUS_COLS.includes(colName)) base = (dd.status || []).slice();
+    else if (CONDITION_COLS.includes(colName)) base = (dd.condition || []).slice();
+    else {
+      const set = new Set();
+      D.demoMachines[demoView].rows.forEach((row, r) => {
+        const ov = demoEdits[demoView][r + "#" + colIdx];
+        const v = ov != null ? ov : row[colIdx];
+        if (v != null && String(v).trim() !== "") set.add(String(v).trim());
+      });
+      base = Array.from(set).sort();
+    }
+    if (current && !base.includes(current)) base = [current].concat(base);
+    return base;
   }
 
   function demoTable() {
     const t = D.demoMachines[demoView];
+    const ed = isAdmin();
     const head = t.columns.map((c) => `<th>${esc(c)}</th>`).join("");
     const body = t.rows.map((row, r) => {
       const cells = row.map((v, c) => {
         const ov = demoEdits[demoView][r + "#" + c];
-        const val = ov != null ? ov : (v == null ? "" : v);
+        const val = ov != null ? ov : (v == null ? "" : String(v));
         const cls = [c === 0 ? "t-name" : "", demoStatusClass(t.columns[c], val)].filter(Boolean).join(" ");
-        const editable = isAdmin() ? ' contenteditable="true"' : "";
-        return `<td class="${cls}"${editable} data-r="${r}" data-c="${c}">${esc(val)}</td>`;
+        if (ed) {
+          const opts = demoOptions(t.columns[c], c, val);
+          const optionHtml = `<option value=""${val ? "" : " selected"}>—</option>` +
+            opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("");
+          return `<td class="${cls}"><select class="demo-select" data-r="${r}" data-c="${c}">${optionHtml}</select></td>`;
+        }
+        return `<td class="${cls}" data-r="${r}" data-c="${c}">${esc(val)}</td>`;
       }).join("");
       return `<tr>${cells}</tr>`;
     }).join("");
@@ -803,10 +919,12 @@
 
   function wireDemoEdit() {
     if (!isAdmin()) return;
-    document.querySelectorAll("#demoBody td[contenteditable]").forEach((td) => {
-      td.onblur = () => {
-        demoEdits[demoView][td.dataset.r + "#" + td.dataset.c] = td.textContent.trim();
+    document.querySelectorAll("#demoBody select.demo-select").forEach((sel) => {
+      sel.onchange = () => {
+        demoEdits[demoView][sel.dataset.r + "#" + sel.dataset.c] = sel.value;
         saveEdits();
+        $("#demoBody").innerHTML = demoTable(); // refresh status colours / option lists
+        wireDemoEdit();
       };
     });
   }
@@ -842,6 +960,7 @@
     name: "Leeford Healthcare Ltd (Primelaze)",
     addr: "Leo House, Shaheed Bhagat Singh Nagar, Dugri-Dhandra Rd, Near Joseph School, Ludhiana, Punjab 141001",
   };
+  const TRANSPORT_MODES = ["Air", "Surface", "Road", "Rail", "Courier", "Sea", "By Hand"];
   let localChallans = []; // in-memory fallback when Firebase isn't available (local dev)
   let challanUnsub = null;
 
@@ -870,7 +989,7 @@
           <div class="ch-grid">
             <label class="ord-field"><span>Challan No.</span><input id="chNo" value="${esc(c.no || "")}" placeholder="PL/DC/2026/001"></label>
             <label class="ord-field"><span>Date</span><input id="chDate" type="date" value="${esc(c.date || "")}"></label>
-            <label class="ord-field"><span>Transport mode</span><input id="chMode" value="${esc(c.mode || "Air")}" placeholder="Air / Road / Courier"></label>
+            <label class="ord-field"><span>Transport mode</span><select id="chMode" class="select">${TRANSPORT_MODES.concat((c.mode && !TRANSPORT_MODES.includes(c.mode)) ? [c.mode] : []).map((m) => `<option${(c.mode || "Air") === m ? " selected" : ""}>${esc(m)}</option>`).join("")}</select></label>
             <label class="ord-field"><span>Date of dispatch</span><input id="chDispatch" type="date" value="${esc(c.dispatch || "")}"></label>
             <label class="ord-field"><span>Estimated arrival</span><input id="chArrival" type="date" value="${esc(c.arrival || "")}"></label>
             <label class="ord-field"><span>Declared cargo value (₹)</span><input id="chValue" type="number" value="${esc(c.declaredValue || "")}"></label>
@@ -1202,16 +1321,16 @@
       </div>
       ${lineSelector}
 
-      <div class="card" style="margin-bottom:18px">
+      ${isAdmin() ? `<div class="card" style="margin-bottom:18px">
         <div class="order-params">
-          <label class="ord-field"><span>USD → INR</span><input id="ordUsd" type="number" step="0.01" value="${orderState.usdInr}" ${roAttr()}></label>
-          <label class="ord-field"><span>Customs rate (%)</span><input id="ordCustoms" type="number" step="1" value="${+(orderState.customs * 100).toFixed(2)}" ${roAttr()}></label>
-          <label class="ord-field"><span>JAR min order</span><input id="ordMoqJar" type="number" step="1" min="1" value="${orderState.moqJar}" ${roAttr()}></label>
-          <label class="ord-field"><span>Retail min order</span><input id="ordMoqRetail" type="number" step="1" min="1" value="${orderState.moqRetail}" ${roAttr()}></label>
+          <label class="ord-field"><span>USD → INR</span><input id="ordUsd" type="number" step="0.01" value="${orderState.usdInr}"></label>
+          <label class="ord-field"><span>Customs rate (%)</span><input id="ordCustoms" type="number" step="1" value="${+(orderState.customs * 100).toFixed(2)}"></label>
+          <label class="ord-field"><span>JAR min order</span><input id="ordMoqJar" type="number" step="1" min="1" value="${orderState.moqJar}"></label>
+          <label class="ord-field"><span>Retail min order</span><input id="ordMoqRetail" type="number" step="1" min="1" value="${orderState.moqRetail}"></label>
           <div class="ord-field"><span>Coverage</span><b>${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon mo</b></div>
-          <button id="ordReset" class="ghost-btn" type="button" ${roAttr()}>Reset</button>
+          <button id="ordReset" class="ghost-btn" type="button">Reset</button>
         </div>
-      </div>
+      </div>` : ""}
 
       <div id="orderKpis" class="grid kpi-grid" style="margin-bottom:18px"></div>
 
@@ -1223,14 +1342,16 @@
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
-            <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
-            <th>ETA (arrival)</th>${canSeeLanding() ? `<th class="num">Landing/Unit</th><th class="num">Money Required</th>` : ""}
+            ${isAdmin()
+              ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
+                 <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
+                 <th>ETA (arrival)</th>${canSeeLanding() ? `<th class="num">Landing/Unit</th><th class="num">Money Required</th>` : ""}`
+              : `<th>Product</th><th class="num">Current stock</th><th>Status</th><th>Estimated arrival</th>`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      <div class="muted-note">Current stock is editable — type a new value to re-plan. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Money Required = To Buy × Landing/Unit. Landing = (Unit USD × FX) + customs + transport.</div>`;
+      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall.</div>` : ""}`;
   }
 
   function orderPaint() {
@@ -1245,21 +1366,31 @@
     const units = filtered.reduce((s, r) => s + r.toBuy, 0);
     const money = filtered.reduce((s, r) => s + r.money, 0);
     const canSell = filtered.filter((r) => r.canSell).length;
+    const admin = isAdmin();
     const kpis = [
       { cls: "k-good", label: "Can sell now", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
-      { cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" },
-    ].concat(canSeeLanding() ? [{ cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" }] : [])
+    ].concat(admin ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
+      .concat(admin && canSeeLanding() ? [{ cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
     if (kEl) kEl.innerHTML = kpis;
 
     const sorted = filtered.slice().sort((a, b) => b.money - a.money || b.toBuy - a.toBuy);
     const body = sorted.map((r) => {
-      const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
       const status = r.canSell
         ? `<span class="badge b-good">Can sell</span>`
         : `<span class="badge b-warn">Reorder</span>`;
+      if (!admin) {
+        // View: Product · Current stock · Status · Estimated arrival only.
+        return `<tr>
+          <td class="t-name">${esc(r.it.name)}</td>
+          <td class="num">${inr(r.current)}</td>
+          <td>${status}</td>
+          <td>${orderState.eta[r.i] ? esc(orderState.eta[r.i]) : "—"}</td>
+        </tr>`;
+      }
+      const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
       return `<tr>
         <td class="t-name">${esc(r.it.name)}</td>
         <td><span class="badge ${catCls}">${esc(r.it.category)}</span></td>
@@ -1267,13 +1398,13 @@
         <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
         <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
-        <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" ${roAttr()} /></td>
+        <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
         <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
-        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" ${roAttr()} /></td>
+        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>
         ${canSeeLanding() ? `<td class="num">${rupee(r.landing, { decimals: 0 })}</td>
         <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="${canSeeLanding() ? 11 : 9}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? (canSeeLanding() ? 11 : 9) : 4}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
   }
@@ -1501,6 +1632,8 @@
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
       if (e.demo) { Object.assign(demoEdits.status, e.demo.status || {}); Object.assign(demoEdits.movement, e.demo.movement || {}); }
       if (e.roster) Object.assign(rosterEdits, e.roster);
+      if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
+      if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
     } catch (err) { console.warn("edits read failed", err); }
   }
 
@@ -1516,7 +1649,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, roster: rosterEdits, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, roster: rosterEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }

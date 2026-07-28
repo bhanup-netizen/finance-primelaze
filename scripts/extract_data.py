@@ -476,6 +476,22 @@ def parse_demo_table(ws, col_idxs, headers, name_col):
     return {"columns": headers, "rows": out}
 
 
+def parse_dropdowns(wb):
+    """Read the 'Drop Down' sheet — column A = Status list, column B = Condition
+    list (header in row 1)."""
+    ws = wb["Drop Down"]
+    rows = rows_of(ws)
+    status, condition = [], []
+    for row in rows[1:]:
+        a = declean(row[0]) if len(row) > 0 else None
+        b = declean(row[1]) if len(row) > 1 else None
+        if isinstance(a, str) and a.strip():
+            status.append(a.strip())
+        if isinstance(b, str) and b.strip():
+            condition.append(b.strip())
+    return {"status": status, "condition": condition}
+
+
 def parse_demo(wb):
     status = parse_demo_table(
         wb["Demo Machine"],
@@ -705,6 +721,7 @@ def main():
         },
         "esthemaxOrder": parse_order(order_wb["Order Summary"]),
         "demoMachines": parse_demo(demo_wb),
+        "dropdowns": parse_dropdowns(demo_wb),
     }
 
     apply_amendments(data)

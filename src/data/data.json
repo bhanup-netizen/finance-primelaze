@@ -7316,5 +7316,22 @@
         ]
       ]
     }
+  },
+  "dropdowns": {
+    "status": [
+      "Ready for Dispatch",
+      "Needs Cleaning",
+      "Needs Foam Replacement",
+      "Needs Repair",
+      "Under Maintenance",
+      "Out of Service"
+    ],
+    "condition": [
+      "Excellent",
+      "Good",
+      "Fair",
+      "Damaged",
+      "Missing"
+    ]
   }
 }
