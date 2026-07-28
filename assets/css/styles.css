@@ -128,6 +128,24 @@ thead th.sort-desc::after { content: "↓"; opacity: 1; }
 }
 .tbl-filter:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
+/* User pill + admin user-management */
+.user-pill {
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--border);
+  padding: 5px 10px; border-radius: 999px; max-width: 210px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.admin-form { display: flex; flex-direction: column; gap: 12px; }
+.admin-form .ord-field input, .admin-form .select { width: 100%; }
+.chk { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.chk input { width: 15px; height: 15px; accent-color: var(--accent); }
+.chk-strong { font-weight: 600; color: var(--text); }
+.perm-group { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface-2); }
+.perm-title { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-3); margin-bottom: 9px; }
+.perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 12px; }
+.linkish { background: none; border: none; color: var(--accent); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; text-transform: none; letter-spacing: 0; }
+.linkish:hover { text-decoration: underline; }
+
 /* ---------- Tabs ---------- */
 .tabs {
   position: sticky; top: 63px; z-index: 20;

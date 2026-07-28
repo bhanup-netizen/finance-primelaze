@@ -9,13 +9,25 @@
   // Populated after the password decrypts the data payload (see the gate below).
   let D = null;
 
-  // Access mode. "view" = read-only, landing/lending prices hidden, no editing.
-  // "admin" = everything visible and editable. (Interim client-side gate; full
-  // per-user accounts & permissions will move to Firebase.)
-  let appMode = "view";
+  // Session / permissions (populated from Firebase Auth + Firestore after login).
+  let appMode = "view";                 // editing on/off (admins can toggle)
   let currentTab = "overview";
-  const isAdmin = () => appMode === "admin";
+  let userRole = "view";                // "admin" | "view"
+  let perms = { pages: "all", hqs: "all", landing: false };
+  let sessionUser = null;               // firebase.User
+  let auth = null, db = null;           // firebase handles
+
+  const roleIsAdmin = () => userRole === "admin";
+  const isAdmin = () => roleIsAdmin() && appMode === "admin";       // editing enabled
+  const canSeeLanding = () => roleIsAdmin() || perms.landing === true;
   const roAttr = () => (isAdmin() ? "" : "disabled");
+  const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
+  const canSeePage = (id) => {
+    if (id === "admin") return roleIsAdmin();
+    const p = allowedPages();
+    return p === "all" || p.includes(id);
+  };
+  const allowedHQs = () => (roleIsAdmin() || perms.hqs === "all") ? "all" : (perms.hqs || []);
 
   /* ---------------- helpers ---------------- */
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -79,6 +91,7 @@
     { id: "esthemax", label: "Esthemax Market", render: renderEsthemax },
     { id: "order", label: "Inventory", render: renderOrder },
     { id: "review", label: "Review Log", render: renderReview },
+    { id: "admin", label: "⚙ Admin", render: renderAdmin },
   ];
 
   // rupees → short ₹ Cr / ₹ L / ₹ form
@@ -281,9 +294,19 @@
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
   const idfor = (s) => s.replace(/[^a-z0-9]/gi, "_");
 
+  function hqAllowed(h) {
+    const a = allowedHQs();
+    if (a === "all") return true;
+    const name = h.title.split("—")[0].trim();
+    return a.includes(name) || a.includes(h.sheet);
+  }
+
   function renderTargets() {
-    const opts = D.hqTargets.map((h, i) =>
-      `<option value="${i}" ${i === hqIndex ? "selected" : ""}>${esc(h.title.split("—")[0].trim())}</option>`).join("");
+    const list = D.hqTargets.filter(hqAllowed);
+    if (!list.some((h) => D.hqTargets.indexOf(h) === hqIndex)) hqIndex = D.hqTargets.indexOf(list[0]);
+    if (!list.length) return `<div class="section-head"><h1>Regional HQ Targets</h1></div><div class="empty">No HQ access assigned. Ask your administrator.</div>`;
+    const opts = D.hqTargets.map((h, i) => hqAllowed(h)
+      ? `<option value="${i}" ${i === hqIndex ? "selected" : ""}>${esc(h.title.split("—")[0].trim())}</option>` : "").join("");
 
     setTimeout(() => {
       const sel = $("#hqSelect");
@@ -316,6 +339,7 @@
         const v = parseFloat(inp.value);
         hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = isNaN(v) ? null : v;
         recomputeHqPlan(inp.dataset.pk);
+        saveEdits();
       };
     });
   }
@@ -616,15 +640,15 @@
 
   function priceBody() {
     if (priceView === "device") {
-      const cols = ["Device"].concat(isAdmin() ? ["Landing Cost (L)"] : []).concat(["Quotation (L)", "Standard (L)", "Minimum (L)"]);
+      const cols = ["Device"].concat(canSeeLanding() ? ["Landing Cost (L)"] : []).concat(["Quotation (L)", "Standard (L)", "Minimum (L)"]);
       const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
       const body = D.costs.device.map((r) => `<tr>
         <td class="t-name">${esc(r.device)}</td>
-        ${isAdmin() ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}
+        ${canSeeLanding() ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}
         <td class="num">${r.quotation ?? "—"}</td>
         <td class="num">${r.standard ?? "—"}</td>
         <td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
-      return `<div class="callout">${isAdmin() ? "Landing = EXW + ~30% (customs + transport). " : "Landing cost is admin-only. "}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}`;
+      return `<div class="callout">${canSeeLanding() ? "Landing = EXW + ~30% (customs + transport). " : "Landing cost is admin-only. "}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}`;
     }
     if (priceView === "celluma") {
       const head = ["Model", "Quotation (₹)", "Selling Price (₹)"]
@@ -638,12 +662,12 @@
     // esthemax
     const sec = (title, rows) => {
       if (!rows || !rows.length) return "";
-      const cols = ["Variant", "Pack"].concat(isAdmin() ? ["Landing Cost"] : []).concat(["Standard (Total)", "MRP", "New MRP", "Min (EXW)"]);
+      const cols = ["Variant", "Pack"].concat(canSeeLanding() ? ["Landing Cost"] : []).concat(["Standard (Total)", "MRP", "New MRP", "Min (EXW)"]);
       const head = cols.map((x, i) => `<th class="${i >= 2 ? "num" : ""}">${x}</th>`).join("");
       const body = rows.map((r) => `<tr>
         <td class="t-name">${esc(r.variant)}</td>
         <td class="t-muted">${esc(r.pack)}</td>
-        ${isAdmin() ? `<td class="num">${rupee(r.landingCost)}</td>` : ""}
+        ${canSeeLanding() ? `<td class="num">${rupee(r.landingCost)}</td>` : ""}
         <td class="num">${rupee(r.standardTotal)}</td>
         <td class="num">${rupee(r.mrp)}</td>
         <td class="num">${rupee(r.newMrp)}</td>
@@ -651,7 +675,7 @@
       return `<div class="block"><h2>${esc(title)}</h2>${table(head, body)}</div>`;
     };
     const e = D.costs.esthemax;
-    return `<div class="callout">${isAdmin() ? "Landing = EXW + 44% customs + transport. " : "Landing cost is admin-only. "}Standard (Total) = landing + marketing + profit. Min (EXW) = Primelaze ex-works price. Per box, excl. GST.</div>
+    return `<div class="callout">${canSeeLanding() ? "Landing = EXW + 44% customs + transport. " : "Landing cost is admin-only. "}Standard (Total) = landing + marketing + profit. Min (EXW) = Primelaze ex-works price. Per box, excl. GST.</div>
       ${sec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
       ${sec("Retail Hydrojelly (2 masks / box)", e.retail)}
       ${sec("Collagen Foot Mask", e.footMask)}`;
@@ -906,7 +930,7 @@
           <thead><tr>
             <th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
             <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
-            <th>ETA (arrival)</th>${isAdmin() ? `<th class="num">Landing/Unit</th><th class="num">Money Required</th>` : ""}
+            <th>ETA (arrival)</th>${canSeeLanding() ? `<th class="num">Landing/Unit</th><th class="num">Money Required</th>` : ""}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
@@ -930,7 +954,7 @@
       { cls: "k-good", label: "Can sell now", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
       { cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" },
-    ].concat(isAdmin() ? [{ cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" }] : [])
+    ].concat(canSeeLanding() ? [{ cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
     if (kEl) kEl.innerHTML = kpis;
@@ -951,10 +975,10 @@
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" ${roAttr()} /></td>
         <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
         <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" ${roAttr()} /></td>
-        ${isAdmin() ? `<td class="num">${rupee(r.landing, { decimals: 0 })}</td>
+        ${canSeeLanding() ? `<td class="num">${rupee(r.landing, { decimals: 0 })}</td>
         <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="${isAdmin() ? 11 : 9}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${canSeeLanding() ? 11 : 9}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
   }
@@ -966,11 +990,12 @@
         const v = parseFloat(e.target.value);
         orderState.stock[idx] = isNaN(v) ? 0 : v;
         orderPaint();
+        saveEdits();
       };
     });
     // ETA (expected arrival at Primelaze) — informational, no recompute needed.
     document.querySelectorAll(".eta-input").forEach((inp) => {
-      inp.onchange = (e) => { orderState.eta[+e.target.dataset.idx] = e.target.value; };
+      inp.onchange = (e) => { orderState.eta[+e.target.dataset.idx] = e.target.value; saveEdits(); };
     });
   }
 
@@ -979,12 +1004,19 @@
 
   function mountTabs() {
     const nav = $("#tabs");
-    nav.innerHTML = TABS.map((t) => `<button class="tab" data-tab="${t.id}" role="tab">${t.label}</button>`).join("");
+    const visible = TABS.filter((t) => canSeePage(t.id));
+    nav.innerHTML = visible.map((t) => `<button class="tab" data-tab="${t.id}" role="tab">${t.label}</button>`).join("");
     nav.querySelectorAll(".tab").forEach((b) => (b.onclick = () => go(b.dataset.tab)));
   }
 
+  function firstVisibleTab() {
+    const t = TABS.find((x) => canSeePage(x.id));
+    return t ? t.id : "overview";
+  }
+
   function go(id) {
-    const tab = TABS.find((t) => t.id === id) || TABS[0];
+    let tab = TABS.find((t) => t.id === id);
+    if (!tab || !canSeePage(tab.id)) tab = TABS.find((t) => t.id === firstVisibleTab()) || TABS[0];
     currentTab = tab.id;
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab.id));
     $("#view").innerHTML = tab.render();
@@ -1049,26 +1081,18 @@
     });
   }
 
-  async function initMode() {
+  // Admins can flip their own editing on/off. Non-admins never see the toggle.
+  function initMode() {
     const btn = document.getElementById("modeToggle");
     if (!btn) return;
+    if (!roleIsAdmin()) { btn.hidden = true; return; }
+    btn.hidden = false;
     const paint = () => {
-      btn.textContent = isAdmin() ? "🔓 Admin" : "👁 View";
+      btn.textContent = isAdmin() ? "🔓 Editing" : "👁 View";
       btn.classList.toggle("admin-on", isAdmin());
     };
     paint();
-    btn.onclick = async () => {
-      if (isAdmin()) { appMode = "view"; paint(); go(currentTab); return; }
-      // interim gate: re-enter the site password to enable editing
-      const pass = window.prompt("Enter admin password to enable editing:");
-      if (pass == null) return;
-      try {
-        await decryptData(pass); // succeeds only for the correct password
-        appMode = "admin"; paint(); go(currentTab);
-      } catch (e) {
-        window.alert("Incorrect password — staying in view-only mode.");
-      }
-    };
+    btn.onclick = () => { appMode = isAdmin() ? "view" : "admin"; paint(); go(currentTab); };
   }
 
   function initTheme() {
@@ -1083,19 +1107,24 @@
     };
   }
 
+  let booted = false;
   function bootApp() {
     $("#fyPill").textContent = D.meta.fiscalYear;
+    const pill = document.getElementById("userPill");
+    if (pill) { pill.textContent = (sessionUser && sessionUser.email ? sessionUser.email : "") + (roleIsAdmin() ? " · admin" : " · view"); pill.hidden = false; }
+    const lo = document.getElementById("logoutBtn");
+    if (lo) { lo.hidden = false; lo.onclick = () => auth && auth.signOut(); }
     mountTabs();
     initMode();
-    go(location.hash.slice(1) || "overview");
-    // auto-enhance tables that sub-tabs render after the initial paint
-    const viewEl = $("#view");
-    if (viewEl) new MutationObserver(() => enhanceTables()).observe(viewEl, { childList: true, subtree: true });
+    go(location.hash.slice(1) || firstVisibleTab());
+    if (!booted) {
+      booted = true;
+      const viewEl = $("#view");
+      if (viewEl) new MutationObserver(() => enhanceTables()).observe(viewEl, { childList: true, subtree: true });
+    }
   }
 
-  /* ---------------- login gate / decryption ---------------- */
-  const EXPECTED_USER = "primelaze";
-
+  /* ---------------- data decryption ---------------- */
   function b64ToBytes(b64) {
     const bin = atob(b64);
     const out = new Uint8Array(bin.length);
@@ -1119,40 +1148,292 @@
     return JSON.parse(new TextDecoder().decode(pt));
   }
 
-  function initGate() {
-    const screen = $("#lockScreen");
-    const app = $("#app");
-    const form = $("#lockForm");
-    const errEl = $("#lockError");
-    const btn = $("#lockBtn");
+  /* ---------------- Firebase auth + Firestore ---------------- */
+  const DEFAULT_DATA_KEY = "prime@1986"; // seeds config/app.dataKey on first admin login
 
+  function initFirebase() {
+    if (!window.firebase || !window.FIREBASE_CONFIG) return false;
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
+      auth = firebase.auth();
+      db = firebase.firestore();
+      return true;
+    } catch (e) { console.error("Firebase init failed", e); return false; }
+  }
+
+  async function loadSession(user) {
+    sessionUser = user;
+    const email = (user.email || "").toLowerCase();
+    const isBootstrap = email && email === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase();
+
+    let udoc = null;
+    try { const s = await db.collection("users").doc(user.uid).get(); if (s.exists) udoc = s.data(); }
+    catch (e) { console.warn("users read failed", e); }
+
+    if (!udoc && isBootstrap) {
+      udoc = { email, role: "admin", pages: "all", hqs: "all", landing: true, name: "Administrator" };
+      try { await db.collection("users").doc(user.uid).set(udoc); } catch (e) { console.warn("bootstrap write failed", e); }
+    }
+    if (!udoc) throw new Error("no-access");
+
+    userRole = udoc.role === "admin" ? "admin" : "view";
+    perms = { pages: udoc.pages || [], hqs: udoc.hqs || [], landing: !!udoc.landing };
+    appMode = "view";
+
+    // data decryption key (kept in Firestore, readable only by signed-in users)
+    let key = DEFAULT_DATA_KEY;
+    try {
+      const cs = await db.collection("config").doc("app").get();
+      if (cs.exists && cs.data().dataKey) key = cs.data().dataKey;
+      else if (roleIsAdmin()) await db.collection("config").doc("app").set({ dataKey: DEFAULT_DATA_KEY }, { merge: true });
+    } catch (e) { console.warn("config read failed, using default key", e); }
+
+    D = await decryptData(key);
+    await loadEdits();
+  }
+
+  async function loadEdits() {
+    try {
+      const s = await db.collection("edits").doc("overrides").get();
+      if (!s.exists) return;
+      const e = s.data() || {};
+      if (e.stock || e.eta) {
+        D.esthemaxOrder.items.forEach((it, i) => {
+          if (e.stock && e.stock[it.name] != null) orderState.stock[i] = e.stock[it.name];
+          if (e.eta && e.eta[it.name] != null) orderState.eta[i] = e.eta[it.name];
+        });
+      }
+      if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
+    } catch (err) { console.warn("edits read failed", err); }
+  }
+
+  let saveTimer = null;
+  function saveEdits() {
+    if (!db || !roleIsAdmin()) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const stock = {}, eta = {};
+      D.esthemaxOrder.items.forEach((it, i) => {
+        if (orderState.stock[i] != null) stock[it.name] = orderState.stock[i];
+        if (orderState.eta[i]) eta[it.name] = orderState.eta[i];
+      });
+      try {
+        await db.collection("edits").doc("overrides").set(
+          { stock, eta, hqTargets: hqEdits, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+      } catch (e) { console.warn("edits save failed", e); }
+    }, 800);
+  }
+
+  function authErr(e) {
+    const c = (e && e.code) || "";
+    if (c.includes("wrong-password") || c.includes("user-not-found") || c.includes("invalid-credential") || c.includes("invalid-email"))
+      return "Incorrect email or password.";
+    if (c.includes("too-many-requests")) return "Too many attempts — try again later.";
+    if (c.includes("network")) return "Network error — check your connection.";
+    return (e && e.message) || "Sign-in failed.";
+  }
+
+  function showLogin() {
+    const s = $("#lockScreen"); if (s) s.style.display = "flex";
+    const app = $("#app"); if (app) app.hidden = true;
+    ["userPill", "modeToggle", "logoutBtn"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; });
+    const b = $("#lockBtn"); if (b) { b.disabled = false; b.textContent = "Sign in"; }
+  }
+
+  function showApp() {
+    const s = $("#lockScreen"); if (s) s.style.display = "none";
+    const app = $("#app"); if (app) app.hidden = false;
+    bootApp();
+  }
+
+  function isLocalHost() {
+    const h = location.hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "" || location.protocol === "file:";
+  }
+
+  // Local-only dev fallback so the dashboard is testable without Firebase.
+  // Never active on a real host (Firebase loads there). Decrypts with the data
+  // password typed in the password field; role via ?role=view|admin.
+  function initLocalDev(form, errEl, btn) {
+    errEl.textContent = "Local dev mode — Firebase not loaded. Enter the data password.";
+    btn.textContent = "Dev sign in";
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      errEl.textContent = "";
-      const user = ($("#lockUser").value || "").trim();
-      const pass = $("#lockPass").value || "";
-      if (user.toLowerCase() !== EXPECTED_USER) {
-        errEl.textContent = "Invalid username or password.";
-        return;
-      }
-      btn.disabled = true;
-      btn.textContent = "Unlocking…";
+      errEl.textContent = ""; btn.disabled = true;
       try {
-        D = await decryptData(pass); // GCM auth fails on a wrong password
-        bootApp();
-        screen.remove();
-        app.hidden = false;
+        D = await decryptData($("#lockPass").value || "");
+        const role = new URLSearchParams(location.search).get("role");
+        userRole = role === "view" ? "view" : "admin";
+        perms = { pages: "all", hqs: "all", landing: userRole === "admin" };
+        sessionUser = { email: "dev@localhost" };
+        showApp();
       } catch (err) {
-        errEl.textContent = "Invalid username or password.";
-        btn.disabled = false;
-        btn.textContent = "Unlock";
-        $("#lockPass").value = "";
-        $("#lockPass").focus();
+        errEl.textContent = "Wrong data password."; btn.disabled = false;
       }
     });
   }
 
-  // boot: theme applies immediately; data stays locked until decrypted.
+  function initAuthGate() {
+    const form = $("#lockForm"), errEl = $("#lockError"), btn = $("#lockBtn");
+    if (!initFirebase()) {
+      if (isLocalHost()) return initLocalDev(form, errEl, btn);
+      errEl.textContent = "Could not load Firebase — check your connection and refresh.";
+      return;
+    }
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.textContent = ""; btn.disabled = true; btn.textContent = "Signing in…";
+      try {
+        await auth.signInWithEmailAndPassword(($("#lockUser").value || "").trim(), $("#lockPass").value || "");
+        // onAuthStateChanged finishes the flow
+      } catch (err) {
+        errEl.textContent = authErr(err); btn.disabled = false; btn.textContent = "Sign in";
+      }
+    });
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { showLogin(); return; }
+      try { await loadSession(user); showApp(); }
+      catch (err) {
+        console.warn("session load", err);
+        errEl.textContent = err && err.message === "no-access"
+          ? "This account has no access yet. Ask your administrator to add you."
+          : "Sign-in problem: " + ((err && err.message) || err);
+        try { await auth.signOut(); } catch (e) {}
+        showLogin();
+      }
+    });
+  }
+
+  /* ---------------- Admin: user & permission management ---------------- */
+  const PERMISSION_PAGES = TABS.filter((t) => t.id !== "admin");
+
+  function renderAdmin() {
+    if (!roleIsAdmin()) return `<div class="section-head"><h1>Admin</h1></div><div class="empty">Administrator access only.</div>`;
+    setTimeout(initAdminUI, 0);
+    const pageChecks = PERMISSION_PAGES.map((t) =>
+      `<label class="chk"><input type="checkbox" class="perm-page" value="${t.id}" checked> ${esc(t.label)}</label>`).join("");
+    const hqChecks = D.hqTargets.map((h) => {
+      const n = h.title.split("—")[0].trim();
+      return `<label class="chk"><input type="checkbox" class="perm-hq" value="${esc(n)}" checked> ${esc(n)}</label>`;
+    }).join("");
+    return `
+      <div class="section-head">
+        <h1>Admin — Users &amp; Access</h1>
+        <p>Create accounts and control which pages and HQs each person can see. Landing/lending cost prices show only to admins or users you grant.</p>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <h2 style="margin-top:0">Add user</h2>
+          <form id="addUserForm" class="admin-form" autocomplete="off">
+            <label class="ord-field"><span>Email</span><input id="auEmail" type="email" required placeholder="person@primelaze.com"></label>
+            <label class="ord-field"><span>Temp password</span><input id="auPass" type="text" required placeholder="min 6 chars"></label>
+            <label class="ord-field"><span>Role</span>
+              <select id="auRole" class="select"><option value="view">View (read-only)</option><option value="admin">Admin (full edit)</option></select>
+            </label>
+            <label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
+            <div class="perm-group"><div class="perm-title">Pages <button type="button" class="linkish" data-all="perm-page">all/none</button></div><div class="perm-grid">${pageChecks}</div></div>
+            <div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>
+            <button type="submit" class="dl-btn" id="auSubmit">Create user</button>
+            <div id="auMsg" class="lock-error" style="min-height:16px"></div>
+          </form>
+        </div>
+        <div class="card">
+          <h2 style="margin-top:0">Existing users</h2>
+          <div id="userList"><div class="empty">Loading…</div></div>
+        </div>
+      </div>`;
+  }
+
+  function collectPerms() {
+    const pages = Array.from(document.querySelectorAll(".perm-page:checked")).map((c) => c.value);
+    const hqs = Array.from(document.querySelectorAll(".perm-hq:checked")).map((c) => c.value);
+    const allPages = pages.length === PERMISSION_PAGES.length;
+    const allHqs = hqs.length === D.hqTargets.length;
+    return {
+      role: document.getElementById("auRole").value === "admin" ? "admin" : "view",
+      landing: document.getElementById("auLanding").checked,
+      pages: allPages ? "all" : pages,
+      hqs: allHqs ? "all" : hqs,
+    };
+  }
+
+  async function adminCreateUser(email, pass, docData) {
+    // use a throwaway secondary app so creating the user doesn't sign the admin out
+    const sec = firebase.initializeApp(window.FIREBASE_CONFIG, "sec-" + Math.floor(performance.now()));
+    try {
+      const cred = await sec.auth().createUserWithEmailAndPassword(email, pass);
+      await db.collection("users").doc(cred.user.uid).set({ email: email.toLowerCase(), ...docData });
+      try { await sec.auth().signOut(); } catch (e) {}
+    } finally { try { await sec.delete(); } catch (e) {} }
+  }
+
+  async function initAdminUI() {
+    document.querySelectorAll("[data-all]").forEach((b) => {
+      b.onclick = () => {
+        const boxes = document.querySelectorAll("." + b.dataset.all);
+        const anyOff = Array.from(boxes).some((x) => !x.checked);
+        boxes.forEach((x) => (x.checked = anyOff));
+      };
+    });
+    const form = document.getElementById("addUserForm");
+    if (form) form.onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("auMsg"), sub = document.getElementById("auSubmit");
+      msg.style.color = ""; msg.textContent = ""; sub.disabled = true; sub.textContent = "Creating…";
+      try {
+        const email = document.getElementById("auEmail").value.trim();
+        const pass = document.getElementById("auPass").value;
+        await adminCreateUser(email, pass, collectPerms());
+        msg.style.color = "var(--good)"; msg.textContent = "User created ✓";
+        form.reset();
+        document.querySelectorAll(".perm-page,.perm-hq").forEach((c) => (c.checked = true));
+        loadUserList();
+      } catch (err) {
+        msg.style.color = "var(--bad)"; msg.textContent = authErr(err);
+      } finally { sub.disabled = false; sub.textContent = "Create user"; }
+    };
+    loadUserList();
+  }
+
+  async function loadUserList() {
+    const box = document.getElementById("userList");
+    if (!box) return;
+    try {
+      const snap = await db.collection("users").get();
+      const rows = [];
+      snap.forEach((doc) => {
+        const u = doc.data();
+        const scope = [
+          u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages"),
+          u.hqs === "all" ? "all HQs" : ((u.hqs || []).length + " HQs"),
+          u.landing ? "landing✓" : "no-landing",
+        ].join(" · ");
+        rows.push(`<tr>
+          <td class="t-name">${esc(u.email || "—")}</td>
+          <td><span class="badge ${u.role === "admin" ? "b-good" : "b-neutral"}">${esc(u.role || "view")}</span></td>
+          <td class="t-muted">${esc(scope)}</td>
+          <td><button class="ghost-btn u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
+        </tr>`);
+      });
+      box.innerHTML = rows.length
+        ? table(["User", "Role", "Access", ""].map((h) => `<th>${h}</th>`).join(""), rows.join(""))
+        : `<div class="empty">No users yet.</div>`;
+      box.querySelectorAll(".u-del").forEach((b) => {
+        b.onclick = async () => {
+          if (b.dataset.email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) {
+            window.alert("The bootstrap admin can't be revoked here."); return;
+          }
+          if (!window.confirm("Revoke access for " + b.dataset.email + "? (Removes their permissions.)")) return;
+          try { await db.collection("users").doc(b.dataset.uid).delete(); loadUserList(); }
+          catch (e) { window.alert("Could not revoke: " + (e.message || e)); }
+        };
+      });
+    } catch (e) {
+      box.innerHTML = `<div class="empty">Could not load users (${esc(e.message || "" + e)}).</div>`;
+    }
+  }
+
+  // boot: theme applies immediately; Firebase drives access.
   initTheme();
-  initGate();
+  initAuthGate();
 })();

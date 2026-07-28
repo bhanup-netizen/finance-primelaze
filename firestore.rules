@@ -1,0 +1,42 @@
+rules_version = '2';
+// Primelaze dashboard — Firestore security rules.
+// Paste these in Firebase Console → Firestore Database → Rules → Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    // Bootstrap admin email is always admin; other admins are flagged in their
+    // own users/{uid} doc. Keep this email in sync with BOOTSTRAP_ADMIN_EMAIL
+    // in assets/js/firebase-config.js.
+    function isBootstrapAdmin() {
+      return isSignedIn() && request.auth.token.email == 'bhanup@primelaze.com';
+    }
+    function isAdmin() {
+      return isBootstrapAdmin() ||
+        (isSignedIn() &&
+         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    // App config (holds the data-decryption key) — any signed-in user may read;
+    // only admins may write.
+    match /config/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Shared edits/overrides — signed-in users read; admins write.
+    match /edits/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // User permission docs — a user may read their own; admins read/write all.
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

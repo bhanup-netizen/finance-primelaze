@@ -25,16 +25,28 @@ Light and dark themes, responsive layout, keyboard-free navigation, deep-linkabl
 tabs (`#overview`, `#incentives`, …). Every table is **click-to-sort** and has a
 per-table **filter** box.
 
-### View vs Admin mode
+### Accounts, roles & permissions (Firebase)
 
-A header toggle switches between **View** (read-only) and **Admin** (edit). In
-View mode, **landing / lending cost prices are hidden** (Price Book landing
-columns, Inventory landing & money) and all editable fields are disabled. Admin
-is unlocked with the site password.
+Sign-in uses **Firebase Auth** (email/password), with permissions in
+**Firestore**. See **[SETUP-firebase.md](SETUP-firebase.md)** for the one-time
+console setup and **[firestore.rules](firestore.rules)** for the security rules.
 
-> This is an interim client-side gate. Full multi-user accounts, per-user page &
-> HQ permissions, and shared persistent edits are planned via **Firebase**
-> (Auth + Firestore) — until then, admin edits are session-only.
+- **Roles** — `admin` (full edit, sees landing/cost prices, sees the **⚙ Admin**
+  tab) or `view` (read-only).
+- **Per-user scope** — the Admin tab controls which **pages** and which **HQs**
+  each user sees, and whether they may see **landing/lending cost prices**.
+- **Landing prices** are hidden from View users (Price Book landing columns,
+  Inventory landing & money).
+- **Edits** by admins (inventory stock/ETA, HQ targets) save to Firestore and
+  load for everyone.
+- **Data at rest** — the payload stays AES-encrypted in `data.enc.js`; the key
+  lives in Firestore (`config/app`) and is delivered only after sign-in, so the
+  public file is unreadable to anonymous visitors.
+
+Every table is **click-to-sort** with a per-table **filter** box.
+
+_Local dev:_ served from `localhost` without Firebase, a dev sign-in decrypts
+with the data password; add `?role=view` to preview a view-only account.
 
 ## 🔒 Password protection
 

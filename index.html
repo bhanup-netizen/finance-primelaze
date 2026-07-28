@@ -12,22 +12,22 @@
   <!-- Login gate: the dashboard data stays AES-256-GCM encrypted until the
        correct password decrypts it in the browser. -->
   <div id="lockScreen" class="lock-screen">
-    <form id="lockForm" class="lock-card" autocomplete="off">
+    <form id="lockForm" class="lock-card" autocomplete="on">
       <div class="lock-mark">P</div>
       <h1>Primelaze Dashboard</h1>
-      <p class="lock-sub">Enter your credentials to unlock FY 2026-27 data.</p>
+      <p class="lock-sub">Sign in with your Primelaze account.</p>
       <label class="lock-field">
-        <span>Username</span>
-        <input id="lockUser" type="text" autocomplete="username" placeholder="username" autofocus />
+        <span>Email</span>
+        <input id="lockUser" type="email" autocomplete="username" placeholder="you@primelaze.com" autofocus />
       </label>
       <label class="lock-field">
         <span>Password</span>
         <input id="lockPass" type="password" autocomplete="current-password" placeholder="password" />
       </label>
-      <button id="lockBtn" type="submit" class="lock-btn">Unlock</button>
+      <button id="lockBtn" type="submit" class="lock-btn">Sign in</button>
       <div id="lockError" class="lock-error" role="alert"></div>
     </form>
-    <div class="lock-foot">Data is encrypted at rest and decrypted locally in your browser.</div>
+    <div class="lock-foot">Access is managed by your administrator. Data is encrypted at rest.</div>
   </div>
 
   <div id="app" hidden>
@@ -41,7 +41,9 @@
     </div>
     <div class="topbar-meta">
       <span class="fy-pill" id="fyPill">FY 2026-27</span>
-      <button id="modeToggle" class="mode-btn" title="Switch between view-only and admin (edit) mode">👁 View</button>
+      <span class="user-pill" id="userPill" hidden></span>
+      <button id="modeToggle" class="mode-btn" title="Switch between view-only and admin (edit) mode" hidden>👁 View</button>
+      <button id="logoutBtn" class="mode-btn" title="Sign out" hidden>Sign out</button>
       <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
         <span class="theme-icon">◐</span>
       </button>
@@ -59,6 +61,11 @@
   </footer>
   </div><!-- /#app -->
 
+  <!-- Firebase (compat build — exposes a global `firebase`) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="assets/js/firebase-config.js"></script>
   <script src="assets/js/data.enc.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
