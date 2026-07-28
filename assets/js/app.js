@@ -23,7 +23,7 @@
   const roAttr = () => (isAdmin() ? "" : "disabled");
   const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
   const canSeePage = (id) => {
-    if (id === "admin") return roleIsAdmin();
+    if (id === "admin") return isAdmin(); // only while an admin is in Admin (edit) mode
     const p = allowedPages();
     return p === "all" || p.includes(id);
   };
@@ -1361,7 +1361,7 @@
       btn.classList.toggle("admin-on", isAdmin());
     };
     paint();
-    btn.onclick = () => { appMode = isAdmin() ? "view" : "admin"; paint(); go(currentTab); };
+    btn.onclick = () => { appMode = isAdmin() ? "view" : "admin"; paint(); mountTabs(); go(currentTab); };
   }
 
   function initTheme() {
