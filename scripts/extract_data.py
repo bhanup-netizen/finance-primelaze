@@ -27,6 +27,7 @@ DASHBOARD = os.path.join(WB_DIR, "Primelaze_Unified_Dashboard_FY2627.xlsx")
 PRICES = os.path.join(WB_DIR, "Esthemax_prices_working.xlsx")
 ORDER = os.path.join(WB_DIR, "Esthemax_Order_Calculation.xlsx")
 DEMO = os.path.join(WB_DIR, "Demo_Machine_Booking_Status.xlsx")
+CHALLAN = os.path.join(WB_DIR, "Delivery_Challan.xlsx")
 
 
 def rows_of(ws):
@@ -465,10 +466,10 @@ def declean(v):
     return num(v) if isinstance(v, (int, float)) else v
 
 
-def parse_demo_table(ws, col_idxs, headers, name_col):
+def parse_demo_table(ws, col_idxs, headers, name_col, data_start=1):
     data = rows_of(ws)
     out = []
-    for row in data[1:]:
+    for row in data[data_start:]:
         first = row[name_col] if name_col < len(row) else None
         if first is None or (isinstance(first, str) and not first.strip()):
             continue
@@ -523,12 +524,20 @@ def parse_refs(wb):
 
 
 def parse_demo(wb):
+    # Current booking status (header at row 3; the daily grid columns are skipped).
+    current = parse_demo_table(
+        wb["Current April-July 2026"],
+        [0, 1, 3, 4, 5, 6],
+        ["Device", "Serial No", "Status", "Location", "Remarks", "Manager"],
+        name_col=0, data_start=3)
+    # Machine working-condition details.
     status = parse_demo_table(
         wb["Demo Machine"],
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 10],
         ["Machine", "Serial No", "Location", "Purpose", "Doctor", "Salesperson",
          "Confirmed by", "Status", "Updated", "Condition"],
         name_col=0)
+    # Movement / dispatch log.
     movement = parse_demo_table(
         wb["Machine Movement Data "],
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
@@ -536,7 +545,46 @@ def parse_demo(wb):
          "Expected Return", "Actual Return", "Demo Status", "Cond. Out",
          "Cond. Return", "Accessories"],
         name_col=2)
-    return {"status": status, "movement": movement}
+    # Flight-case / packing condition.
+    packing = parse_demo_table(
+        wb["Packing condition "],
+        list(range(0, 16)),
+        ["Device", "Serial No", "Flight Case ID", "Foam Condition", "Lock Condition",
+         "Handle Condition", "Wheel Condition", "Exterior Condition", "Interior Condition",
+         "Last Checked By", "Last Checked Date", "Status", "Remarks",
+         "Flight Case On Receipt", "Missing Items", "Damage Reported"],
+        name_col=0)
+    return {"current": current, "status": status, "movement": movement, "packing": packing}
+
+
+def parse_challan_refs(wb):
+    """Address book for the Delivery Challan module:
+    - consignors (From): the Primelaze offices in the 'Database' sheet
+    - consignees (To): recipients in the 'DATA' sheet (name, address, declaration)
+    """
+    def tidy(v):
+        if not isinstance(v, str):
+            return ""
+        return " ".join(v.replace("\xa0", " ").split()).strip()
+
+    consignors = []
+    for row in rows_of(wb["Database"])[1:]:
+        name = tidy(row[1]) if len(row) > 1 else ""
+        addr = tidy(row[2]) if len(row) > 2 else ""
+        if name and "primelaze" in name.lower():
+            consignors.append({"name": name, "addr": addr})
+
+    consignees = []
+    seen = set()
+    for row in rows_of(wb["DATA"])[1:]:
+        name = tidy(row[1]) if len(row) > 1 else ""
+        addr = tidy(row[3]) if len(row) > 3 else ""
+        purpose = tidy(row[5]) if len(row) > 5 else ""
+        if name and name not in seen:
+            seen.add(name)
+            consignees.append({"name": name, "addr": addr, "purpose": purpose})
+
+    return {"from": consignors, "to": consignees}
 
 
 def parse_order(ws):
@@ -714,6 +762,7 @@ def main():
     prices = load_workbook(PRICES, data_only=True)
     order_wb = load_workbook(ORDER, data_only=True)
     demo_wb = load_workbook(DEMO, data_only=True)
+    challan_wb = load_workbook(CHALLAN, data_only=True)
 
     hq_sheets = [s for s in dash.sheetnames if s.endswith("HQ")]
 
@@ -753,6 +802,7 @@ def main():
         "demoMachines": parse_demo(demo_wb),
         "dropdowns": parse_dropdowns(demo_wb),
         "refs": parse_refs(demo_wb),
+        "challanRefs": parse_challan_refs(challan_wb),
     }
 
     apply_amendments(data)

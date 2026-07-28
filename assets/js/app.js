@@ -860,8 +860,14 @@
   }
 
   /* ================= DEMO MACHINES ================= */
-  const demoEdits = { status: {}, movement: {} };
-  let demoView = "status";
+  const demoEdits = { current: {}, status: {}, movement: {}, packing: {} };
+  const DEMO_VIEWS = [
+    { id: "current", label: "Current status" },
+    { id: "status", label: "Machine details" },
+    { id: "movement", label: "Movement log" },
+    { id: "packing", label: "Packing condition" },
+  ];
+  let demoView = "current";
 
   const STATUS_COLS = ["Status"];
   const CONDITION_COLS = ["Condition", "Cond. Out", "Cond. Return"];
@@ -898,13 +904,14 @@
   function demoOptions(colName, colIdx, current, rowIdx) {
     const dd = D.dropdowns || {}, rf = D.refs || {};
     const cols = D.demoMachines[demoView].columns;
+    const uniq = (a, b) => Array.from(new Set(a.concat(b)));
     let base;
-    if (colName === "Status") base = (dd.status || []).slice();
-    else if (CONDITION_COLS.includes(colName)) base = (dd.condition || []).slice();
-    else if (/location|^from$|^to$/i.test(colName)) base = (rf.states || []).slice();
-    else if (/salesperson|confirmed by|manager|received by|approved by/i.test(colName)) base = (rf.employees || []).slice();
+    if (colName === "Status") base = uniq(dd.status || [], distinctDemoValues(colIdx));
+    else if (/condition/i.test(colName)) base = uniq(dd.condition || [], distinctDemoValues(colIdx));
+    else if (/location|^from$|^to$/i.test(colName)) base = uniq(rf.states || [], distinctDemoValues(colIdx));
+    else if (/salesperson|confirmed by|manager|received by|approved by|checked by/i.test(colName)) base = (rf.employees || []).slice();
     else if (/^machine$|^device$/i.test(colName)) base = (rf.devices || []).slice();
-    else if (/serial/i.test(colName)) {
+    else if (/serial|flight case id/i.test(colName)) {
       const mIdx = cols.findIndex((c) => /^machine$|^device$/i.test(c));
       const mv = mIdx >= 0 ? demoVal(rowIdx, mIdx) : "";
       const linked = mv ? (rf.deviceSerials || []).filter((x) => x.device === mv).map((x) => x.serial).filter(Boolean) : [];
@@ -975,8 +982,7 @@
       </div>
       <div class="controls">
         <div class="seg">
-          <button data-dview="status" class="${demoView === "status" ? "active" : ""}">Current status</button>
-          <button data-dview="movement" class="${demoView === "movement" ? "active" : ""}">Movement log</button>
+          ${DEMO_VIEWS.map((v) => `<button data-dview="${v.id}" class="${demoView === v.id ? "active" : ""}">${esc(v.label)}</button>`).join("")}
         </div>
       </div>
       <div id="demoBody">${demoTable()}</div>`;
@@ -1022,6 +1028,10 @@
             <label class="ord-field"><span>Declared cargo value (₹)</span><input id="chValue" type="number" value="${esc(c.declaredValue || "")}"></label>
           </div>
           <div class="ch-grid">
+            <label class="ord-field"><span>From — pick office</span>
+              <select id="chFromPick" class="select"><option value="">— pick from address book —</option>${(D.challanRefs && D.challanRefs.from || []).map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join("")}</select></label>
+            <label class="ord-field"><span>To — pick consignee</span>
+              <select id="chToPick" class="select"><option value="">— pick from address book —</option>${(D.challanRefs && D.challanRefs.to || []).map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join("")}</select></label>
             <label class="ord-field"><span>From — name</span><input id="chFromName" value="${esc(c.fromName || DEFAULT_FROM.name)}"></label>
             <label class="ord-field"><span>To — name (consignee)</span><input id="chToName" value="${esc(c.toName || "")}" placeholder="Dr. Name / Clinic"></label>
             <label class="ord-field"><span>From — address</span><textarea id="chFromAddr" rows="2">${esc(c.fromAddr || DEFAULT_FROM.addr)}</textarea></label>
@@ -1076,6 +1086,20 @@
       document.querySelectorAll(".ch-del").forEach((b) => b.onclick = () => { b.closest(".ch-item").remove(); });
     };
     wrapItems();
+    // pick From/To from the imported address book → auto-fill name + address
+    const fromPick = document.getElementById("chFromPick");
+    if (fromPick) fromPick.onchange = () => {
+      const x = (D.challanRefs && D.challanRefs.from || [])[+fromPick.value];
+      if (x) { $("#chFromName").value = x.name; $("#chFromAddr").value = x.addr; }
+    };
+    const toPick = document.getElementById("chToPick");
+    if (toPick) toPick.onchange = () => {
+      const x = (D.challanRefs && D.challanRefs.to || [])[+toPick.value];
+      if (x) {
+        $("#chToName").value = x.name; $("#chToAddr").value = x.addr;
+        if (x.purpose && !$("#chNotes").value) $("#chNotes").value = x.purpose;
+      }
+    };
     $("#chCancel").onclick = () => { $("#challanForm").innerHTML = ""; };
     $("#chForm").onsubmit = async (e) => {
       e.preventDefault();
@@ -1657,7 +1681,7 @@
         });
       }
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
-      if (e.demo) { Object.assign(demoEdits.status, e.demo.status || {}); Object.assign(demoEdits.movement, e.demo.movement || {}); }
+      if (e.demo) ["current", "status", "movement", "packing"].forEach((k) => Object.assign(demoEdits[k], e.demo[k] || {}));
       if (e.roster) Object.assign(rosterEdits, e.roster);
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
