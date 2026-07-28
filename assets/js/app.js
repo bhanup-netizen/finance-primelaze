@@ -13,13 +13,14 @@
   let appMode = "view";                 // editing on/off (admins can toggle)
   let currentTab = "overview";
   let userRole = "view";                // "admin" | "view"
-  let perms = { pages: "all", hqs: "all", landing: false };
+  let perms = { pages: "all", hqs: "all", landing: false, managerInc: false };
   let sessionUser = null;               // firebase.User
   let auth = null, db = null;           // firebase handles
 
   const roleIsAdmin = () => userRole === "admin";
   const isAdmin = () => roleIsAdmin() && appMode === "admin";       // editing enabled
   const canSeeLanding = () => roleIsAdmin() || perms.landing === true;
+  const canSeeManagerInc = () => roleIsAdmin() || perms.managerInc === true;
   const roAttr = () => (isAdmin() ? "" : "disabled");
   const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
   const canSeePage = (id) => {
@@ -382,32 +383,27 @@
     const plans = (h.plans && h.plans.length ? h.plans : []).map((pl, pi) => {
       const pk = h.sheet + "#" + pi;
       const pid = idfor(pk);
-      const head = ["Product", "FY25-26", "FY26-27", "Device Value (L)", "Total Value (L)", "Notes"]
-        .map((x, i) => `<th class="${i >= 1 && i <= 4 ? "num" : ""}">${x}</th>`).join("");
-      // running totals over device rows (numeric deviceValue) using edited values
-      let tu = 0, tv = 0;
+      const head = ["Product", "FY25-26", "FY26-27"]
+        .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
+      // units total over device rows (numeric deviceValue) using edited values
+      let tu = 0;
       pl.rows.forEach((r, ri) => {
         if (r.isTotal || !isNum(r.deviceValue)) return;
         const v = effVal(pk, ri, r.fy2627);
-        if (isNum(v)) { tu += v; tv += v * r.deviceValue; }
+        if (isNum(v)) tu += v;
       });
       const rows = pl.rows.map((r, ri) => {
         if (r.isTotal) return `<tr class="total-row">
-          <td>TOTAL</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num" id="totu_${pid}">${inr(tu)}</td>
-          <td class="num"></td><td class="num" id="totv_${pid}">${inr(tv)}</td><td></td></tr>`;
+          <td>TOTAL</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num" id="totu_${pid}">${inr(tu)}</td></tr>`;
         const editable = isNum(r.fy2627);
         const v = effVal(pk, ri, r.fy2627);
         const fyCell = editable
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
-        const rowTv = (isNum(v) && isNum(r.deviceValue)) ? v * r.deviceValue : (isNum(r.totalValue) ? r.totalValue : null);
         return `<tr>
           <td class="t-name">${esc(r.product)}</td>
           <td class="num">${r.fy2526 ?? "—"}</td>
-          <td class="num">${fyCell}</td>
-          <td class="num">${isNum(r.deviceValue) ? inr(r.deviceValue) : "—"}</td>
-          <td class="num" id="tv_${pid}_${ri}">${isNum(rowTv) ? inr(rowTv) : "—"}</td>
-          <td class="cell-note">${esc(r.notes || "")}</td></tr>`;
+          <td class="num">${fyCell}</td></tr>`;
       }).join("");
       return `${pl.label ? `<div class="subplan-title">${esc(pl.label)}</div>` : ""}${table(head, rows)}`;
     }).join("");
@@ -463,9 +459,10 @@
     const devTbl = (rows) => pTable(
       [{ label: "Device" }, { label: "Std Sell (L)", num: 1 }, { label: "Min (L)", num: 1 }, { label: "Std Incentive", num: 1 }, { label: "Min Incentive", num: 1 }, { label: "Above-Std" }],
       rows.map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td><td class="num">${rupee(r.stdIncentive)}</td><td class="num">${rupee(r.minIncentive)}</td><td>${esc(r.aboveStd || "—")}</td></tr>`).join(""));
+    const mgr = canSeeManagerInc();
     const cel = pTable(
-      [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: "SP Incentive", num: 1 }, { label: "Mgr Incentive", num: 1 }],
-      D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.sellingPrice)}</td><td class="num">${rupee(r.salespersonIncentive)}</td><td class="num">${rupee(r.managerIncentive)}</td></tr>`).join(""));
+      [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: "SP Incentive", num: 1 }].concat(mgr ? [{ label: "Mgr Incentive", num: 1 }] : []),
+      D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.sellingPrice)}</td><td class="num">${rupee(r.salespersonIncentive)}</td>${mgr ? `<td class="num">${rupee(r.managerIncentive)}</td>` : ""}</tr>`).join(""));
     const esthTiers = (t) => pTable(
       [{ label: "Tier" }, { label: "Boxes min", num: 1 }, { label: "Boxes max", num: 1 }, { label: "₹/Box", num: 1 }, { label: "Label" }],
       t.map((x) => `<tr><td>${esc(x.tier)}</td><td class="num">${x.min}</td><td class="num">${esc(x.max)}</td><td class="num">${rupee(x.incentive)}</td><td>${esc(x.label)}</td></tr>`).join(""));
@@ -484,10 +481,10 @@
       </div>
       <div class="p-section p-break">
         <h2>Incentive reference — Devices (Sales Person)</h2>${devTbl(dev.salesperson)}
-        <h2>Incentive reference — Devices (Sales Manager · flat 50% of Std)</h2>${devTbl(dev.manager)}
+        ${mgr ? `<h2>Incentive reference — Devices (Sales Manager · flat 50% of Std)</h2>${devTbl(dev.manager)}` : ""}
         <h2>Incentive reference — Celluma</h2>${cel}
         <h2>Incentive reference — Esthemax (Sales Person slab)</h2>${esthTiers(D.incentives.esthemax.salesperson)}
-        <h2>Incentive reference — Esthemax (Sales Manager slab)</h2>${esthTiers(D.incentives.esthemax.manager)}
+        ${mgr ? `<h2>Incentive reference — Esthemax (Sales Manager slab)</h2>${esthTiers(D.incentives.esthemax.manager)}` : ""}
       </div>
       <div class="p-section p-break">
         <h2>Incentive terms &amp; conditions</h2>
@@ -559,17 +556,18 @@
     return `
       <div class="callout">Standard = selling price (pricelist + ₹50K FY26-27 uplift). Sell above Standard → +10% of the excess (Sales Person only). Below Standard → 70% of Std. Manager earns a flat 50% of Std on reportee sales, full SP rates on direct sales.</div>
       <div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson, false)}</div>
-      <div class="block"><h2>Sales Manager plan <span class="pill-inline">flat 50% of Std</span></h2>${mk(D.incentives.device.manager, true)}</div>`;
+      ${canSeeManagerInc() ? `<div class="block"><h2>Sales Manager plan <span class="pill-inline">flat 50% of Std</span></h2>${mk(D.incentives.device.manager, true)}</div>` : ""}`;
   }
 
   function cellumaIncentive() {
-    const head = ["Model", "Selling Price (excl. GST)", "Salesperson Incentive", "Sales Manager Incentive"]
-      .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
+    const mgr = canSeeManagerInc();
+    const cols = ["Model", "Selling Price (excl. GST)", "Salesperson Incentive"].concat(mgr ? ["Sales Manager Incentive"] : []);
+    const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
     const body = D.incentives.celluma.map((r) => `<tr>
       <td class="t-name">${esc(r.model)}</td>
       <td class="num">${rupee(r.sellingPrice)}</td>
       <td class="num">${rupee(r.salespersonIncentive)}</td>
-      <td class="num">${rupee(r.managerIncentive)}</td></tr>`).join("");
+      ${mgr ? `<td class="num">${rupee(r.managerIncentive)}</td>` : ""}</tr>`).join("");
     return `
       <div class="callout teal">Single Standard (selling) price per model; no minimum. Manager incentive is a flat 50% of the salesperson standard. Target rule: 1 Celluma / IC / month (12/yr), 10 units per HQ per year at HQ level.</div>
       ${table(head, body)}`;
@@ -590,7 +588,7 @@
     return `
       <div class="callout">Hydrojelly 6-tier per-box slab. Threshold = monthly box achievement; incentive applied per box, retrospective to box 1. Payment terms: full incentive if paid within 45 days, 50% within 60 days, none after 60 days.</div>
       <div class="block"><h2>Sales Person slab</h2>${mk(D.incentives.esthemax.salesperson)}</div>
-      <div class="block"><h2>Sales Manager slab</h2>${mk(D.incentives.esthemax.manager)}</div>`;
+      ${canSeeManagerInc() ? `<div class="block"><h2>Sales Manager slab</h2>${mk(D.incentives.esthemax.manager)}</div>` : ""}`;
   }
 
   function termsView() {
@@ -1440,13 +1438,13 @@
     catch (e) { console.warn("users read failed", e); }
 
     if (!udoc && isBootstrap) {
-      udoc = { email, role: "admin", pages: "all", hqs: "all", landing: true, name: "Administrator" };
+      udoc = { email, role: "admin", pages: "all", hqs: "all", landing: true, managerInc: true, name: "Administrator" };
       try { await db.collection("users").doc(user.uid).set(udoc); } catch (e) { console.warn("bootstrap write failed", e); }
     }
     if (!udoc) throw new Error("no-access");
 
     userRole = udoc.role === "admin" ? "admin" : "view";
-    perms = { pages: udoc.pages || [], hqs: udoc.hqs || [], landing: !!udoc.landing };
+    perms = { pages: udoc.pages || [], hqs: udoc.hqs || [], landing: !!udoc.landing, managerInc: !!udoc.managerInc };
     appMode = "view";
 
     // data decryption key (kept in Firestore, readable only by signed-in users)
@@ -1619,6 +1617,7 @@
               <select id="auRole" class="select"><option value="view">View (read-only)</option><option value="admin">Admin (full edit)</option></select>
             </label>
             <label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
+            <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label>
             <div class="perm-group"><div class="perm-title">Pages <button type="button" class="linkish" data-all="perm-page">all/none</button></div><div class="perm-grid">${pageChecks}</div></div>
             <div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>
             <button type="submit" class="dl-btn" id="auSubmit">Create user</button>
@@ -1640,6 +1639,7 @@
     return {
       role: document.getElementById("auRole").value === "admin" ? "admin" : "view",
       landing: document.getElementById("auLanding").checked,
+      managerInc: document.getElementById("auMgrInc").checked,
       pages: allPages ? "all" : pages,
       hqs: allHqs ? "all" : hqs,
     };
@@ -1695,6 +1695,7 @@
           u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages"),
           u.hqs === "all" ? "all HQs" : ((u.hqs || []).length + " HQs"),
           u.landing ? "landing✓" : "no-landing",
+          u.managerInc ? "mgr-inc✓" : "no-mgr-inc",
         ].join(" · ");
         rows.push(`<tr>
           <td class="t-name">${esc(u.email || "—")}</td>
