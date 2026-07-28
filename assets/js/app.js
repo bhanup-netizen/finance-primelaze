@@ -213,6 +213,8 @@
   const rosterEdits = {}; // `${num}#${field}` -> value
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
   let rosterAddSeq = 0;
+  const customHQs = [];   // admin-added base-HQ cities
+  const DIVISIONS = ["Derma", "Salon/Spa"];
   const rval = (p, field) => {
     if (p._aid != null) return p[field] || "";
     const k = p.num + "#" + field;
@@ -250,6 +252,17 @@
   const vacantPeople = () =>
     D.roster.people.concat(rosterAdds).filter((p) => estatus(p) === "vacant");
 
+  // Distinct existing values for a roster field (for dropdowns), plus extras.
+  const rosterOptions = (field, extra) => {
+    const s = new Set();
+    D.roster.people.concat(rosterAdds).forEach((p) => {
+      const v = rval(p, field);
+      if (v && v !== "—") s.add(String(v).trim());
+    });
+    (extra || []).forEach((v) => { if (v) s.add(String(v).trim()); });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  };
+
   function renderTeam() {
     const people = D.roster.people;
     const summary = D.roster.summary || {};
@@ -262,6 +275,16 @@
       const cell = (p, field, cls) => {
         const val = rval(p, field) || "";
         return `<td class="${cls || ""}"${ed ? ' contenteditable="true"' : ""} ${idAttr(p)} data-field="${field}">${esc(val)}</td>`;
+      };
+      // Editable dropdown cell sourced from existing distinct values.
+      const selCell = (p, field, opts, addNew) => {
+        const cur = rval(p, field) || "";
+        const options = opts.slice();
+        if (cur && !options.includes(cur)) options.unshift(cur);
+        let html = `<option value=""${cur === "" ? " selected" : ""}>—</option>`;
+        html += options.map((o) => `<option value="${esc(o)}"${o === cur ? " selected" : ""}>${esc(o)}</option>`).join("");
+        if (addNew) html += `<option value="__add__">＋ Add new…</option>`;
+        return `<td><select class="roster-sel" ${idAttr(p)} data-field="${field}">${html}</select></td>`;
       };
       const all = people.concat(rosterAdds);
       const rows = all.filter((p) => {
@@ -288,7 +311,7 @@
           : `<td>${badge}</td>`;
         const divBadge = `<span class="badge ${division === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(division)}</span>`;
         const divCell = ed
-          ? `<td contenteditable="true" ${idAttr(p)} data-field="division">${esc(division)}</td>`
+          ? selCell(p, "division", DIVISIONS)
           : `<td>${divBadge}</td>`;
         const firstCell = (ed && p._aid != null)
           ? `<td class="num t-muted"><button class="linkish roster-rm" data-aid="${p._aid}" title="Remove">✕</button></td>`
@@ -296,11 +319,11 @@
         return `<tr>
           ${firstCell}
           ${cell(p, "name", "t-name")}
-          ${cell(p, "designation")}
+          ${ed ? selCell(p, "designation", rosterOptions("designation")) : cell(p, "designation")}
           ${divCell}
-          ${cell(p, "baseHQ")}
-          ${cell(p, "reportsTo")}
-          ${cell(p, "zone")}
+          ${ed ? selCell(p, "baseHQ", rosterOptions("baseHQ", customHQs), true) : cell(p, "baseHQ")}
+          ${ed ? selCell(p, "reportsTo", rosterOptions("reportsTo")) : cell(p, "reportsTo")}
+          ${ed ? selCell(p, "zone", rosterOptions("zone")) : cell(p, "zone")}
           ${statusCell}
         </tr>`;
       }).join("");
@@ -368,6 +391,27 @@
           rosterEdits[td.dataset.num + "#" + field] = val;
         }
         saveEdits();
+      };
+    });
+    document.querySelectorAll("#teamBody .roster-sel").forEach((sel) => {
+      sel.onchange = () => {
+        const field = sel.dataset.field;
+        let val = sel.value;
+        if (val === "__add__") {
+          const name = (window.prompt("Add new HQ (city):") || "").trim();
+          if (!name) { go("team"); return; }
+          if (!customHQs.includes(name)) customHQs.push(name);
+          val = name;
+        }
+        if (sel.dataset.aid) {
+          const p = rosterAdds.find((x) => x._aid === sel.dataset.aid);
+          if (p) p[field] = val;
+        } else {
+          rosterEdits[sel.dataset.num + "#" + field] = val;
+        }
+        saveEdits();
+        // Re-render so a new HQ / division change reflects in dropdowns & badges.
+        go("team");
       };
     });
     document.querySelectorAll("#teamBody .roster-status").forEach((sel) => {
@@ -1896,6 +1940,7 @@
         const ids = rosterAdds.map((x) => +String(x._aid).slice(1)).filter((n) => !isNaN(n));
         rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
+      if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
@@ -1914,7 +1959,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, customHQs, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }

@@ -3,6 +3,7 @@
    Neutral finance palette, indigo accent, light + dark themes.
    ============================================================ */
 :root {
+  --stick-top: 112px; /* topbar + tabs height — keeps table headers below them */
   --bg: #f4f5f8;
   --surface: #ffffff;
   --surface-2: #f8f9fc;
@@ -115,7 +116,7 @@ a { color: var(--accent); text-decoration: none; }
 .mode-btn.admin-on { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
 
 /* Sortable headers + per-table filter */
-thead th.sortable { cursor: pointer; user-select: none; position: sticky; top: 0; }
+thead th.sortable { cursor: pointer; user-select: none; position: sticky; top: var(--stick-top); }
 thead th.sortable:hover { color: var(--text); background: var(--surface-3); }
 thead th.sortable::after { content: "⇅"; opacity: .35; margin-left: 5px; font-size: 10px; }
 thead th.sort-asc::after { content: "↑"; opacity: 1; }
@@ -261,7 +262,7 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 thead th {
-  position: sticky; top: 0;
+  position: sticky; top: var(--stick-top); z-index: 5;
   background: var(--surface-2); color: var(--text-2);
   text-align: left; font-weight: 700; font-size: 12px;
   text-transform: uppercase; letter-spacing: .4px;
