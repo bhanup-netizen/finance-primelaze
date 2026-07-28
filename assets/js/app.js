@@ -86,7 +86,6 @@
   const TABS = [
     { id: "overview", label: "Overview", render: renderOverview },
     { id: "team", label: "Team Roster", render: renderTeam },
-    { id: "vacancies", label: "Vacancies", render: renderVacancies },
     { id: "targets", label: "HQ Targets", render: renderTargets },
     { id: "incentives", label: "Incentives", render: renderIncentives },
     { id: "prices", label: "Device", render: renderPrices },
@@ -209,7 +208,7 @@
   }
 
   /* ================= TEAM ROSTER ================= */
-  let teamFilter = "all", teamSearch = "", teamDivision = "all";
+  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster";
   const rosterEdits = {}; // `${num}#${field}` -> value
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
   let rosterAddSeq = 0;
@@ -323,7 +322,22 @@
     </ul>`;
   }
 
+  function wireTeamSubnav() {
+    document.querySelectorAll("[data-teamtab]").forEach((b) => {
+      b.onclick = () => { teamTab = b.dataset.teamtab; go("team"); };
+    });
+  }
+  const teamSubnav = () => `
+    <div class="seg team-subnav" style="margin-bottom:16px">
+      <button data-teamtab="roster" class="${teamTab === "roster" ? "active" : ""}">Team Roster</button>
+      <button data-teamtab="vacancies" class="${teamTab === "vacancies" ? "active" : ""}">Vacancies</button>
+    </div>`;
+
   function renderTeam() {
+    if (teamTab === "vacancies") {
+      setTimeout(wireTeamSubnav, 0);
+      return teamSubnav() + renderVacancies();
+    }
     const people = D.roster.people;
     const summary = D.roster.summary || {};
     const summaryCards = Object.entries(summary).map(([k, v]) => `
@@ -413,9 +427,10 @@
         };
       });
       wireRosterEdit();
+      wireTeamSubnav();
     }, 0);
 
-    return `
+    return teamSubnav() + `
       <div class="section-head">
         <h1>Team Roster</h1>
         <p>All sales personnel across zones for ${esc(D.meta.fiscalYear)}, including vacant positions and new joinees.${isAdmin() ? " Click any cell to edit — changes save for everyone." : ""}</p>
@@ -581,7 +596,7 @@
         b.onclick = () => {
           vacancySort = b.dataset.vsort;
           document.querySelectorAll("[data-vsort]").forEach((x) => x.classList.toggle("active", x === b));
-          go("vacancies");
+          go("team");
         };
       });
       wireVacancyEdit();
@@ -633,13 +648,13 @@
         let val = sel.value;
         if (val === "__add__") {
           const name = (window.prompt("Add new HQ (city):") || "").trim();
-          if (!name) { go("vacancies"); return; }
+          if (!name) { go("team"); return; }
           if (!customHQs.includes(name)) customHQs.push(name);
           val = name;
         }
         writeRoster(sel, val);
         saveEdits();
-        go("vacancies");
+        go("team");
       };
     });
     document.querySelectorAll(".vac-rname").forEach((td) => {
