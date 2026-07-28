@@ -217,6 +217,18 @@
     const k = p.num + "#" + field;
     return rosterEdits[k] != null ? rosterEdits[k] : p[field];
   };
+  const STATUS_OPTIONS = [
+    { id: "active", label: "Active" },
+    { id: "tojoin", label: "To join" },
+    { id: "vacant", label: "Vacant" },
+  ];
+  // Effective status: an explicit admin override wins, else it's derived from
+  // the name / notes (vacant positions, joinees).
+  const estatus = (p) => {
+    const ov = rval(p, "status");
+    if (ov) return ov;
+    return statusFromNotes({ name: rval(p, "name"), notes: p.notes });
+  };
 
   function renderTeam() {
     const people = D.roster.people;
@@ -234,7 +246,7 @@
       const all = people.concat(rosterAdds);
       const rows = all.filter((p) => {
         const name = rval(p, "name"), division = rval(p, "division") || "Derma";
-        const st = statusFromNotes({ name, notes: p.notes });
+        const st = estatus(p);
         if (teamFilter !== "all" && teamFilter !== st) return false;
         if (teamDivision !== "all" && division !== teamDivision) return false;
         if (teamSearch) {
@@ -245,10 +257,15 @@
       }).map((p, i) => {
         const name = rval(p, "name"), division = rval(p, "division") || "Derma";
         const rc = roleClass(name, rval(p, "designation"));
-        const st = statusFromNotes({ name, notes: p.notes });
+        const st = estatus(p);
         const badge = st === "vacant" ? `<span class="badge b-bad">Vacant</span>`
           : st === "tojoin" ? `<span class="badge b-info">To join</span>`
           : `<span class="badge ${rc.cls}">${rc.label}</span>`;
+        const statusCell = ed
+          ? `<td><select class="roster-status" ${idAttr(p)} data-field="status">${
+              STATUS_OPTIONS.map((o) => `<option value="${o.id}"${o.id === st ? " selected" : ""}>${o.label}</option>`).join("")
+            }</select></td>`
+          : `<td>${badge}</td>`;
         const divBadge = `<span class="badge ${division === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(division)}</span>`;
         const divCell = ed
           ? `<td contenteditable="true" ${idAttr(p)} data-field="division">${esc(division)}</td>`
@@ -264,7 +281,7 @@
           ${cell(p, "baseHQ")}
           ${cell(p, "reportsTo")}
           ${cell(p, "zone")}
-          <td>${badge}</td>
+          ${statusCell}
         </tr>`;
       }).join("");
       return rows || `<tr><td colspan="8" class="empty">No matching personnel.</td></tr>`;
@@ -331,6 +348,20 @@
           rosterEdits[td.dataset.num + "#" + field] = val;
         }
         saveEdits();
+      };
+    });
+    document.querySelectorAll("#teamBody .roster-status").forEach((sel) => {
+      sel.onchange = () => {
+        const val = sel.value, field = sel.dataset.field;
+        if (sel.dataset.aid) {
+          const p = rosterAdds.find((x) => x._aid === sel.dataset.aid);
+          if (p) p[field] = val;
+        } else {
+          rosterEdits[sel.dataset.num + "#" + field] = val;
+        }
+        saveEdits();
+        // Re-render so the pill colour and status filter reflect the change.
+        go("team");
       };
     });
     document.querySelectorAll("#teamBody .roster-rm").forEach((b) => {
