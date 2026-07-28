@@ -617,6 +617,7 @@
           <button data-vsort="priority" class="${vacancySort === "priority" ? "active" : ""}">By priority</button>
           <button data-vsort="fillBy" class="${vacancySort === "fillBy" ? "active" : ""}">By target date</button>
         </div>
+        ${ed ? `<div class="hq-actions"><button id="vacancyAddBtn" class="dl-btn" type="button">＋ Add vacancy</button></div>` : ""}
       </div>
       <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
   }
@@ -660,6 +661,13 @@
     document.querySelectorAll(".vac-rname").forEach((td) => {
       td.onblur = () => { writeRoster(td, td.textContent.trim()); saveEdits(); };
     });
+    const addVac = document.getElementById("vacancyAddBtn");
+    if (addVac) addVac.onclick = () => {
+      // A vacancy is a roster row flagged vacant, so it also shows in Team Roster.
+      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: "Vacant position", designation: "", division: "Derma", baseHQ: "", reportsTo: "Arjun", zone: "", status: "vacant" });
+      saveEdits();
+      go("team");
+    };
   }
 
   /* ================= HQ TARGETS ================= */
