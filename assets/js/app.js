@@ -396,6 +396,9 @@
     if (add) add.onclick = () => {
       rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "", zone: "" });
       saveEdits();
+      // Reset filters so the freshly-added (Active) row is actually visible —
+      // otherwise an active filter like "Vacant" hides it and it looks broken.
+      teamFilter = "all"; teamDivision = "all"; teamSearch = "";
       go("team");
     };
   }
