@@ -209,6 +209,12 @@
 
   /* ================= TEAM ROSTER ================= */
   let teamFilter = "all", teamSearch = "", teamDivision = "all";
+  const rosterEdits = {}; // `${num}#${field}` -> value
+  const rval = (p, field) => {
+    const k = p.num + "#" + field;
+    return rosterEdits[k] != null ? rosterEdits[k] : p[field];
+  };
+
   function renderTeam() {
     const people = D.roster.people;
     const summary = D.roster.summary || {};
@@ -216,63 +222,75 @@
       <div class="stat"><b>${inr(v)}</b><span>${esc(k)}</span></div>`).join("");
 
     const view = () => {
+      const ed = isAdmin();
+      const cell = (p, field, cls) => {
+        const val = rval(p, field) || "";
+        return `<td class="${cls || ""}"${ed ? ' contenteditable="true"' : ""} data-num="${p.num}" data-field="${field}">${esc(val)}</td>`;
+      };
       const rows = people.filter((p) => {
-        const st = statusFromNotes(p);
+        const name = rval(p, "name"), division = rval(p, "division") || "Derma";
+        const st = statusFromNotes({ name, notes: p.notes });
         if (teamFilter !== "all" && teamFilter !== st) return false;
-        if (teamDivision !== "all" && (p.division || "Derma") !== teamDivision) return false;
+        if (teamDivision !== "all" && division !== teamDivision) return false;
         if (teamSearch) {
-          const hay = `${p.name} ${p.designation} ${p.baseHQ} ${p.zone} ${p.reportsTo} ${p.division || ""} ${p.notes || ""}`.toLowerCase();
+          const hay = `${name} ${rval(p, "designation")} ${rval(p, "baseHQ")} ${rval(p, "zone")} ${rval(p, "reportsTo")} ${division} ${p.notes || ""}`.toLowerCase();
           if (!hay.includes(teamSearch.toLowerCase())) return false;
         }
         return true;
       }).map((p) => {
-        const rc = roleClass(p.name, p.designation);
-        const st = statusFromNotes(p);
+        const name = rval(p, "name"), division = rval(p, "division") || "Derma";
+        const rc = roleClass(name, rval(p, "designation"));
+        const st = statusFromNotes({ name, notes: p.notes });
         const badge = st === "vacant" ? `<span class="badge b-bad">Vacant</span>`
           : st === "tojoin" ? `<span class="badge b-info">To join</span>`
           : `<span class="badge ${rc.cls}">${rc.label}</span>`;
-        const div = p.division || "Derma";
-        const divBadge = `<span class="badge ${div === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(div)}</span>`;
+        const divBadge = `<span class="badge ${division === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(division)}</span>`;
+        const divCell = ed
+          ? `<td contenteditable="true" data-num="${p.num}" data-field="division">${esc(division)}</td>`
+          : `<td>${divBadge}</td>`;
         return `<tr>
           <td class="num t-muted">${p.num}</td>
-          <td class="t-name">${esc(p.name)}</td>
-          <td>${esc(p.designation)}</td>
-          <td>${divBadge}</td>
-          <td>${esc(p.baseHQ)}</td>
-          <td>${esc(p.reportsTo)}</td>
-          <td>${esc(p.zone)}</td>
+          ${cell(p, "name", "t-name")}
+          ${cell(p, "designation")}
+          ${divCell}
+          ${cell(p, "baseHQ")}
+          ${cell(p, "reportsTo")}
+          ${cell(p, "zone")}
           <td>${badge}</td>
         </tr>`;
       }).join("");
       return rows || `<tr><td colspan="8" class="empty">No matching personnel.</td></tr>`;
     };
 
+    const repaint = () => { $("#teamBody").innerHTML = view(); wireRosterEdit(); };
+
     const head = ["#", "Name", "Designation", "Division", "Base HQ", "Reports To", "Zone", "Status"]
       .map((h, i) => `<th class="${i === 0 ? "num" : ""}">${h}</th>`).join("");
 
     setTimeout(() => {
       const search = $("#teamSearch");
-      if (search) search.oninput = (e) => { teamSearch = e.target.value; $("#teamBody").innerHTML = view(); };
+      if (search) search.oninput = (e) => { teamSearch = e.target.value; repaint(); };
       document.querySelectorAll("[data-tfilter]").forEach((b) => {
         b.onclick = () => {
           teamFilter = b.dataset.tfilter;
           document.querySelectorAll("[data-tfilter]").forEach((x) => x.classList.toggle("active", x === b));
-          $("#teamBody").innerHTML = view();
+          repaint();
         };
       });
       document.querySelectorAll("[data-tdiv]").forEach((b) => {
         b.onclick = () => {
           teamDivision = b.dataset.tdiv;
           document.querySelectorAll("[data-tdiv]").forEach((x) => x.classList.toggle("active", x === b));
-          $("#teamBody").innerHTML = view();
+          repaint();
         };
       });
+      wireRosterEdit();
     }, 0);
 
     return `
       <div class="section-head">
         <h1>Team Roster</h1>
-        <p>All sales personnel across zones for ${esc(D.meta.fiscalYear)}, including vacant positions and new joinees. Reporting line rolls up to Arjun.</p>
+        <p>All sales personnel across zones for ${esc(D.meta.fiscalYear)}, including vacant positions and new joinees.${isAdmin() ? " Click any cell to edit — changes save for everyone." : ""}</p>
       </div>
       <div class="card" style="margin-bottom:20px"><div class="stat-row">${summaryCards}</div></div>
       <div class="controls">
@@ -290,6 +308,16 @@
         </div>
       </div>
       <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody id="teamBody">${view()}</tbody></table></div>`;
+  }
+
+  function wireRosterEdit() {
+    if (!isAdmin()) return;
+    document.querySelectorAll("#teamBody td[contenteditable]").forEach((td) => {
+      td.onblur = () => {
+        rosterEdits[td.dataset.num + "#" + td.dataset.field] = td.textContent.trim();
+        saveEdits();
+      };
+    });
   }
 
   /* ================= HQ TARGETS ================= */
@@ -1472,6 +1500,7 @@
       }
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
       if (e.demo) { Object.assign(demoEdits.status, e.demo.status || {}); Object.assign(demoEdits.movement, e.demo.movement || {}); }
+      if (e.roster) Object.assign(rosterEdits, e.roster);
     } catch (err) { console.warn("edits read failed", err); }
   }
 
@@ -1487,7 +1516,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, roster: rosterEdits, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
