@@ -19,6 +19,8 @@ workbooks and runs as a **static site** with no backend and no build step.
 | **Price Book** | Landing / quotation / standard / minimum prices for devices, Celluma models and Esthemax skincare. |
 | **Esthemax Market** | Full salon & doctor pricing matrices — old vs new (+15% MRP) structures with bulk-offer tiers and effective net prices. |
 | **Inventory** | Product-line inventory & reorder planning (Esthemax loaded; Celluma / Devices are add-later). Per-SKU **sell status** (stock ≥ required → *Can sell*, else *Reorder*), required stock, minimum-order-lot buy quantity and landed money required — all recomputing live as you edit FX, customs, lot sizes and current stock. |
+| **Demo Machines** | Live status and movement log of demo devices. Admins edit any cell inline (saved for everyone); others view read-only. |
+| **Delivery Challan** | Admins create delivery challans (from/to, dispatch & arrival, items, declared value) saved to Firestore; everyone can view and download them as PDF. |
 | **Review Log** | Every review comment raised by Surya / HR / management, with resolution and status. |
 
 Light and dark themes, responsive layout, keyboard-free navigation, deep-linkable

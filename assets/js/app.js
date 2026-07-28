@@ -90,6 +90,8 @@
     { id: "prices", label: "Price Book", render: renderPrices },
     { id: "esthemax", label: "Esthemax Market", render: renderEsthemax },
     { id: "order", label: "Inventory", render: renderOrder },
+    { id: "demo", label: "Demo Machines", render: renderDemo },
+    { id: "challan", label: "Delivery Challan", render: renderChallan },
     { id: "review", label: "Review Log", render: renderReview },
     { id: "admin", label: "⚙ Admin", render: renderAdmin },
   ];
@@ -745,6 +747,276 @@
       <div class="muted-note">Scroll horizontally to see all offer tiers. Effective net prices are per box, inclusive of GST.</div>`;
   }
 
+  /* ================= DEMO MACHINES ================= */
+  const demoEdits = { status: {}, movement: {} };
+  let demoView = "status";
+
+  function demoStatusClass(col, val) {
+    if (col !== "Status" && col !== "Demo Status" && col !== "Condition" && col !== "Cond. Return") return "";
+    const t = String(val || "").toLowerCase();
+    if (t.includes("not working") || t.includes("booked") || t.includes("pending") || t.includes("damage")) return "demo-bad";
+    if (t.includes("working") || t.includes("okay") || t.includes("ok") || t.includes("free") || t.includes("good") || t.includes("returned")) return "demo-good";
+    return "";
+  }
+
+  function demoTable() {
+    const t = D.demoMachines[demoView];
+    const head = t.columns.map((c) => `<th>${esc(c)}</th>`).join("");
+    const body = t.rows.map((row, r) => {
+      const cells = row.map((v, c) => {
+        const ov = demoEdits[demoView][r + "#" + c];
+        const val = ov != null ? ov : (v == null ? "" : v);
+        const cls = [c === 0 ? "t-name" : "", demoStatusClass(t.columns[c], val)].filter(Boolean).join(" ");
+        const editable = isAdmin() ? ' contenteditable="true"' : "";
+        return `<td class="${cls}"${editable} data-r="${r}" data-c="${c}">${esc(val)}</td>`;
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+    return table(head, body);
+  }
+
+  function wireDemoEdit() {
+    if (!isAdmin()) return;
+    document.querySelectorAll("#demoBody td[contenteditable]").forEach((td) => {
+      td.onblur = () => {
+        demoEdits[demoView][td.dataset.r + "#" + td.dataset.c] = td.textContent.trim();
+        saveEdits();
+      };
+    });
+  }
+
+  function renderDemo() {
+    setTimeout(() => {
+      document.querySelectorAll("[data-dview]").forEach((b) => {
+        b.onclick = () => {
+          demoView = b.dataset.dview;
+          document.querySelectorAll("[data-dview]").forEach((x) => x.classList.toggle("active", x === b));
+          $("#demoBody").innerHTML = demoTable();
+          wireDemoEdit();
+        };
+      });
+      wireDemoEdit();
+    }, 0);
+    return `
+      <div class="section-head">
+        <h1>Demo Machines</h1>
+        <p>Live status and movement of demo devices. ${isAdmin() ? "Click any cell to edit — changes save for everyone." : "Read-only — an administrator maintains this."}</p>
+      </div>
+      <div class="controls">
+        <div class="seg">
+          <button data-dview="status" class="${demoView === "status" ? "active" : ""}">Current status</button>
+          <button data-dview="movement" class="${demoView === "movement" ? "active" : ""}">Movement log</button>
+        </div>
+      </div>
+      <div id="demoBody">${demoTable()}</div>`;
+  }
+
+  /* ================= DELIVERY CHALLAN ================= */
+  const DEFAULT_FROM = {
+    name: "Leeford Healthcare Ltd (Primelaze)",
+    addr: "Leo House, Shaheed Bhagat Singh Nagar, Dugri-Dhandra Rd, Near Joseph School, Ludhiana, Punjab 141001",
+  };
+  let localChallans = []; // in-memory fallback when Firebase isn't available (local dev)
+  let challanUnsub = null;
+
+  function challanStore() { return db ? db.collection("challans") : null; }
+
+  function renderChallan() {
+    setTimeout(initChallanUI, 0);
+    return `
+      <div class="section-head">
+        <h1>Delivery Challan</h1>
+        <p>${roleIsAdmin() ? "Create delivery challans and download them as PDF. " : "View and download delivery challans. "}Everyone can view &amp; download; only admins can create.</p>
+      </div>
+      ${roleIsAdmin() ? `<div class="controls"><button id="newChallanBtn" class="dl-btn" type="button">＋ New challan</button></div>` : ""}
+      <div id="challanForm"></div>
+      <div id="challanList"><div class="empty">Loading…</div></div>`;
+  }
+
+  function challanFormHtml(c) {
+    c = c || {};
+    const items = (c.items && c.items.length ? c.items : [{ desc: "", amount: "" }]);
+    const itemRows = items.map((it, i) => challanItemRow(it, i)).join("");
+    return `
+      <div class="card" style="margin-bottom:20px">
+        <h2 style="margin-top:0">${c.id ? "Edit" : "New"} challan</h2>
+        <form id="chForm" class="admin-form">
+          <div class="ch-grid">
+            <label class="ord-field"><span>Challan No.</span><input id="chNo" value="${esc(c.no || "")}" placeholder="PL/DC/2026/001"></label>
+            <label class="ord-field"><span>Date</span><input id="chDate" type="date" value="${esc(c.date || "")}"></label>
+            <label class="ord-field"><span>Transport mode</span><input id="chMode" value="${esc(c.mode || "Air")}" placeholder="Air / Road / Courier"></label>
+            <label class="ord-field"><span>Date of dispatch</span><input id="chDispatch" type="date" value="${esc(c.dispatch || "")}"></label>
+            <label class="ord-field"><span>Estimated arrival</span><input id="chArrival" type="date" value="${esc(c.arrival || "")}"></label>
+            <label class="ord-field"><span>Declared cargo value (₹)</span><input id="chValue" type="number" value="${esc(c.declaredValue || "")}"></label>
+          </div>
+          <div class="ch-grid">
+            <label class="ord-field"><span>From — name</span><input id="chFromName" value="${esc(c.fromName || DEFAULT_FROM.name)}"></label>
+            <label class="ord-field"><span>To — name (consignee)</span><input id="chToName" value="${esc(c.toName || "")}" placeholder="Dr. Name / Clinic"></label>
+            <label class="ord-field"><span>From — address</span><textarea id="chFromAddr" rows="2">${esc(c.fromAddr || DEFAULT_FROM.addr)}</textarea></label>
+            <label class="ord-field"><span>To — address</span><textarea id="chToAddr" rows="2">${esc(c.toAddr || "")}</textarea></label>
+          </div>
+          <div class="perm-group">
+            <div class="perm-title">Items <button type="button" class="linkish" id="chAddItem">+ add item</button></div>
+            <div id="chItems">${itemRows}</div>
+          </div>
+          <label class="ord-field"><span>Notes (optional)</span><textarea id="chNotes" rows="2">${esc(c.notes || "")}</textarea></label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" class="dl-btn">${c.id ? "Save changes" : "Create challan"}</button>
+            <button type="button" class="ghost-btn" id="chCancel">Cancel</button>
+          </div>
+          <div id="chMsg" class="lock-error" style="min-height:16px"></div>
+        </form>
+      </div>`;
+  }
+
+  function challanItemRow(it, i) {
+    it = it || {};
+    return `<div class="ch-item" data-i="${i}">
+      <input class="ch-desc" placeholder="Description of item (e.g. Poly Lase Demo Unit)" value="${esc(it.desc || "")}">
+      <input class="ch-amt" type="number" placeholder="Amount ₹" value="${esc(it.amount || "")}">
+      <button type="button" class="ghost-btn ch-del" title="Remove">✕</button>
+    </div>`;
+  }
+
+  function readChallanForm() {
+    const items = Array.from(document.querySelectorAll("#chItems .ch-item")).map((r) => ({
+      desc: r.querySelector(".ch-desc").value.trim(),
+      amount: r.querySelector(".ch-amt").value.trim(),
+    })).filter((x) => x.desc || x.amount);
+    return {
+      no: $("#chNo").value.trim(), date: $("#chDate").value, mode: $("#chMode").value.trim(),
+      dispatch: $("#chDispatch").value, arrival: $("#chArrival").value,
+      declaredValue: $("#chValue").value.trim(),
+      fromName: $("#chFromName").value.trim(), fromAddr: $("#chFromAddr").value.trim(),
+      toName: $("#chToName").value.trim(), toAddr: $("#chToAddr").value.trim(),
+      items, notes: $("#chNotes").value.trim(),
+    };
+  }
+
+  function openChallanForm(existing) {
+    $("#challanForm").innerHTML = challanFormHtml(existing);
+    const wrapItems = () => {
+      $("#chAddItem").onclick = () => {
+        const box = $("#chItems");
+        box.insertAdjacentHTML("beforeend", challanItemRow({}, box.children.length));
+        wrapItems();
+      };
+      document.querySelectorAll(".ch-del").forEach((b) => b.onclick = () => { b.closest(".ch-item").remove(); });
+    };
+    wrapItems();
+    $("#chCancel").onclick = () => { $("#challanForm").innerHTML = ""; };
+    $("#chForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = $("#chMsg"); msg.style.color = ""; msg.textContent = "";
+      const data = readChallanForm();
+      if (!data.no || !data.toName) { msg.style.color = "var(--bad)"; msg.textContent = "Challan No. and consignee (To) are required."; return; }
+      data.createdBy = (sessionUser && sessionUser.email) || "";
+      try {
+        const store = challanStore();
+        if (store) {
+          if (existing && existing.id) await store.doc(existing.id).set(data, { merge: true });
+          else { data.createdAt = Date.now(); await store.add(data); }
+        } else {
+          if (existing && existing.id) { const idx = localChallans.findIndex((x) => x.id === existing.id); if (idx >= 0) localChallans[idx] = { ...data, id: existing.id }; }
+          else localChallans.unshift({ ...data, id: "local-" + localChallans.length, createdAt: Date.now() });
+        }
+        $("#challanForm").innerHTML = "";
+        loadChallans();
+      } catch (err) { msg.style.color = "var(--bad)"; msg.textContent = "Save failed: " + (err.message || err); }
+    };
+  }
+
+  function initChallanUI() {
+    const nb = document.getElementById("newChallanBtn");
+    if (nb) nb.onclick = () => openChallanForm(null);
+    loadChallans();
+  }
+
+  async function loadChallans() {
+    const box = document.getElementById("challanList");
+    if (!box) return;
+    let list = [];
+    try {
+      const store = challanStore();
+      if (store) {
+        const snap = await store.orderBy("createdAt", "desc").get();
+        snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
+      } else {
+        list = localChallans.slice();
+        box.insertAdjacentHTML("afterbegin", "");
+      }
+    } catch (e) {
+      // orderBy can fail if createdAt missing; fall back to unordered
+      try { const snap = await challanStore().get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
+      catch (e2) { box.innerHTML = `<div class="empty">Could not load challans (${esc(e2.message || "" + e2)}).</div>`; return; }
+    }
+    if (!list.length) { box.innerHTML = `<div class="empty">No challans yet.${roleIsAdmin() ? " Click “New challan” to create one." : ""}</div>`; return; }
+    const rows = list.map((c) => {
+      const val = c.declaredValue ? rupee(+c.declaredValue) : "—";
+      const admin = roleIsAdmin()
+        ? `<button class="ghost-btn ch-edit" data-id="${esc(c.id)}">Edit</button> <button class="ghost-btn ch-rm" data-id="${esc(c.id)}">Delete</button>`
+        : "";
+      return `<tr>
+        <td class="t-name">${esc(c.no || "—")}</td>
+        <td>${esc(c.date || "—")}</td>
+        <td>${esc(c.toName || "—")}</td>
+        <td class="num">${(c.items || []).length}</td>
+        <td class="num">${val}</td>
+        <td><button class="ghost-btn ch-pdf" data-id="${esc(c.id)}">⤓ PDF</button> ${admin}</td>
+      </tr>`;
+    }).join("");
+    box.innerHTML = `<div class="block"><h2>Challans</h2>${table(["Challan No.", "Date", "Consignee", "Items", "Value", ""].map((h) => `<th>${h}</th>`).join(""), rows)}</div>`;
+    const byId = (id) => list.find((x) => x.id === id);
+    box.querySelectorAll(".ch-pdf").forEach((b) => b.onclick = () => downloadChallanPdf(byId(b.dataset.id)));
+    box.querySelectorAll(".ch-edit").forEach((b) => b.onclick = () => openChallanForm(byId(b.dataset.id)));
+    box.querySelectorAll(".ch-rm").forEach((b) => b.onclick = async () => {
+      if (!window.confirm("Delete this challan?")) return;
+      try { const store = challanStore(); if (store) await store.doc(b.dataset.id).delete(); else localChallans = localChallans.filter((x) => x.id !== b.dataset.id); loadChallans(); }
+      catch (e) { window.alert("Delete failed: " + (e.message || e)); }
+    });
+  }
+
+  function buildChallanPrint(c) {
+    const itemRows = (c.items || []).map((it, i) =>
+      `<tr><td class="num">${i + 1}</td><td>${esc(it.desc || "")}</td><td class="num">${it.amount ? rupee(+it.amount) : ""}</td></tr>`).join("");
+    const total = (c.items || []).reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+    return `
+      <div class="p-section">
+        <h1>Delivery Challan${c.no ? " — " + esc(c.no) : ""}</h1>
+        <div class="p-sub">TO WHOM SO EVER IT MAY CONCERN</div>
+        <table><tbody>
+          <tr><th>Date</th><td>${esc(c.date || "—")}</td><th>Transport</th><td>${esc(c.mode || "—")}</td></tr>
+          <tr><th>Date of dispatch</th><td>${esc(c.dispatch || "—")}</td><th>Estimated arrival</th><td>${esc(c.arrival || "—")}</td></tr>
+          <tr><th>Declared cargo value</th><td colspan="3">${c.declaredValue ? rupee(+c.declaredValue) : "—"}</td></tr>
+        </tbody></table>
+        <table><tbody>
+          <tr><th style="width:50%">From (Consignor)</th><th style="width:50%">To (Consignee)</th></tr>
+          <tr><td><b>${esc(c.fromName || "")}</b><br>${esc(c.fromAddr || "")}</td>
+              <td><b>${esc(c.toName || "")}</b><br>${esc(c.toAddr || "")}</td></tr>
+        </table>
+        <h3>List / Description of Items</h3>
+        <table>
+          <thead><tr><th class="num">S.No</th><th>Description</th><th class="num">Amount</th></tr></thead>
+          <tbody>${itemRows || `<tr><td colspan="3">—</td></tr>`}
+            <tr><td></td><td class="num"><b>Total</b></td><td class="num"><b>${rupee(total)}</b></td></tr>
+          </tbody>
+        </table>
+        ${c.notes ? `<p class="p-meta">Notes: ${esc(c.notes)}</p>` : ""}
+        <p class="p-meta" style="margin-top:24px">For ${esc(c.fromName || DEFAULT_FROM.name)} — Authorised Signatory ____________________</p>
+      </div>`;
+  }
+
+  function downloadChallanPdf(c) {
+    if (!c) return;
+    let area = document.getElementById("printArea");
+    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
+    area.innerHTML = buildChallanPrint(c);
+    document.body.classList.add("printing");
+    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 40);
+  }
+
   /* ================= REVIEW LOG ================= */
   function renderReview() {
     const rows = D.comments.map((c) => `<tr>
@@ -1201,6 +1473,7 @@
         });
       }
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
+      if (e.demo) { Object.assign(demoEdits.status, e.demo.status || {}); Object.assign(demoEdits.movement, e.demo.movement || {}); }
     } catch (err) { console.warn("edits read failed", err); }
   }
 
@@ -1216,7 +1489,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }

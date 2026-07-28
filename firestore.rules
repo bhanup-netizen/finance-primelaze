@@ -33,6 +33,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Delivery challans — any signed-in user may read/download; admins write.
+    match /challans/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // User permission docs — a user may read their own; admins read/write all.
     match /users/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());

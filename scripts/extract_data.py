@@ -17,6 +17,7 @@ section headers and merged cells, so a generic table reader produces noise.
 """
 import json
 import os
+import datetime
 from openpyxl import load_workbook
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -25,6 +26,7 @@ WB_DIR = os.path.join(ROOT, "source_workbooks")
 DASHBOARD = os.path.join(WB_DIR, "Primelaze_Unified_Dashboard_FY2627.xlsx")
 PRICES = os.path.join(WB_DIR, "Esthemax_prices_working.xlsx")
 ORDER = os.path.join(WB_DIR, "Esthemax_Order_Calculation.xlsx")
+DEMO = os.path.join(WB_DIR, "Demo_Machine_Booking_Status.xlsx")
 
 
 def rows_of(ws):
@@ -449,6 +451,48 @@ def parse_price_market(ws):
     return {"band": band, "columns": header, "groups": groups}
 
 
+def declean(v):
+    """Clean a Demo-Machine cell: format dates, and undo the source's
+    find/replace corruption where the letter 'v'/'V' became 'Booked'
+    (e.g. 'Bookedossman' -> 'Vossman'). The literal status 'Booked' is kept."""
+    if isinstance(v, datetime.datetime):
+        return v.strftime("%d %b %Y")
+    if isinstance(v, str):
+        s = v.strip()
+        if s and s != "Booked":
+            s = s.replace("Booked", "V")
+        return s
+    return num(v) if isinstance(v, (int, float)) else v
+
+
+def parse_demo_table(ws, col_idxs, headers, name_col):
+    data = rows_of(ws)
+    out = []
+    for row in data[1:]:
+        first = row[name_col] if name_col < len(row) else None
+        if first is None or (isinstance(first, str) and not first.strip()):
+            continue
+        out.append([declean(row[i]) if i < len(row) else None for i in col_idxs])
+    return {"columns": headers, "rows": out}
+
+
+def parse_demo(wb):
+    status = parse_demo_table(
+        wb["Demo Machine"],
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 10],
+        ["Machine", "Serial No", "Location", "Purpose", "Doctor", "Salesperson",
+         "Confirmed by", "Status", "Updated", "Condition"],
+        name_col=0)
+    movement = parse_demo_table(
+        wb["Machine Movement Data "],
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+        ["Date", "Device", "Serial No", "From", "To", "Assigned To", "Purpose",
+         "Expected Return", "Actual Return", "Demo Status", "Cond. Out",
+         "Cond. Return", "Accessories"],
+        name_col=2)
+    return {"status": status, "movement": movement}
+
+
 def parse_order(ws):
     """Esthemax procurement planner (Order Summary sheet).
 
@@ -623,6 +667,7 @@ def main():
     dash = load_workbook(DASHBOARD, data_only=True)
     prices = load_workbook(PRICES, data_only=True)
     order_wb = load_workbook(ORDER, data_only=True)
+    demo_wb = load_workbook(DEMO, data_only=True)
 
     hq_sheets = [s for s in dash.sheetnames if s.endswith("HQ")]
 
@@ -635,6 +680,7 @@ def main():
                 "Primelaze_Unified_Dashboard_FY2627.xlsx",
                 "Esthemax_prices_working.xlsx",
                 "Esthemax_Order_Calculation.xlsx",
+                "Demo_Machine_Booking_Status.xlsx",
             ],
         },
         "kpis": parse_kpis(dash["Master Dashboard"]),
@@ -658,6 +704,7 @@ def main():
             "doctor": parse_price_market(prices["Doctor Market"]),
         },
         "esthemaxOrder": parse_order(order_wb["Order Summary"]),
+        "demoMachines": parse_demo(demo_wb),
     }
 
     apply_amendments(data)

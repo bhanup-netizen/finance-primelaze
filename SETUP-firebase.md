@@ -54,8 +54,16 @@ domain is listed (e.g. `bhanup-netizen.github.io` for GitHub Pages, and
 config/app         { dataKey: "prime@1986" }
 users/{uid}        { email, role: "admin"|"view", pages: "all"|[ids],
                      hqs: "all"|[hqNames], landing: bool, name }
-edits/overrides    { stock: {sku: n}, eta: {sku: date}, hqTargets: {key: n} }
+edits/overrides    { stock: {sku: n}, eta: {sku: date}, hqTargets: {key: n},
+                     demo: { status: {"r#c": v}, movement: {"r#c": v} } }
+challans/{id}      { no, date, mode, dispatch, arrival, fromName, fromAddr,
+                     toName, toAddr, declaredValue, items:[{desc,amount}],
+                     notes, createdBy, createdAt }
 ```
+
+The **Delivery Challan** module stores challans in the `challans` collection
+(admins create/edit; everyone reads & downloads). Rules for it are already in
+`firestore.rules`.
 
 ## Notes / limits
 - Creating a user from the Admin tab uses a temporary secondary Firebase app so
