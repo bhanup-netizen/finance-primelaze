@@ -210,7 +210,10 @@
   /* ================= TEAM ROSTER ================= */
   let teamFilter = "all", teamSearch = "", teamDivision = "all";
   const rosterEdits = {}; // `${num}#${field}` -> value
+  const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
+  let rosterAddSeq = 0;
   const rval = (p, field) => {
+    if (p._aid != null) return p[field] || "";
     const k = p.num + "#" + field;
     return rosterEdits[k] != null ? rosterEdits[k] : p[field];
   };
@@ -223,11 +226,13 @@
 
     const view = () => {
       const ed = isAdmin();
+      const idAttr = (p) => p._aid != null ? `data-aid="${p._aid}"` : `data-num="${p.num}"`;
       const cell = (p, field, cls) => {
         const val = rval(p, field) || "";
-        return `<td class="${cls || ""}"${ed ? ' contenteditable="true"' : ""} data-num="${p.num}" data-field="${field}">${esc(val)}</td>`;
+        return `<td class="${cls || ""}"${ed ? ' contenteditable="true"' : ""} ${idAttr(p)} data-field="${field}">${esc(val)}</td>`;
       };
-      const rows = people.filter((p) => {
+      const all = people.concat(rosterAdds);
+      const rows = all.filter((p) => {
         const name = rval(p, "name"), division = rval(p, "division") || "Derma";
         const st = statusFromNotes({ name, notes: p.notes });
         if (teamFilter !== "all" && teamFilter !== st) return false;
@@ -237,7 +242,7 @@
           if (!hay.includes(teamSearch.toLowerCase())) return false;
         }
         return true;
-      }).map((p) => {
+      }).map((p, i) => {
         const name = rval(p, "name"), division = rval(p, "division") || "Derma";
         const rc = roleClass(name, rval(p, "designation"));
         const st = statusFromNotes({ name, notes: p.notes });
@@ -246,10 +251,13 @@
           : `<span class="badge ${rc.cls}">${rc.label}</span>`;
         const divBadge = `<span class="badge ${division === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(division)}</span>`;
         const divCell = ed
-          ? `<td contenteditable="true" data-num="${p.num}" data-field="division">${esc(division)}</td>`
+          ? `<td contenteditable="true" ${idAttr(p)} data-field="division">${esc(division)}</td>`
           : `<td>${divBadge}</td>`;
+        const firstCell = (ed && p._aid != null)
+          ? `<td class="num t-muted"><button class="linkish roster-rm" data-aid="${p._aid}" title="Remove">✕</button></td>`
+          : `<td class="num t-muted">${p.num != null ? p.num : ""}</td>`;
         return `<tr>
-          <td class="num t-muted">${p.num}</td>
+          ${firstCell}
           ${cell(p, "name", "t-name")}
           ${cell(p, "designation")}
           ${divCell}
@@ -306,6 +314,7 @@
           <button data-tdiv="Derma" class="${teamDivision === "Derma" ? "active" : ""}">Derma</button>
           <button data-tdiv="Salon/Spa" class="${teamDivision === "Salon/Spa" ? "active" : ""}">Salon/Spa</button>
         </div>
+        ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button">＋ Add person</button></div>` : ""}
       </div>
       <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody id="teamBody">${view()}</tbody></table></div>`;
   }
@@ -314,10 +323,30 @@
     if (!isAdmin()) return;
     document.querySelectorAll("#teamBody td[contenteditable]").forEach((td) => {
       td.onblur = () => {
-        rosterEdits[td.dataset.num + "#" + td.dataset.field] = td.textContent.trim();
+        const val = td.textContent.trim(), field = td.dataset.field;
+        if (td.dataset.aid) {
+          const p = rosterAdds.find((x) => x._aid === td.dataset.aid);
+          if (p) p[field] = val;
+        } else {
+          rosterEdits[td.dataset.num + "#" + field] = val;
+        }
         saveEdits();
       };
     });
+    document.querySelectorAll("#teamBody .roster-rm").forEach((b) => {
+      b.onclick = () => {
+        const i = rosterAdds.findIndex((x) => x._aid === b.dataset.aid);
+        if (i >= 0) rosterAdds.splice(i, 1);
+        saveEdits();
+        go("team");
+      };
+    });
+    const add = document.getElementById("rosterAddBtn");
+    if (add) add.onclick = () => {
+      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "", zone: "" });
+      saveEdits();
+      go("team");
+    };
   }
 
   /* ================= HQ TARGETS ================= */
@@ -861,13 +890,18 @@
 
   /* ================= DEMO MACHINES ================= */
   const demoEdits = { current: {}, status: {}, movement: {}, packing: {} };
+  const demoAdds = { current: [], status: [], movement: [], packing: [] }; // [{id, vals:[]}]
+  let demoAddSeq = 0;
   const DEMO_VIEWS = [
     { id: "current", label: "Current status" },
     { id: "status", label: "Machine details" },
     { id: "movement", label: "Movement log" },
     { id: "packing", label: "Packing condition" },
   ];
+  const FREE_TEXT_COLS = /remark|missing item|accessor|damage report|dimension|purpose$/i;
   let demoView = "current";
+
+  const demoAddById = (rid) => (demoAdds[demoView] || []).find((x) => x.id === rid);
 
   const STATUS_COLS = ["Status"];
   const CONDITION_COLS = ["Condition", "Cond. Out", "Cond. Return"];
@@ -890,11 +924,18 @@
     return Array.from(set).sort();
   }
 
-  const demoVal = (r, c) => {
-    const ov = demoEdits[demoView][r + "#" + c];
-    const raw = D.demoMachines[demoView].rows[r][c];
+  const demoVal = (rid, c) => {
+    const added = demoAddById(rid);
+    if (added) return added.vals[c] == null ? "" : String(added.vals[c]);
+    const ov = demoEdits[demoView][rid + "#" + c];
+    const raw = D.demoMachines[demoView].rows[+rid][c];
     return ov != null ? ov : (raw == null ? "" : String(raw));
   };
+  function demoSetVal(rid, c, value) {
+    const added = demoAddById(rid);
+    if (added) added.vals[c] = value;
+    else demoEdits[demoView][rid + "#" + c] = value;
+  }
 
   // Option list for an editable demo cell, pulled from the right master list:
   //  Status → Drop Down sheet Status; Condition → Drop Down Condition;
@@ -910,7 +951,7 @@
     else if (/condition/i.test(colName)) base = uniq(dd.condition || [], distinctDemoValues(colIdx));
     else if (/location|^from$|^to$/i.test(colName)) base = uniq(rf.states || [], distinctDemoValues(colIdx));
     else if (/salesperson|confirmed by|manager|received by|approved by|checked by/i.test(colName)) base = (rf.employees || []).slice();
-    else if (/^machine$|^device$/i.test(colName)) base = (rf.devices || []).slice();
+    else if (/^machine$|^device$/i.test(colName)) base = uniq(rf.devices || [], deviceNames());
     else if (/serial|flight case id/i.test(colName)) {
       const mIdx = cols.findIndex((c) => /^machine$|^device$/i.test(c));
       const mv = mIdx >= 0 ? demoVal(rowIdx, mIdx) : "";
@@ -921,46 +962,60 @@
     return base;
   }
 
+  function demoCell(rid, c, colName, ed) {
+    const val = demoVal(rid, c);
+    const cls = [c === 0 ? "t-name" : "", demoStatusClass(colName, val)].filter(Boolean).join(" ");
+    if (!ed) return `<td class="${cls}">${esc(val)}</td>`;
+    if (FREE_TEXT_COLS.test(colName)) {
+      return `<td class="${cls}"><input class="demo-text" type="text" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
+    }
+    const opts = demoOptions(colName, c, val, rid);
+    const optionHtml = `<option value=""${val ? "" : " selected"}>—</option>` +
+      opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("");
+    const rm = (c === 0 && String(rid).startsWith("a")) ? `<button class="linkish demo-rm" data-id="${rid}" title="Remove">✕</button> ` : "";
+    return `<td class="${cls}">${rm}<select class="demo-select" data-r="${rid}" data-c="${c}">${optionHtml}</select></td>`;
+  }
+
   function demoTable() {
     const t = D.demoMachines[demoView];
     const ed = isAdmin();
     const head = t.columns.map((c) => `<th>${esc(c)}</th>`).join("");
-    const body = t.rows.map((row, r) => {
-      const cells = row.map((v, c) => {
-        const ov = demoEdits[demoView][r + "#" + c];
-        const val = ov != null ? ov : (v == null ? "" : String(v));
-        const cls = [c === 0 ? "t-name" : "", demoStatusClass(t.columns[c], val)].filter(Boolean).join(" ");
-        if (ed) {
-          const opts = demoOptions(t.columns[c], c, val, r);
-          const optionHtml = `<option value=""${val ? "" : " selected"}>—</option>` +
-            opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("");
-          return `<td class="${cls}"><select class="demo-select" data-r="${r}" data-c="${c}">${optionHtml}</select></td>`;
-        }
-        return `<td class="${cls}" data-r="${r}" data-c="${c}">${esc(val)}</td>`;
-      }).join("");
-      return `<tr>${cells}</tr>`;
-    }).join("");
+    const ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
+    const body = ids.map((rid) =>
+      `<tr>${t.columns.map((colName, c) => demoCell(rid, c, colName, ed)).join("")}</tr>`).join("");
     return table(head, body);
   }
+
+  function demoRepaint() { $("#demoBody").innerHTML = demoTable(); wireDemoEdit(); }
 
   function wireDemoEdit() {
     if (!isAdmin()) return;
     const cols = D.demoMachines[demoView].columns;
     document.querySelectorAll("#demoBody select.demo-select").forEach((sel) => {
       sel.onchange = () => {
-        const r = sel.dataset.r, c = +sel.dataset.c;
-        demoEdits[demoView][r + "#" + c] = sel.value;
+        const rid = sel.dataset.r, c = +sel.dataset.c;
+        demoSetVal(rid, c, sel.value);
         // Linked logic: choosing a Machine/Device fills its Serial No.
         if (/^machine$|^device$/i.test(cols[c])) {
           const sIdx = cols.findIndex((x) => /serial/i.test(x));
           const ds = (D.refs.deviceSerials || []).filter((x) => x.device === sel.value).map((x) => x.serial).filter(Boolean);
-          if (sIdx >= 0 && ds.length) demoEdits[demoView][r + "#" + sIdx] = ds[0];
+          if (sIdx >= 0 && ds.length) demoSetVal(rid, sIdx, ds[0]);
         }
-        saveEdits();
-        $("#demoBody").innerHTML = demoTable();
-        wireDemoEdit();
+        saveEdits(); demoRepaint();
       };
     });
+    document.querySelectorAll("#demoBody input.demo-text").forEach((inp) => {
+      inp.onchange = () => { demoSetVal(inp.dataset.r, +inp.dataset.c, inp.value); saveEdits(); };
+    });
+    document.querySelectorAll("#demoBody .demo-rm").forEach((b) => {
+      b.onclick = () => { demoAdds[demoView] = demoAdds[demoView].filter((x) => x.id !== b.dataset.id); saveEdits(); demoRepaint(); };
+    });
+  }
+
+  function demoAddRow() {
+    const ncol = D.demoMachines[demoView].columns.length;
+    (demoAdds[demoView] = demoAdds[demoView] || []).push({ id: "a" + (demoAddSeq++), vals: new Array(ncol).fill("") });
+    saveEdits(); demoRepaint();
   }
 
   function renderDemo() {
@@ -969,21 +1024,23 @@
         b.onclick = () => {
           demoView = b.dataset.dview;
           document.querySelectorAll("[data-dview]").forEach((x) => x.classList.toggle("active", x === b));
-          $("#demoBody").innerHTML = demoTable();
-          wireDemoEdit();
+          demoRepaint();
         };
       });
+      const add = document.getElementById("demoAddBtn");
+      if (add) add.onclick = demoAddRow;
       wireDemoEdit();
     }, 0);
     return `
       <div class="section-head">
         <h1>Demo Machines</h1>
-        <p>Live status and movement of demo devices. ${isAdmin() ? "Click any cell to edit — changes save for everyone." : "Read-only — an administrator maintains this."}</p>
+        <p>Live status and movement of demo devices. ${isAdmin() ? "Edit cells via dropdowns; Remarks are free text. Changes save for everyone." : "Read-only — an administrator maintains this."}</p>
       </div>
       <div class="controls">
         <div class="seg">
           ${DEMO_VIEWS.map((v) => `<button data-dview="${v.id}" class="${demoView === v.id ? "active" : ""}">${esc(v.label)}</button>`).join("")}
         </div>
+        ${isAdmin() ? `<div class="hq-actions"><button id="demoAddBtn" class="dl-btn" type="button">＋ Add machine</button></div>` : ""}
       </div>
       <div id="demoBody">${demoTable()}</div>`;
   }
@@ -1682,7 +1739,17 @@
       }
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
       if (e.demo) ["current", "status", "movement", "packing"].forEach((k) => Object.assign(demoEdits[k], e.demo[k] || {}));
+      if (e.demoAdds) {
+        ["current", "status", "movement", "packing"].forEach((k) => { if (Array.isArray(e.demoAdds[k])) demoAdds[k] = e.demoAdds[k]; });
+        const ids = Object.values(demoAdds).flat().map((x) => +String(x.id).slice(1)).filter((n) => !isNaN(n));
+        demoAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
+      }
       if (e.roster) Object.assign(rosterEdits, e.roster);
+      if (Array.isArray(e.rosterAdds)) {
+        rosterAdds.length = 0; e.rosterAdds.forEach((p) => rosterAdds.push(p));
+        const ids = rosterAdds.map((x) => +String(x._aid).slice(1)).filter((n) => !isNaN(n));
+        rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
+      }
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
     } catch (err) { console.warn("edits read failed", err); }
@@ -1700,7 +1767,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, roster: rosterEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
