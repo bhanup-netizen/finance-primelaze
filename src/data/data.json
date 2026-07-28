@@ -7333,5 +7333,236 @@
       "Damaged",
       "Missing"
     ]
+  },
+  "refs": {
+    "states": [
+      "Andhra Pradesh",
+      "Arunachal Pradesh",
+      "Assam",
+      "Bihar",
+      "Chhattisgarh",
+      "Goa",
+      "Gujarat",
+      "Haryana",
+      "Himachal Pradesh",
+      "Jharkhand",
+      "Karnataka",
+      "Kerala",
+      "Madhya Pradesh",
+      "Maharashtra",
+      "Manipur",
+      "Meghalaya",
+      "Mizoram",
+      "Nagaland",
+      "Odisha",
+      "Punjab",
+      "Rajasthan",
+      "Sikkim",
+      "Tamil Nadu",
+      "Telangana",
+      "Tripura",
+      "Uttar Pradesh",
+      "Uttarakhand",
+      "West Bengal",
+      "Andaman and Nicobar Islands",
+      "Chandigarh",
+      "Dadra and Nagar Haveli and Daman and Diu",
+      "Delhi",
+      "Jammu and Kashmir",
+      "Ladakh",
+      "Lakshadweep",
+      "Puducherry"
+    ],
+    "employees": [
+      "Avedan Sharma",
+      "Ramandeep kaur",
+      "Rashmi J",
+      "Sandeepika Bhardwaj",
+      "Sonal Swapnil Lad",
+      "Sparsha Rajput",
+      "Sushma S",
+      "Aditya L",
+      "Akash Anbarasan",
+      "Akshay D",
+      "Akshay Jain",
+      "Akshaya Kumar",
+      "Arasukumar",
+      "Arjun Sharma",
+      "Avinesh Periyasamy",
+      "Ayush Sharma",
+      "Balaji Balu",
+      "Bimal Kumar",
+      "Brajeshkumar Veeramuthu",
+      "Darvins S",
+      "Dhinesh Ramalingam",
+      "Ibrahim Mohamad",
+      "Kuldeep Singh",
+      "M Balasubramanian Bala",
+      "Naresh Mohanlal Chaudhary",
+      "Pankaj Verma",
+      "Puneet Pandey",
+      "Rohan Ashok Kumar Patel",
+      "Sachin Aggarwal",
+      "Sairaj Ashok Shahu",
+      "Sandeep kumar Dhirajlal Kukadiya",
+      "Santhosh Kumar",
+      "SITHANANDAM KUPPUSAMY",
+      "Suryakant Kadam",
+      "Uday Narayan Panda",
+      "Vamsi Arudra",
+      "Viisvesh S",
+      "Harani Subhashini Rajaram",
+      "Lubdha Dangle"
+    ],
+    "devices": [
+      "Bi Axis 2",
+      "Blauman 1",
+      "Blauman 2",
+      "Blauman 3",
+      "Cellina 1",
+      "Cellina 2",
+      "Celluma Contour",
+      "Celluma Nova",
+      "Celluma PRO-PLUS",
+      "Celluma Pro-Plus",
+      "Erbium Laser",
+      "Exofacial Tower model",
+      "Magic Pulse",
+      "Milesman Blend",
+      "Milesman Compact",
+      "UTIMS Hifu",
+      "Vossman"
+    ],
+    "serials": [
+      "QSP1059",
+      "B031822",
+      "B031322",
+      "B0490719",
+      "CPL-001",
+      "CPL-002",
+      "CE2025080002, W325080010",
+      "CE3825070018",
+      "21CE3825120047",
+      "21CE3825120046",
+      "CE2225040062",
+      "CE2225040060",
+      "CE2225040061",
+      "HDA1002R020786",
+      "HDA1002C17R020010",
+      "HDA1002R020788",
+      "HDA1002C17R020008",
+      "MGP001",
+      "Q41302",
+      "Q48708",
+      "Q42702",
+      "KUSt-UA3-091U7",
+      "V62701E74"
+    ],
+    "deviceSerials": [
+      {
+        "device": "Bi Axis 2",
+        "serial": "QSP1059"
+      },
+      {
+        "device": "Blauman 1",
+        "serial": "B031822"
+      },
+      {
+        "device": "Blauman 2",
+        "serial": "B031322"
+      },
+      {
+        "device": "Blauman 3",
+        "serial": "B0490719"
+      },
+      {
+        "device": "Cellina 1",
+        "serial": "CPL-001"
+      },
+      {
+        "device": "Cellina 2",
+        "serial": "CPL-002"
+      },
+      {
+        "device": "Celluma Contour",
+        "serial": "CE2025080002, W325080010"
+      },
+      {
+        "device": "Celluma Nova",
+        "serial": "CE3825070018"
+      },
+      {
+        "device": "Celluma Nova",
+        "serial": "21CE3825120047"
+      },
+      {
+        "device": "Celluma Nova",
+        "serial": "21CE3825120046"
+      },
+      {
+        "device": "Celluma PRO-PLUS",
+        "serial": "CE2225040062"
+      },
+      {
+        "device": "Celluma Pro-Plus",
+        "serial": "CE2225040060"
+      },
+      {
+        "device": "Celluma Pro-Plus",
+        "serial": "CE2225040061"
+      },
+      {
+        "device": "Erbium Laser",
+        "serial": ""
+      },
+      {
+        "device": "Exofacial Tower model",
+        "serial": "HDA1002R020786"
+      },
+      {
+        "device": "Exofacial Tower model",
+        "serial": "HDA1002C17R020010"
+      },
+      {
+        "device": "Exofacial Tower model",
+        "serial": "HDA1002R020788"
+      },
+      {
+        "device": "Exofacial Tower model",
+        "serial": "HDA1002C17R020008"
+      },
+      {
+        "device": "Magic Pulse",
+        "serial": "MGP001"
+      },
+      {
+        "device": "Milesman Blend",
+        "serial": "Q41302"
+      },
+      {
+        "device": "Milesman Compact",
+        "serial": "Q48708"
+      },
+      {
+        "device": "Milesman Compact",
+        "serial": "Q42702"
+      },
+      {
+        "device": "Erbium Laser",
+        "serial": ""
+      },
+      {
+        "device": "UTIMS Hifu",
+        "serial": "KUSt-UA3-091U7"
+      },
+      {
+        "device": "Vossman",
+        "serial": "V62701E74"
+      },
+      {
+        "device": "Vossman",
+        "serial": ""
+      }
+    ]
   }
 }

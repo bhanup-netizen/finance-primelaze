@@ -874,23 +874,42 @@
     return "";
   }
 
-  // Option list for an editable demo cell: Status/Condition come from the
-  // workbook "Drop Down" sheet; other columns list the distinct values already
-  // used in that column. The current value is always included.
-  function demoOptions(colName, colIdx, current) {
-    let base = [];
-    const dd = D.dropdowns || {};
-    if (STATUS_COLS.includes(colName)) base = (dd.status || []).slice();
+  function distinctDemoValues(colIdx) {
+    const set = new Set();
+    D.demoMachines[demoView].rows.forEach((row, r) => {
+      const ov = demoEdits[demoView][r + "#" + colIdx];
+      const v = ov != null ? ov : row[colIdx];
+      if (v != null && String(v).trim() !== "") set.add(String(v).trim());
+    });
+    return Array.from(set).sort();
+  }
+
+  const demoVal = (r, c) => {
+    const ov = demoEdits[demoView][r + "#" + c];
+    const raw = D.demoMachines[demoView].rows[r][c];
+    return ov != null ? ov : (raw == null ? "" : String(raw));
+  };
+
+  // Option list for an editable demo cell, pulled from the right master list:
+  //  Status → Drop Down sheet Status; Condition → Drop Down Condition;
+  //  Location/From/To → DATA Sheet states; Salesperson/Assigned/etc → employees;
+  //  Machine/Device → devices; Serial → that device's serial(s). The current
+  //  value is always kept selectable.
+  function demoOptions(colName, colIdx, current, rowIdx) {
+    const dd = D.dropdowns || {}, rf = D.refs || {};
+    const cols = D.demoMachines[demoView].columns;
+    let base;
+    if (colName === "Status") base = (dd.status || []).slice();
     else if (CONDITION_COLS.includes(colName)) base = (dd.condition || []).slice();
-    else {
-      const set = new Set();
-      D.demoMachines[demoView].rows.forEach((row, r) => {
-        const ov = demoEdits[demoView][r + "#" + colIdx];
-        const v = ov != null ? ov : row[colIdx];
-        if (v != null && String(v).trim() !== "") set.add(String(v).trim());
-      });
-      base = Array.from(set).sort();
-    }
+    else if (/location|^from$|^to$/i.test(colName)) base = (rf.states || []).slice();
+    else if (/salesperson|confirmed by|manager|received by|approved by/i.test(colName)) base = (rf.employees || []).slice();
+    else if (/^machine$|^device$/i.test(colName)) base = (rf.devices || []).slice();
+    else if (/serial/i.test(colName)) {
+      const mIdx = cols.findIndex((c) => /^machine$|^device$/i.test(c));
+      const mv = mIdx >= 0 ? demoVal(rowIdx, mIdx) : "";
+      const linked = mv ? (rf.deviceSerials || []).filter((x) => x.device === mv).map((x) => x.serial).filter(Boolean) : [];
+      base = (linked.length ? linked : (rf.serials || [])).slice();
+    } else base = distinctDemoValues(colIdx);
     if (current && !base.includes(current)) base = [current].concat(base);
     return base;
   }
@@ -905,7 +924,7 @@
         const val = ov != null ? ov : (v == null ? "" : String(v));
         const cls = [c === 0 ? "t-name" : "", demoStatusClass(t.columns[c], val)].filter(Boolean).join(" ");
         if (ed) {
-          const opts = demoOptions(t.columns[c], c, val);
+          const opts = demoOptions(t.columns[c], c, val, r);
           const optionHtml = `<option value=""${val ? "" : " selected"}>—</option>` +
             opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("");
           return `<td class="${cls}"><select class="demo-select" data-r="${r}" data-c="${c}">${optionHtml}</select></td>`;
@@ -919,11 +938,19 @@
 
   function wireDemoEdit() {
     if (!isAdmin()) return;
+    const cols = D.demoMachines[demoView].columns;
     document.querySelectorAll("#demoBody select.demo-select").forEach((sel) => {
       sel.onchange = () => {
-        demoEdits[demoView][sel.dataset.r + "#" + sel.dataset.c] = sel.value;
+        const r = sel.dataset.r, c = +sel.dataset.c;
+        demoEdits[demoView][r + "#" + c] = sel.value;
+        // Linked logic: choosing a Machine/Device fills its Serial No.
+        if (/^machine$|^device$/i.test(cols[c])) {
+          const sIdx = cols.findIndex((x) => /serial/i.test(x));
+          const ds = (D.refs.deviceSerials || []).filter((x) => x.device === sel.value).map((x) => x.serial).filter(Boolean);
+          if (sIdx >= 0 && ds.length) demoEdits[demoView][r + "#" + sIdx] = ds[0];
+        }
         saveEdits();
-        $("#demoBody").innerHTML = demoTable(); // refresh status colours / option lists
+        $("#demoBody").innerHTML = demoTable();
         wireDemoEdit();
       };
     });

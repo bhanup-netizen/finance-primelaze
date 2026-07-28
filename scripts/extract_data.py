@@ -492,6 +492,36 @@ def parse_dropdowns(wb):
     return {"status": status, "condition": condition}
 
 
+def parse_refs(wb):
+    """Master lookup lists from the 'DATA Sheet':
+    A = States/UTs (Location), B = Employees (salesperson/assigned-to),
+    C = Devices, D = Serial numbers (C & D are row-aligned)."""
+    ws = wb["DATA Sheet"]
+    rows = rows_of(ws)[1:]  # skip header row
+
+    def col(idx):
+        seen, out = set(), []
+        for row in rows:
+            v = declean(row[idx]) if idx < len(row) else None
+            if isinstance(v, str) and v.strip() and v not in seen:
+                seen.add(v); out.append(v)
+        return out
+
+    device_serials = []
+    for row in rows:
+        dev = declean(row[2]) if len(row) > 2 else None
+        ser = declean(row[3]) if len(row) > 3 else None
+        if isinstance(dev, str) and dev.strip():
+            device_serials.append({"device": dev, "serial": ser if isinstance(ser, str) else ""})
+    return {
+        "states": col(0),
+        "employees": col(1),
+        "devices": col(2),
+        "serials": col(3),
+        "deviceSerials": device_serials,
+    }
+
+
 def parse_demo(wb):
     status = parse_demo_table(
         wb["Demo Machine"],
@@ -722,6 +752,7 @@ def main():
         "esthemaxOrder": parse_order(order_wb["Order Summary"]),
         "demoMachines": parse_demo(demo_wb),
         "dropdowns": parse_dropdowns(demo_wb),
+        "refs": parse_refs(demo_wb),
     }
 
     apply_amendments(data)
