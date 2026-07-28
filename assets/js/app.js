@@ -213,7 +213,20 @@
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
   let rosterAddSeq = 0;
   const customHQs = [];   // admin-added base-HQ cities
+  const rosterRemovals = []; // nums of original roster people deleted by admin
   const DIVISIONS = ["Derma", "Salon/Spa"];
+  const isRemoved = (p) => p._aid == null && rosterRemovals.includes(p.num);
+  function removePerson(p) {
+    if (p._aid != null) {
+      const i = rosterAdds.findIndex((x) => x._aid === p._aid);
+      if (i >= 0) rosterAdds.splice(i, 1);
+    } else if (!rosterRemovals.includes(p.num)) {
+      rosterRemovals.push(p.num);
+    }
+    saveEdits();
+  }
+  // Living roster = original people (minus deletions) + admin-added rows.
+  const roster = () => D.roster.people.filter((p) => !isRemoved(p)).concat(rosterAdds);
   const rval = (p, field) => {
     if (p._aid != null) return p[field] || "";
     const k = p.num + "#" + field;
@@ -249,12 +262,12 @@
     (vacancyEdits[k] || (vacancyEdits[k] = {}))[field] = value;
   };
   const vacantPeople = () =>
-    D.roster.people.concat(rosterAdds).filter((p) => estatus(p) === "vacant");
+    roster().filter((p) => estatus(p) === "vacant");
 
   // Distinct existing values for a roster field (for dropdowns), plus extras.
   const rosterOptions = (field, extra) => {
     const s = new Set();
-    D.roster.people.concat(rosterAdds).forEach((p) => {
+    roster().forEach((p) => {
       const v = rval(p, field);
       if (v && v !== "—") s.add(String(v).trim());
     });
@@ -279,7 +292,7 @@
   // Build the reporting-hierarchy tree from Reports-To + designation data.
   function renderOrgChart() {
     const ROOT = "Arjun";
-    const all = D.roster.people.concat(rosterAdds).map((p) => ({
+    const all = roster().map((p) => ({
       name: (rval(p, "name") || "").trim(),
       desig: rval(p, "designation") || "",
       rep: (rval(p, "reportsTo") || "").trim(),
@@ -360,7 +373,7 @@
         if (addNew) html += `<option value="__add__">＋ Add new…</option>`;
         return `<td><select class="roster-sel" ${idAttr(p)} data-field="${field}">${html}</select></td>`;
       };
-      const all = people.concat(rosterAdds);
+      const all = people.filter((p) => !isRemoved(p)).concat(rosterAdds);
       const rows = all.filter((p) => {
         const name = rval(p, "name"), division = rval(p, "division") || "Derma";
         const st = estatus(p);
@@ -387,8 +400,8 @@
         const divCell = ed
           ? selCell(p, "division", DIVISIONS)
           : `<td>${divBadge}</td>`;
-        const firstCell = (ed && p._aid != null)
-          ? `<td class="num t-muted"><button class="linkish roster-rm" data-aid="${p._aid}" title="Remove">✕</button></td>`
+        const firstCell = ed
+          ? `<td class="num t-muted"><button class="linkish roster-rm" ${idAttr(p)} title="Remove">✕</button></td>`
           : `<td class="num t-muted">${p.num != null ? p.num : ""}</td>`;
         return `<tr>
           ${firstCell}
@@ -509,9 +522,8 @@
     });
     document.querySelectorAll("#teamBody .roster-rm").forEach((b) => {
       b.onclick = () => {
-        const i = rosterAdds.findIndex((x) => x._aid === b.dataset.aid);
-        if (i >= 0) rosterAdds.splice(i, 1);
-        saveEdits();
+        if (!window.confirm("Remove this person from the roster?")) return;
+        removePerson(b.dataset.aid != null ? { _aid: b.dataset.aid } : { num: +b.dataset.num });
         go("team");
       };
     });
@@ -575,8 +587,11 @@
       const remarkCell = ed
         ? `<td><input class="vac-in vac-remark" type="text" data-k="${vkey(p)}" data-field="remark" placeholder="Add remark…" value="${esc(vget(p, "remark"))}" /></td>`
         : `<td>${vget(p, "remark") ? esc(vget(p, "remark")) : "<span class='t-muted'>—</span>"}</td>`;
+      const firstCell = ed
+        ? `<td class="num t-muted"><button class="linkish vac-rm" ${ridAttr(p)} title="Remove">✕</button></td>`
+        : `<td class="num t-muted">${i + 1}</td>`;
       return `<tr>
-        <td class="num t-muted">${i + 1}</td>
+        ${firstCell}
         ${nameCell}
         ${rSel(p, "designation", rosterOptions("designation"))}
         ${rSel(p, "baseHQ", rosterOptions("baseHQ", customHQs), true)}
@@ -660,6 +675,13 @@
     });
     document.querySelectorAll(".vac-rname").forEach((td) => {
       td.onblur = () => { writeRoster(td, td.textContent.trim()); saveEdits(); };
+    });
+    document.querySelectorAll(".vac-rm").forEach((b) => {
+      b.onclick = () => {
+        if (!window.confirm("Delete this vacancy?")) return;
+        removePerson(b.dataset.aid != null ? { _aid: b.dataset.aid } : { num: +b.dataset.num });
+        go("team");
+      };
     });
     const addVac = document.getElementById("vacancyAddBtn");
     if (addVac) addVac.onclick = () => {
@@ -2160,6 +2182,7 @@
         const ids = rosterAdds.map((x) => +String(x._aid).slice(1)).filter((n) => !isNaN(n));
         rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
+      if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
       if (Array.isArray(e.customPeople)) { customPeople.length = 0; e.customPeople.forEach((h) => customPeople.push(h)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
@@ -2180,7 +2203,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, customHQs, customPeople, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
