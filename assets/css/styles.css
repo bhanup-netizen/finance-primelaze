@@ -526,6 +526,23 @@ tr.total-row:hover td { background: var(--surface-3); }
   #printArea dl { margin: 0; }
   #printArea dt { font-weight: 700; font-size: 10px; margin-top: 5px; }
   #printArea dd { margin: 0 0 2px; font-size: 10px; color: #333; }
+
+  /* Delivery challan — official letterhead layout */
+  #printArea .ch-letterhead { display: flex; align-items: center; gap: 16px; border-bottom: 2px solid #c0202a; padding-bottom: 8px; margin-bottom: 6px; }
+  #printArea .ch-logo { flex: 0 0 auto; }
+  #printArea .ch-co { flex: 1; }
+  #printArea .ch-co-name { font-size: 14px; font-weight: 800; color: #111; }
+  #printArea .ch-co-line { font-size: 9.5px; color: #444; }
+  #printArea .ch-title { text-align: center; font-size: 15px; font-weight: 800; letter-spacing: 1px; margin: 8px 0; color: #c0202a; }
+  #printArea .ch-meta th, #printArea .ch-fromto th { background: #c0202a; color: #fff; }
+  #printArea .ch-purpose { font-size: 11px; margin: 8px 0; }
+  #printArea .ch-declare { font-size: 10px; margin: 8px 0; break-inside: avoid; }
+  #printArea .ch-declare ol { margin: 3px 0 6px 18px; padding: 0; }
+  #printArea .ch-declare li { margin: 2px 0; }
+  #printArea .ch-sign { margin-top: 18px; text-align: right; break-inside: avoid; }
+  #printArea .ch-sign-name { font-weight: 700; color: #2a2ab0; font-size: 11px; }
+  #printArea .ch-sign img { display: inline-block; margin: 2px 0; }
+  #printArea .ch-sign-role { font-weight: 700; color: #2a2ab0; font-size: 11px; }
 }
 
 /* ============================================================

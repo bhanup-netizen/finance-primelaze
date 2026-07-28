@@ -1361,6 +1361,47 @@
     addr: "Leo House, Shaheed Bhagat Singh Nagar, Dugri-Dhandra Rd, Near Joseph School, Ludhiana, Punjab 141001",
   };
   const TRANSPORT_MODES = ["Air", "Surface", "Road", "Rail", "Courier", "Sea", "By Hand"];
+
+  // Fixed company letterhead for the printed challan (issuing entity + GSTIN).
+  const COMPANY = {
+    name: "PrimeLaze Private Limited",
+    addr: "No.16/8, Ragavendra Koil Street, Kurumbapet, Puducherry – 605 009",
+    phone: "9015128171",
+    gstin: "34AAMCP9346F1Z3",
+    signName: "For PRIMELAZE PVT. LTD.",
+  };
+  // Primelaze logo (recreated as inline SVG so the PDF is self-contained).
+  // Replace window.PRIMELAZE_LOGO with a data-URI PNG for a pixel-exact logo.
+  const LOGO_SVG =
+    `<svg width="190" height="72" viewBox="0 0 190 72" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="3" width="182" height="42" rx="3" fill="#c0202a"/>
+      <text x="95" y="33" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">Primelaze</text>
+      <text x="95" y="63" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#3a3a3a" text-anchor="middle">We rise by our service</text>
+    </svg>`;
+  const challanLogo = () => (window.PRIMELAZE_LOGO ? `<img src="${window.PRIMELAZE_LOGO}" alt="Primelaze" style="height:64px">` : LOGO_SVG);
+  // Optional Director signature image (data-URI). Set window.PRIMELAZE_SIGNATURE
+  // to embed the real signature; otherwise a signing space is printed.
+  const challanSign = () => (window.PRIMELAZE_SIGNATURE ? `<img src="${window.PRIMELAZE_SIGNATURE}" alt="" style="height:56px">` : `<div style="height:52px"></div>`);
+
+  // Standard "purpose of this item" declarations (from the official template).
+  const PURPOSE_STATEMENTS = [
+    "This is a Medical Device for Demo purpose, and hold no commercial value",
+    "This is Magicpulse Packing box have no commercial value",
+    "This is defective spares, and hold no commercial value",
+    "This is a Medical Device 'CELLINA PR' for Demo purpose and hold no commercial value",
+    "This is a Medical Device 'BI_AXIS' for Demo purpose and hold no commercial value",
+    "This is a Medical Device 'BLAUMAN' for Demo purpose and holds no commercial value",
+    "These are Medical Device Spare Parts, Have no commercial Value",
+    "These are medical device Accessories. There are no Commercial Value attached to them",
+    "These are Demo medical Device unit for demonstration In Doctors Clinics, Hospital and Conferences. These have no Commercial value attached to them",
+    "This is Stationary for marketing hold no comercial value only Value of goods",
+    "This is Medical accessories no commercial value",
+    "Co shifting to new Office",
+  ];
+  const DECLARATION = [
+    "I also confirm that the items in the consignment are not illegal, dangerous, or prohibited products.",
+    "I further confirm that the above details are true and I will bear the responsibility for any misrepresentation.",
+  ];
   let localChallans = []; // in-memory fallback when Firebase isn't available (local dev)
   let challanUnsub = null;
 
@@ -1393,6 +1434,9 @@
             <label class="ord-field"><span>Date of dispatch</span><input id="chDispatch" type="date" value="${esc(c.dispatch || "")}"></label>
             <label class="ord-field"><span>Estimated arrival</span><input id="chArrival" type="date" value="${esc(c.arrival || "")}"></label>
             <label class="ord-field"><span>Declared cargo value (₹)</span><input id="chValue" type="number" value="${esc(c.declaredValue || "")}"></label>
+            <label class="ord-field"><span>Docket No.</span><input id="chDocket" value="${esc(c.docket || "")}"></label>
+            <label class="ord-field"><span>Total packages</span><input id="chPackages" type="number" value="${esc(c.packages || "1")}"></label>
+            <label class="ord-field"><span>Weight</span><input id="chWeight" value="${esc(c.weight || "")}" placeholder="e.g. 12 kg"></label>
           </div>
           <div class="ch-grid">
             <label class="ord-field"><span>From — pick office</span>
@@ -1408,7 +1452,13 @@
             <div class="perm-title">Items <button type="button" class="linkish" id="chAddItem">+ add item</button></div>
             <div id="chItems">${itemRows}</div>
           </div>
-          <label class="ord-field"><span>Notes (optional)</span><textarea id="chNotes" rows="2">${esc(c.notes || "")}</textarea></label>
+          <label class="ord-field"><span>Purpose of this item</span>
+            <select id="chPurpose" class="select">
+              <option value="">— select a purpose —</option>
+              ${PURPOSE_STATEMENTS.concat((c.purpose && !PURPOSE_STATEMENTS.includes(c.purpose)) ? [c.purpose] : []).map((p) => `<option${c.purpose === p ? " selected" : ""}>${esc(p)}</option>`).join("")}
+              <option value="__custom__">＋ Other (type below)…</option>
+            </select></label>
+          <label class="ord-field"><span>Notes / custom purpose (optional)</span><textarea id="chNotes" rows="2">${esc(c.notes || "")}</textarea></label>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button type="submit" class="dl-btn">${c.id ? "Save changes" : "Create challan"}</button>
             <button type="button" class="ghost-btn" id="chCancel">Cancel</button>
@@ -1432,10 +1482,13 @@
       desc: r.querySelector(".ch-desc").value.trim(),
       amount: r.querySelector(".ch-amt").value.trim(),
     })).filter((x) => x.desc || x.amount);
+    const purposeSel = $("#chPurpose").value;
     return {
       no: $("#chNo").value.trim(), date: $("#chDate").value, mode: $("#chMode").value.trim(),
       dispatch: $("#chDispatch").value, arrival: $("#chArrival").value,
       declaredValue: $("#chValue").value.trim(),
+      docket: $("#chDocket").value.trim(), packages: $("#chPackages").value.trim(), weight: $("#chWeight").value.trim(),
+      purpose: purposeSel === "__custom__" ? "" : purposeSel,
       fromName: $("#chFromName").value.trim(), fromAddr: $("#chFromAddr").value.trim(),
       toName: $("#chToName").value.trim(), toAddr: $("#chToAddr").value.trim(),
       items, notes: $("#chNotes").value.trim(),
@@ -1543,29 +1596,53 @@
     const itemRows = (c.items || []).map((it, i) =>
       `<tr><td class="num">${i + 1}</td><td>${esc(it.desc || "")}</td><td class="num">${it.amount ? rupee(+it.amount) : ""}</td></tr>`).join("");
     const total = (c.items || []).reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+    const purpose = c.purpose || c.notes || "";
     return `
-      <div class="p-section">
-        <h1>Delivery Challan${c.no ? " — " + esc(c.no) : ""}</h1>
-        <div class="p-sub">TO WHOM SO EVER IT MAY CONCERN</div>
-        <table><tbody>
-          <tr><th>Date</th><td>${esc(c.date || "—")}</td><th>Transport</th><td>${esc(c.mode || "—")}</td></tr>
+      <div class="p-section ch-print">
+        <div class="ch-letterhead">
+          <div class="ch-logo">${challanLogo()}</div>
+          <div class="ch-co">
+            <div class="ch-co-name">${esc(COMPANY.name)}</div>
+            <div class="ch-co-line">If lost, please return to: ${esc(COMPANY.addr)}</div>
+            <div class="ch-co-line">Call ${esc(COMPANY.phone)} &nbsp;·&nbsp; GSTIN ${esc(COMPANY.gstin)}</div>
+          </div>
+        </div>
+        <div class="ch-title">DELIVERY CHALLAN</div>
+
+        <table class="ch-meta"><tbody>
+          <tr><th>Challan No.</th><td>${esc(c.no || "—")}</td><th>Date</th><td>${esc(c.date || "—")}</td></tr>
+          <tr><th>Docket No.</th><td>${esc(c.docket || "—")}</td><th>Transport mode</th><td>${esc(c.mode || "—")}</td></tr>
+          <tr><th>Total packages</th><td>${esc(c.packages || "—")}</td><th>Weight</th><td>${esc(c.weight || "—")}</td></tr>
           <tr><th>Date of dispatch</th><td>${esc(c.dispatch || "—")}</td><th>Estimated arrival</th><td>${esc(c.arrival || "—")}</td></tr>
           <tr><th>Declared cargo value</th><td colspan="3">${c.declaredValue ? rupee(+c.declaredValue) : "—"}</td></tr>
         </tbody></table>
-        <table><tbody>
+
+        <table class="ch-fromto"><tbody>
           <tr><th style="width:50%">From (Consignor)</th><th style="width:50%">To (Consignee)</th></tr>
           <tr><td><b>${esc(c.fromName || "")}</b><br>${esc(c.fromAddr || "")}</td>
               <td><b>${esc(c.toName || "")}</b><br>${esc(c.toAddr || "")}</td></tr>
         </table>
-        <h3>List / Description of Items</h3>
-        <table>
-          <thead><tr><th class="num">S.No</th><th>Description</th><th class="num">Amount</th></tr></thead>
+
+        <table class="ch-items">
+          <thead><tr><th class="num">S.No</th><th>List / Description of Items</th><th class="num">Amount</th></tr></thead>
           <tbody>${itemRows || `<tr><td colspan="3">—</td></tr>`}
             <tr><td></td><td class="num"><b>Total</b></td><td class="num"><b>${rupee(total)}</b></td></tr>
           </tbody>
         </table>
-        ${c.notes ? `<p class="p-meta">Notes: ${esc(c.notes)}</p>` : ""}
-        <p class="p-meta" style="margin-top:24px">For ${esc(c.fromName || DEFAULT_FROM.name)} — Authorised Signatory ____________________</p>
+
+        ${purpose ? `<p class="ch-purpose"><b>The purpose of this item is:</b> ${esc(purpose)}</p>` : ""}
+
+        <div class="ch-declare">
+          <b>I hereby declare that:</b>
+          <ol>${DECLARATION.map((d) => `<li>${esc(d)}</li>`).join("")}</ol>
+          <div>Thanking you.<br>Sincerely,</div>
+        </div>
+
+        <div class="ch-sign">
+          <div class="ch-sign-name">${esc(COMPANY.signName)}</div>
+          ${challanSign()}
+          <div class="ch-sign-role">Director</div>
+        </div>
       </div>`;
   }
 
