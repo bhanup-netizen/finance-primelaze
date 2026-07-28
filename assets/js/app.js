@@ -467,8 +467,24 @@
     const open = list.filter((p) => !vget(p, "fillBy")).length;
     const high = list.filter((p) => effPr(p) === "high").length;
 
+    // Roster-backed editable cells (write through to Team Roster).
+    const ridAttr = (p) => (p._aid != null ? `data-aid="${p._aid}"` : `data-num="${p.num}"`);
+    const rSel = (p, field, opts, addNew) => {
+      if (!ed) return `<td>${esc(rval(p, field) || "—")}</td>`;
+      const cur = rval(p, field) || "";
+      const options = opts.slice();
+      if (cur && !options.includes(cur)) options.unshift(cur);
+      let html = `<option value=""${cur === "" ? " selected" : ""}>—</option>`;
+      html += options.map((o) => `<option value="${esc(o)}"${o === cur ? " selected" : ""}>${esc(o)}</option>`).join("");
+      if (addNew) html += `<option value="__add__">＋ Add new…</option>`;
+      return `<td><select class="vac-rsel" ${ridAttr(p)} data-field="${field}">${html}</select></td>`;
+    };
+
     const rows = sorted.map((p, i) => {
       const name = rval(p, "name"), pr = effPr(p);
+      const nameCell = ed
+        ? `<td class="t-name vac-rname" contenteditable="true" ${ridAttr(p)} data-field="name">${esc(name)}</td>`
+        : `<td class="t-name">${esc(name)}</td>`;
       const prCell = ed
         ? `<td><select class="vac-in" data-k="${vkey(p)}" data-field="priority">${
             PRIORITY_OPTIONS.map((o) => `<option value="${o.id}"${o.id === pr ? " selected" : ""}>${o.label}</option>`).join("")
@@ -482,11 +498,11 @@
         : `<td>${vget(p, "remark") ? esc(vget(p, "remark")) : "<span class='t-muted'>—</span>"}</td>`;
       return `<tr>
         <td class="num t-muted">${i + 1}</td>
-        <td class="t-name">${esc(name)}</td>
-        <td>${esc(rval(p, "designation") || "—")}</td>
-        <td>${esc(rval(p, "baseHQ") || "—")}</td>
-        <td>${esc(rval(p, "zone") || "—")}</td>
-        <td>${esc(rval(p, "reportsTo") || "—")}</td>
+        ${nameCell}
+        ${rSel(p, "designation", rosterOptions("designation"))}
+        ${rSel(p, "baseHQ", rosterOptions("baseHQ", customHQs), true)}
+        ${rSel(p, "zone", rosterOptions("zone"))}
+        ${rSel(p, "reportsTo", rosterOptions("reportsTo"))}
         ${prCell}
         ${fillCell}
         ${remarkCell}
@@ -510,7 +526,7 @@
     return `
       <div class="section-head">
         <h1>Vacancies</h1>
-        <p>Open positions across the team${ed ? " — set a priority, a target date to fill, and a remark. Changes save for everyone." : ". An administrator prioritises and schedules these."}</p>
+        <p>Open positions across the team${ed ? " — every field is editable: refine the role details, set a priority, a target date to fill, and a remark. Detail edits sync with the Team Roster. Changes save for everyone." : ". An administrator prioritises and schedules these."}</p>
       </div>
       <div class="card" style="margin-bottom:20px"><div class="stat-row">
         <div class="stat"><b>${list.length}</b><span>Vacant positions</span></div>
@@ -536,6 +552,34 @@
       };
       el.onchange = commit;
       if (el.tagName === "INPUT" && el.type === "text") el.onblur = commit;
+    });
+    // Roster-backed fields (name/designation/HQ/zone/reports-to) — write
+    // through to the shared roster so Team Roster and Vacancies stay in sync.
+    const writeRoster = (el, val) => {
+      const field = el.dataset.field;
+      if (el.dataset.aid) {
+        const p = rosterAdds.find((x) => x._aid === el.dataset.aid);
+        if (p) p[field] = val;
+      } else {
+        rosterEdits[el.dataset.num + "#" + field] = val;
+      }
+    };
+    document.querySelectorAll(".vac-rsel").forEach((sel) => {
+      sel.onchange = () => {
+        let val = sel.value;
+        if (val === "__add__") {
+          const name = (window.prompt("Add new HQ (city):") || "").trim();
+          if (!name) { go("vacancies"); return; }
+          if (!customHQs.includes(name)) customHQs.push(name);
+          val = name;
+        }
+        writeRoster(sel, val);
+        saveEdits();
+        go("vacancies");
+      };
+    });
+    document.querySelectorAll(".vac-rname").forEach((td) => {
+      td.onblur = () => { writeRoster(td, td.textContent.trim()); saveEdits(); };
     });
   }
 
