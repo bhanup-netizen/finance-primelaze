@@ -9,6 +9,14 @@
   // Populated after the password decrypts the data payload (see the gate below).
   let D = null;
 
+  // Access mode. "view" = read-only, landing/lending prices hidden, no editing.
+  // "admin" = everything visible and editable. (Interim client-side gate; full
+  // per-user accounts & permissions will move to Firebase.)
+  let appMode = "view";
+  let currentTab = "overview";
+  const isAdmin = () => appMode === "admin";
+  const roAttr = () => (isAdmin() ? "" : "disabled");
+
   /* ---------------- helpers ---------------- */
   const $ = (sel, root = document) => root.querySelector(sel);
   const esc = (s) =>
@@ -218,13 +226,12 @@
           <td>${esc(p.reportsTo)}</td>
           <td>${esc(p.zone)}</td>
           <td>${badge}</td>
-          <td class="cell-note">${esc(p.notes || "")}</td>
         </tr>`;
       }).join("");
-      return rows || `<tr><td colspan="9" class="empty">No matching personnel.</td></tr>`;
+      return rows || `<tr><td colspan="8" class="empty">No matching personnel.</td></tr>`;
     };
 
-    const head = ["#", "Name", "Designation", "Division", "Base HQ", "Reports To", "Zone", "Status", "Notes"]
+    const head = ["#", "Name", "Designation", "Division", "Base HQ", "Reports To", "Zone", "Status"]
       .map((h, i) => `<th class="${i === 0 ? "num" : ""}">${h}</th>`).join("");
 
     setTimeout(() => {
@@ -365,7 +372,7 @@
         const editable = isNum(r.fy2627);
         const v = effVal(pk, ri, r.fy2627);
         const fyCell = editable
-          ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" />`
+          ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
         const rowTv = (isNum(v) && isNum(r.deviceValue)) ? v * r.deviceValue : (isNum(r.totalValue) ? r.totalValue : null);
         return `<tr>
@@ -609,15 +616,15 @@
 
   function priceBody() {
     if (priceView === "device") {
-      const head = ["Device", "Landing Cost (L)", "Quotation (L)", "Standard (L)", "Minimum (L)"]
-        .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
+      const cols = ["Device"].concat(isAdmin() ? ["Landing Cost (L)"] : []).concat(["Quotation (L)", "Standard (L)", "Minimum (L)"]);
+      const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
       const body = D.costs.device.map((r) => `<tr>
         <td class="t-name">${esc(r.device)}</td>
-        <td class="num">${r.landingCost ?? "—"}</td>
+        ${isAdmin() ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}
         <td class="num">${r.quotation ?? "—"}</td>
         <td class="num">${r.standard ?? "—"}</td>
         <td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
-      return `<div class="callout">Landing = EXW + ~30% (customs + transport). Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}`;
+      return `<div class="callout">${isAdmin() ? "Landing = EXW + ~30% (customs + transport). " : "Landing cost is admin-only. "}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}`;
     }
     if (priceView === "celluma") {
       const head = ["Model", "Quotation (₹)", "Selling Price (₹)"]
@@ -631,12 +638,12 @@
     // esthemax
     const sec = (title, rows) => {
       if (!rows || !rows.length) return "";
-      const head = ["Variant", "Pack", "Landing Cost", "Standard (Total)", "MRP", "New MRP", "Min (EXW)"]
-        .map((x, i) => `<th class="${i >= 2 ? "num" : ""}">${x}</th>`).join("");
+      const cols = ["Variant", "Pack"].concat(isAdmin() ? ["Landing Cost"] : []).concat(["Standard (Total)", "MRP", "New MRP", "Min (EXW)"]);
+      const head = cols.map((x, i) => `<th class="${i >= 2 ? "num" : ""}">${x}</th>`).join("");
       const body = rows.map((r) => `<tr>
         <td class="t-name">${esc(r.variant)}</td>
         <td class="t-muted">${esc(r.pack)}</td>
-        <td class="num">${rupee(r.landingCost)}</td>
+        ${isAdmin() ? `<td class="num">${rupee(r.landingCost)}</td>` : ""}
         <td class="num">${rupee(r.standardTotal)}</td>
         <td class="num">${rupee(r.mrp)}</td>
         <td class="num">${rupee(r.newMrp)}</td>
@@ -644,7 +651,7 @@
       return `<div class="block"><h2>${esc(title)}</h2>${table(head, body)}</div>`;
     };
     const e = D.costs.esthemax;
-    return `<div class="callout">Landing = EXW + 44% customs + transport. Standard (Total) = landing + marketing + profit. Min (EXW) = Primelaze ex-works price. Per box, excl. GST.</div>
+    return `<div class="callout">${isAdmin() ? "Landing = EXW + 44% customs + transport. " : "Landing cost is admin-only. "}Standard (Total) = landing + marketing + profit. Min (EXW) = Primelaze ex-works price. Per box, excl. GST.</div>
       ${sec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
       ${sec("Retail Hydrojelly (2 masks / box)", e.retail)}
       ${sec("Collagen Foot Mask", e.footMask)}`;
@@ -878,12 +885,12 @@
 
       <div class="card" style="margin-bottom:18px">
         <div class="order-params">
-          <label class="ord-field"><span>USD → INR</span><input id="ordUsd" type="number" step="0.01" value="${orderState.usdInr}"></label>
-          <label class="ord-field"><span>Customs rate (%)</span><input id="ordCustoms" type="number" step="1" value="${+(orderState.customs * 100).toFixed(2)}"></label>
-          <label class="ord-field"><span>JAR min order</span><input id="ordMoqJar" type="number" step="1" min="1" value="${orderState.moqJar}"></label>
-          <label class="ord-field"><span>Retail min order</span><input id="ordMoqRetail" type="number" step="1" min="1" value="${orderState.moqRetail}"></label>
+          <label class="ord-field"><span>USD → INR</span><input id="ordUsd" type="number" step="0.01" value="${orderState.usdInr}" ${roAttr()}></label>
+          <label class="ord-field"><span>Customs rate (%)</span><input id="ordCustoms" type="number" step="1" value="${+(orderState.customs * 100).toFixed(2)}" ${roAttr()}></label>
+          <label class="ord-field"><span>JAR min order</span><input id="ordMoqJar" type="number" step="1" min="1" value="${orderState.moqJar}" ${roAttr()}></label>
+          <label class="ord-field"><span>Retail min order</span><input id="ordMoqRetail" type="number" step="1" min="1" value="${orderState.moqRetail}" ${roAttr()}></label>
           <div class="ord-field"><span>Coverage</span><b>${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon mo</b></div>
-          <button id="ordReset" class="ghost-btn" type="button">Reset</button>
+          <button id="ordReset" class="ghost-btn" type="button" ${roAttr()}>Reset</button>
         </div>
       </div>
 
@@ -899,7 +906,7 @@
           <thead><tr>
             <th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
             <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
-            <th>ETA (arrival)</th><th class="num">Landing/Unit</th><th class="num">Money Required</th>
+            <th>ETA (arrival)</th>${isAdmin() ? `<th class="num">Landing/Unit</th><th class="num">Money Required</th>` : ""}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
@@ -923,8 +930,8 @@
       { cls: "k-good", label: "Can sell now", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
       { cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" },
-      { cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" },
-    ].map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
+    ].concat(isAdmin() ? [{ cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" }] : [])
+      .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
     if (kEl) kEl.innerHTML = kpis;
 
@@ -941,13 +948,13 @@
         <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
         <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
-        <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
+        <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" ${roAttr()} /></td>
         <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
-        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>
-        <td class="num">${rupee(r.landing, { decimals: 0 })}</td>
-        <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>
+        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" ${roAttr()} /></td>
+        ${isAdmin() ? `<td class="num">${rupee(r.landing, { decimals: 0 })}</td>
+        <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="11" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${isAdmin() ? 11 : 9}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
   }
@@ -978,10 +985,90 @@
 
   function go(id) {
     const tab = TABS.find((t) => t.id === id) || TABS[0];
+    currentTab = tab.id;
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab.id));
     $("#view").innerHTML = tab.render();
+    enhanceTables();
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (location.hash.slice(1) !== tab.id) history.replaceState(null, "", "#" + tab.id);
+  }
+
+  // Generic click-to-sort + per-table filter for every rendered table.
+  function enhanceTables() {
+    document.querySelectorAll("#view .table-wrap").forEach((wrap) => {
+      if (wrap.dataset.enh) return;
+      const table = wrap.querySelector("table");
+      const tbody = table && table.querySelector("tbody");
+      if (!tbody) return;
+      wrap.dataset.enh = "1";
+
+      // filter box above the table
+      const tools = document.createElement("div");
+      tools.className = "tbl-tools";
+      const inp = document.createElement("input");
+      inp.type = "search"; inp.className = "tbl-filter"; inp.placeholder = "Filter this table…";
+      inp.oninput = () => {
+        const q = inp.value.toLowerCase();
+        tbody.querySelectorAll("tr").forEach((tr) => {
+          if (tr.classList.contains("total-row")) return;
+          tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none";
+        });
+      };
+      tools.appendChild(inp);
+      wrap.parentNode.insertBefore(tools, wrap);
+
+      // sortable headers
+      const ths = Array.from(table.querySelectorAll("thead th"));
+      ths.forEach((th, ci) => {
+        th.classList.add("sortable");
+        th.addEventListener("click", () => {
+          const dir = th.dataset.dir === "asc" ? "desc" : "asc";
+          ths.forEach((h) => { h.dataset.dir = ""; h.classList.remove("sort-asc", "sort-desc"); });
+          th.dataset.dir = dir; th.classList.add(dir === "asc" ? "sort-asc" : "sort-desc");
+          const rowsAll = Array.from(tbody.querySelectorAll("tr"));
+          const totals = rowsAll.filter((r) => r.classList.contains("total-row"));
+          const rows = rowsAll.filter((r) => !r.classList.contains("total-row") && !r.querySelector(".empty"));
+          const cellVal = (tr) => {
+            const cell = tr.children[ci];
+            if (!cell) return { t: "", num: NaN };
+            const el = cell.querySelector("input");
+            const t = (el ? el.value : cell.textContent).trim();
+            const num = parseFloat(t.replace(/[₹,%]/g, "").replace(/[^0-9.\-]/g, ""));
+            return { t, num };
+          };
+          rows.sort((a, b) => {
+            const A = cellVal(a), B = cellVal(b);
+            const bothNum = !isNaN(A.num) && A.t !== "" && !isNaN(B.num) && B.t !== "";
+            const cmp = bothNum ? A.num - B.num : A.t.localeCompare(B.t, undefined, { numeric: true });
+            return dir === "asc" ? cmp : -cmp;
+          });
+          rows.forEach((r) => tbody.appendChild(r));
+          totals.forEach((r) => tbody.appendChild(r));
+        });
+      });
+    });
+  }
+
+  async function initMode() {
+    const btn = document.getElementById("modeToggle");
+    if (!btn) return;
+    const paint = () => {
+      btn.textContent = isAdmin() ? "🔓 Admin" : "👁 View";
+      btn.classList.toggle("admin-on", isAdmin());
+    };
+    paint();
+    btn.onclick = async () => {
+      if (isAdmin()) { appMode = "view"; paint(); go(currentTab); return; }
+      // interim gate: re-enter the site password to enable editing
+      const pass = window.prompt("Enter admin password to enable editing:");
+      if (pass == null) return;
+      try {
+        await decryptData(pass); // succeeds only for the correct password
+        appMode = "admin"; paint(); go(currentTab);
+      } catch (e) {
+        window.alert("Incorrect password — staying in view-only mode.");
+      }
+    };
   }
 
   function initTheme() {
@@ -999,7 +1086,11 @@
   function bootApp() {
     $("#fyPill").textContent = D.meta.fiscalYear;
     mountTabs();
+    initMode();
     go(location.hash.slice(1) || "overview");
+    // auto-enhance tables that sub-tabs render after the initial paint
+    const viewEl = $("#view");
+    if (viewEl) new MutationObserver(() => enhanceTables()).observe(viewEl, { childList: true, subtree: true });
   }
 
   /* ---------------- login gate / decryption ---------------- */

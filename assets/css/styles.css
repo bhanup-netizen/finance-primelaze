@@ -106,6 +106,27 @@ a { color: var(--accent); text-decoration: none; }
   display: grid; place-items: center; transition: .15s;
 }
 .icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.mode-btn {
+  height: 36px; padding: 0 13px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2);
+  font-size: 13px; font-weight: 700; font-family: inherit; transition: .15s; white-space: nowrap;
+}
+.mode-btn:hover { background: var(--surface-3); color: var(--text); }
+.mode-btn.admin-on { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+
+/* Sortable headers + per-table filter */
+thead th.sortable { cursor: pointer; user-select: none; position: sticky; top: 0; }
+thead th.sortable:hover { color: var(--text); background: var(--surface-3); }
+thead th.sortable::after { content: "⇅"; opacity: .35; margin-left: 5px; font-size: 10px; }
+thead th.sort-asc::after { content: "↑"; opacity: 1; }
+thead th.sort-desc::after { content: "↓"; opacity: 1; }
+.tbl-tools { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.tbl-filter {
+  width: 220px; max-width: 60%; padding: 7px 11px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 13px; font-family: inherit;
+}
+.tbl-filter:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
 /* ---------- Tabs ---------- */
 .tabs {

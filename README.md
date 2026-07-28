@@ -22,7 +22,19 @@ workbooks and runs as a **static site** with no backend and no build step.
 | **Review Log** | Every review comment raised by Surya / HR / management, with resolution and status. |
 
 Light and dark themes, responsive layout, keyboard-free navigation, deep-linkable
-tabs (`#overview`, `#incentives`, …).
+tabs (`#overview`, `#incentives`, …). Every table is **click-to-sort** and has a
+per-table **filter** box.
+
+### View vs Admin mode
+
+A header toggle switches between **View** (read-only) and **Admin** (edit). In
+View mode, **landing / lending cost prices are hidden** (Price Book landing
+columns, Inventory landing & money) and all editable fields are disabled. Admin
+is unlocked with the site password.
+
+> This is an interim client-side gate. Full multi-user accounts, per-user page &
+> HQ permissions, and shared persistent edits are planned via **Firebase**
+> (Auth + Firestore) — until then, admin edits are session-only.
 
 ## 🔒 Password protection
 
