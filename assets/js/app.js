@@ -1357,7 +1357,7 @@
     if (!roleIsAdmin()) { btn.hidden = true; return; }
     btn.hidden = false;
     const paint = () => {
-      btn.textContent = isAdmin() ? "🔓 Editing" : "👁 View";
+      btn.textContent = isAdmin() ? "🔓 Admin" : "👁 View";
       btn.classList.toggle("admin-on", isAdmin());
     };
     paint();
