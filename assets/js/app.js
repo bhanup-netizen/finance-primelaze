@@ -1197,6 +1197,10 @@
     { id: "packing", label: "Packing condition" },
   ];
   const FREE_TEXT_COLS = /remark|missing item|accessor|damage report|dimension|purpose$/i;
+  const PERSON_COLS = /salesperson|confirmed by|manager|received by|approved by|checked by|owner|current taker/i;
+  const customPeople = []; // admin-added people for person dropdowns
+  // Display-only column renames (keeps the underlying data key for logic).
+  const demoColLabel = (c) => (/^manager$/i.test(c) ? "Current Taker" : c);
   let demoView = "current";
 
   const demoAddById = (rid) => (demoAdds[demoView] || []).find((x) => x.id === rid);
@@ -1248,7 +1252,7 @@
     if (colName === "Status") base = uniq(dd.status || [], distinctDemoValues(colIdx));
     else if (/condition/i.test(colName)) base = uniq(dd.condition || [], distinctDemoValues(colIdx));
     else if (/location|^from$|^to$/i.test(colName)) base = uniq(rf.states || [], distinctDemoValues(colIdx));
-    else if (/salesperson|confirmed by|manager|received by|approved by|checked by/i.test(colName)) base = (rf.employees || []).slice();
+    else if (PERSON_COLS.test(colName)) base = uniq(rf.employees || [], customPeople);
     else if (/^machine$|^device$/i.test(colName)) base = uniq(rf.devices || [], deviceNames());
     else if (/serial|flight case id/i.test(colName)) {
       const mIdx = cols.findIndex((c) => /^machine$|^device$/i.test(c));
@@ -1269,7 +1273,8 @@
     }
     const opts = demoOptions(colName, c, val, rid);
     const optionHtml = `<option value=""${val ? "" : " selected"}>—</option>` +
-      opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("");
+      opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("") +
+      (PERSON_COLS.test(colName) ? `<option value="__add__">＋ Add new…</option>` : "");
     const rm = (c === 0 && String(rid).startsWith("a")) ? `<button class="linkish demo-rm" data-id="${rid}" title="Remove">✕</button> ` : "";
     return `<td class="${cls}">${rm}<select class="demo-select" data-r="${rid}" data-c="${c}">${optionHtml}</select></td>`;
   }
@@ -1277,7 +1282,7 @@
   function demoTable() {
     const t = D.demoMachines[demoView];
     const ed = isAdmin();
-    const head = t.columns.map((c) => `<th>${esc(c)}</th>`).join("");
+    const head = t.columns.map((c) => `<th>${esc(demoColLabel(c))}</th>`).join("");
     const ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
     const body = ids.map((rid) =>
       `<tr>${t.columns.map((colName, c) => demoCell(rid, c, colName, ed)).join("")}</tr>`).join("");
@@ -1292,6 +1297,13 @@
     document.querySelectorAll("#demoBody select.demo-select").forEach((sel) => {
       sel.onchange = () => {
         const rid = sel.dataset.r, c = +sel.dataset.c;
+        if (sel.value === "__add__") {
+          const name = (window.prompt("Add new person:") || "").trim();
+          if (!name) { demoRepaint(); return; }
+          if (!customPeople.includes(name)) customPeople.push(name);
+          demoSetVal(rid, c, name);
+          saveEdits(); demoRepaint(); return;
+        }
         demoSetVal(rid, c, sel.value);
         // Linked logic: choosing a Machine/Device fills its Serial No.
         if (/^machine$|^device$/i.test(cols[c])) {
@@ -2049,6 +2061,7 @@
         rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
+      if (Array.isArray(e.customPeople)) { customPeople.length = 0; e.customPeople.forEach((h) => customPeople.push(h)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
@@ -2067,7 +2080,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, customHQs, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, customHQs, customPeople, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
