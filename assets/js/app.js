@@ -419,14 +419,11 @@
         </div>
       </div>`).join("");
 
-    const highlights = (h.highlights || []).map((x) => `<li>${esc(x)}</li>`).join("");
-
     return `
       <div class="callout">${esc(h.title)}${h.subtitle ? `<div class="muted-note" style="margin-top:6px">${esc(h.subtitle)}</div>` : ""}</div>
       ${summary ? `<div class="card" style="margin-bottom:22px"><div class="stat-row">${summary}</div></div>` : ""}
       ${plans || `<div class="empty">No product plan — placeholder HQ pending hire.</div>`}
-      ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}
-      ${highlights ? `<div class="block"><h2>Plan highlights</h2><ul class="hq-highlights" style="padding:0;margin:0">${highlights}</ul></div>` : ""}`;
+      ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}`;
   }
 
   /* ---- HQ target PDF (targets + incentives + T&C) ---- */
