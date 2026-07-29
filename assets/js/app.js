@@ -725,9 +725,15 @@
   let hqIndex = 0;
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
   const hqAdds = {};  // `${sheet}#${planIdx}` -> [{product, fy2627, deviceValue}]
-  // Sales achieved per HQ sheet: each record = one machine sold.
-  const hqSales = {}; // `${sheet}` -> [{ id, product, buyer, location, soldBy }]
+  // Sales achieved per HQ sheet.
+  const hqSales = {};     // device sales: `${sheet}` -> [{ id, product, buyer, location, soldBy, amount }]
+  const hqEsthSales = {}; // esthemax sales: `${sheet}` -> [{ id, product, qty, buyer, location, soldBy, amount }]
   let hqSaleSeq = 0;
+  const esthemaxProductNames = () => {
+    const s = new Set();
+    Object.values(D.esthemaxPrices || {}).forEach((mk) => Object.values(mk.groups || {}).forEach((rows) => rows.forEach((r) => { if (r.name) s.add(r.name); })));
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  };
   // Product names available in an HQ (its plan products + added + device list).
   const hqProductNames = (h) => {
     const s = new Set();
@@ -832,66 +838,89 @@
         mountHqDetail(D.hqTargets[hqIndex]);
       };
     });
-    // Sales-achieved records (who bought / where / who sold).
+    // Sales-achieved records (who bought / where / who sold / how much).
     const h = D.hqTargets[hqIndex];
     const key = h && h.sheet;
+    const storeFor = (s) => (s === "esth" ? hqEsthSales : hqSales);
     document.querySelectorAll(".sale-in").forEach((el) => {
       const commit = () => {
-        const rec = (hqSales[key] || []).find((x) => x.id === el.dataset.id);
-        if (rec) { rec[el.dataset.field] = el.value; saveEdits(); }
+        const rec = (storeFor(el.dataset.store)[key] || []).find((x) => x.id === el.dataset.id);
+        if (rec) {
+          const numField = el.type === "number";
+          rec[el.dataset.field] = numField ? (el.value === "" ? "" : parseFloat(el.value)) : el.value;
+          saveEdits();
+          if (numField) mountHqDetail(h); // refresh rollup totals
+        }
       };
       el.onchange = commit;
       if (el.tagName === "INPUT" && el.type === "text") el.onblur = commit;
     });
     document.querySelectorAll(".sale-rm").forEach((b) => {
       b.onclick = () => {
-        hqSales[key] = (hqSales[key] || []).filter((x) => x.id !== b.dataset.id);
+        const map = storeFor(b.dataset.store);
+        map[key] = (map[key] || []).filter((x) => x.id !== b.dataset.id);
         saveEdits(); mountHqDetail(h);
       };
     });
-    const addSale = document.getElementById("hqSaleAdd");
-    if (addSale) addSale.onclick = () => {
-      (hqSales[key] = hqSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", buyer: "", location: "", soldBy: "" });
+    const addDev = document.getElementById("hqSaleAdd");
+    if (addDev) addDev.onclick = () => {
+      (hqSales[key] = hqSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", buyer: "", location: "", soldBy: "", amount: "" });
+      saveEdits(); mountHqDetail(h);
+    };
+    const addEsth = document.getElementById("hqEsthAdd");
+    if (addEsth) addEsth.onclick = () => {
+      (hqEsthSales[key] = hqEsthSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", qty: "", buyer: "", location: "", soldBy: "", amount: "" });
       saveEdits(); mountHqDetail(h);
     };
   }
 
-  function hqSalesSection(h) {
+  // Generic sales-record section. store = "dev" (devices) | "esth" (Esthemax).
+  function hqSalesSection(h, store) {
+    const isEsth = store === "esth";
     const key = h.sheet;
-    const list = hqSales[key] || [];
+    const list = (isEsth ? hqEsthSales : hqSales)[key] || [];
     const admin = isAdmin();
-    const prodOpts = hqProductNames(h);
+    const prodOpts = isEsth ? esthemaxProductNames() : hqProductNames(h);
+    const da = (rec, field) => `data-store="${store}" data-id="${rec.id}" data-field="${field}"`;
     const sel = (rec) => admin
-      ? `<select class="sale-in" data-id="${rec.id}" data-field="product"><option value=""${rec.product ? "" : " selected"}>— product —</option>${prodOpts.concat(rec.product && !prodOpts.includes(rec.product) ? [rec.product] : []).map((n) => `<option${n === rec.product ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`
+      ? `<select class="sale-in" ${da(rec, "product")}><option value=""${rec.product ? "" : " selected"}>— product —</option>${prodOpts.concat(rec.product && !prodOpts.includes(rec.product) ? [rec.product] : []).map((n) => `<option${n === rec.product ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`
       : esc(rec.product || "—");
     const txt = (rec, field, ph, listId) => admin
-      ? `<input class="sale-in" type="text" data-id="${rec.id}" data-field="${field}"${listId ? ` list="${listId}"` : ""} value="${esc(rec[field] || "")}" placeholder="${ph}">`
+      ? `<input class="sale-in" type="text" ${da(rec, field)}${listId ? ` list="${listId}"` : ""} value="${esc(rec[field] || "")}" placeholder="${ph}">`
       : esc(rec[field] || "—");
+    const num = (rec, field, ph) => admin
+      ? `<input class="sale-in" type="number" min="0" ${da(rec, field)} value="${esc(rec[field] ?? "")}" placeholder="${ph}" style="max-width:110px">`
+      : (rec[field] == null || rec[field] === "" ? "—" : esc(rec[field]));
+
     const rows = list.map((rec) => `<tr>
       <td>${sel(rec)}</td>
+      ${isEsth ? `<td class="num">${num(rec, "qty", "boxes")}</td>` : ""}
       <td>${txt(rec, "buyer", "Dr. / Clinic name")}</td>
       <td>${txt(rec, "location", "City / location", "hqStates")}</td>
       <td>${txt(rec, "soldBy", "Salesperson", "salesPeople")}</td>
-      ${admin ? `<td class="num"><button class="linkish sale-rm" data-id="${rec.id}" title="Remove">✕</button></td>` : ""}
-    </tr>`).join("") || `<tr><td colspan="${admin ? 5 : 4}" class="empty">No sales recorded yet.${admin ? " Click “Add sale”." : ""}</td></tr>`;
-    const head = ["Product", "Bought by (Doctor / Clinic)", "Location", "Sold by"].concat(admin ? [""] : [])
-      .map((x) => `<th>${x}</th>`).join("");
+      <td class="num">${num(rec, "amount", "₹ sold for")}</td>
+      ${admin ? `<td class="num"><button class="linkish sale-rm" data-store="${store}" data-id="${rec.id}" title="Remove">✕</button></td>` : ""}
+    </tr>`).join("") || `<tr><td colspan="${(isEsth ? 6 : 5) + (admin ? 1 : 0)}" class="empty">No sales recorded yet.${admin ? " Click “Add sale”." : ""}</td></tr>`;
 
-    // Achieved rollup: total machines sold + per-product breakdown.
-    const total = list.length;
+    const head = ["Product"].concat(isEsth ? ["Qty (boxes)"] : [], ["Bought by (Doctor / Clinic)", "Location", "Sold by", "Sold for (₹)"], admin ? [""] : [])
+      .map((x, i) => `<th class="${isEsth && i === 1 ? "num" : ""}">${x}</th>`).join("");
+
+    // Rollup: units/boxes sold + total value.
+    const qtySum = isEsth ? list.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0) : list.length;
+    const valSum = list.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
     const byProd = {};
-    list.forEach((r) => { if (r.product) byProd[r.product] = (byProd[r.product] || 0) + 1; });
+    list.forEach((r) => { if (r.product) byProd[r.product] = (byProd[r.product] || 0) + (isEsth ? (parseFloat(r.qty) || 0) : 1); });
     const chips = Object.keys(byProd).sort().map((p) => `<span class="badge b-neutral">${esc(p)}: ${byProd[p]}</span>`).join(" ");
-    const statesDl = `<datalist id="hqStates">${((D.refs && D.refs.states) || []).map((s) => `<option value="${esc(s)}">`).join("")}</datalist>`;
+    const addId = isEsth ? "hqEsthAdd" : "hqSaleAdd";
 
     return `<div class="block" style="margin-top:24px">
-      <h2>Sales achieved</h2>
+      <h2>${isEsth ? "Esthemax sales achieved" : "Device sales achieved"}</h2>
       <div class="card" style="margin-bottom:14px"><div class="stat-row">
-        <div class="stat k-good"><b>${total}</b><span>Machines sold (this HQ)</span></div>
+        <div class="stat k-good"><b>${inr(qtySum)}</b><span>${isEsth ? "Boxes sold" : "Machines sold"} (this HQ)</span></div>
+        <div class="stat"><b>${valSum ? rupeeShort(valSum) : "—"}</b><span>Total value sold</span></div>
       </div>${chips ? `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>` : ""}</div>
-      ${statesDl}
       ${table(head, rows)}
-      ${admin ? `<div class="hq-add-row" style="margin-top:12px"><button id="hqSaleAdd" class="dl-btn" type="button">＋ Add sale</button></div>` : ""}
+      ${admin ? `<div class="hq-add-row" style="margin-top:12px"><button id="${addId}" class="dl-btn" type="button">＋ Add ${isEsth ? "Esthemax " : ""}sale</button></div>` : ""}
     </div>`;
   }
 
@@ -983,14 +1012,16 @@
         </div>
       </div>`).join("");
 
-    const datalist = `<datalist id="salesPeople">${salesPeopleList().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>`;
+    const datalist = `<datalist id="salesPeople">${salesPeopleList().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>` +
+      `<datalist id="hqStates">${((D.refs && D.refs.states) || []).map((s) => `<option value="${esc(s)}">`).join("")}</datalist>`;
     return `
       <div class="callout">${esc(h.title)}${h.subtitle ? `<div class="muted-note" style="margin-top:6px">${esc(h.subtitle)}</div>` : ""}</div>
       ${summary ? `<div class="card" style="margin-bottom:22px"><div class="stat-row">${summary}</div></div>` : ""}
       ${datalist}
       ${plans || `<div class="empty">No product plan — placeholder HQ pending hire.</div>`}
       ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}
-      ${hqSalesSection(h)}`;
+      ${hqSalesSection(h, "dev")}
+      ${hqSalesSection(h, "esth")}`;
   }
 
   /* ---- HQ target PDF (targets + incentives + T&C) ---- */
@@ -2411,9 +2442,10 @@
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
-      if (e.hqSales) {
-        Object.keys(e.hqSales).forEach((k) => { if (Array.isArray(e.hqSales[k])) hqSales[k] = e.hqSales[k]; });
-        const ids = Object.values(hqSales).flat().map((x) => +String(x.id).slice(1)).filter((n) => !isNaN(n));
+      if (e.hqSales) Object.keys(e.hqSales).forEach((k) => { if (Array.isArray(e.hqSales[k])) hqSales[k] = e.hqSales[k]; });
+      if (e.hqEsthSales) Object.keys(e.hqEsthSales).forEach((k) => { if (Array.isArray(e.hqEsthSales[k])) hqEsthSales[k] = e.hqEsthSales[k]; });
+      {
+        const ids = Object.values(hqSales).concat(Object.values(hqEsthSales)).flat().map((x) => +String(x.id).slice(1)).filter((n) => !isNaN(n));
         hqSaleSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
@@ -2432,7 +2464,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqSales, hqEsthSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
