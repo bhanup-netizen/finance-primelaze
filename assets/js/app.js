@@ -722,10 +722,17 @@
   }
 
   /* ================= HQ TARGETS ================= */
-  let hqIndex = 0;
+  let hqIndex = 0, hqYear = null;
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
   const hqAdds = {};  // `${sheet}#${planIdx}` -> [{product, fy2627, deviceValue}]
-  const hqQtr = {};   // `${pk}#${ri}` -> { q1, q2, q3, q4 } per-product quarterly target
+  const hqQtr = {};   // `${pk}#${rowKey}#${year}` -> { q1, q2, q3, q4 } quarterly target
+  // 5 planning years starting at the base fiscal year (e.g. 2026 → 2026..2030).
+  function hqYears() {
+    let base = 2026;
+    const m = String((D && D.meta && D.meta.fiscalYear) || "").match(/(20\d\d)/);
+    if (m) base = +m[1];
+    return [0, 1, 2, 3, 4].map((i) => base + i);
+  }
   // Sales achieved per HQ sheet.
   const hqSales = {};     // device sales: `${sheet}` -> [{ id, product, buyer, location, soldBy, amount }]
   const hqEsthSales = {}; // esthemax sales: `${sheet}` -> [{ id, product, qty, buyer, location, soldBy, amount }]
@@ -800,32 +807,38 @@
     wireHqDetail();
   }
 
+  // Read a non-negative number from an input (clamps negatives to 0).
+  const nonNeg = (inp) => {
+    if (inp.value === "") return "";
+    let v = parseFloat(inp.value);
+    if (isNaN(v)) return "";
+    if (v < 0) { v = 0; inp.value = 0; }
+    return v;
+  };
   function wireHqDetail() {
+    document.querySelectorAll("[data-hqyear]").forEach((b) => {
+      b.onclick = () => { hqYear = +b.dataset.hqyear; mountHqDetail(D.hqTargets[hqIndex]); };
+    });
     document.querySelectorAll(".tgt-input").forEach((inp) => {
       inp.oninput = () => {
+        const val = nonNeg(inp);
         if (inp.dataset.add != null) {
           const arr = hqAdds[inp.dataset.pk] || [];
           const a = arr[+inp.dataset.add];
-          if (a) a.fy2627 = inp.value === "" ? "" : parseFloat(inp.value);
+          if (a) a.fy2627 = val;
         } else {
-          const v = parseFloat(inp.value);
-          hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = isNaN(v) ? null : v;
+          hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = val === "" ? null : val;
         }
         recomputeHqPlan(inp.dataset.pk);
         saveEdits();
       };
     });
-    // Per-product quarterly targets (Q1–Q4).
+    // Per-product quarterly targets (Q1–Q4) for the selected year.
     document.querySelectorAll(".hq-qtr").forEach((inp) => {
       inp.oninput = () => {
-        const q = inp.dataset.q, val = inp.value === "" ? "" : parseFloat(inp.value);
-        if (inp.dataset.add != null) {
-          const a = (hqAdds[inp.dataset.pk] || [])[+inp.dataset.add];
-          if (a) a[q] = val;
-        } else {
-          const k = inp.dataset.pk + "#" + inp.dataset.ri;
-          (hqQtr[k] || (hqQtr[k] = {}))[q] = val;
-        }
+        const q = inp.dataset.q, val = nonNeg(inp);
+        const k = `${inp.dataset.pk}#${inp.dataset.row}#${hqYear}`;
+        (hqQtr[k] || (hqQtr[k] = {}))[q] = val;
         recomputeHqQtr(inp.dataset.pk);
         saveEdits();
       };
@@ -840,8 +853,8 @@
         if (!name) { if (sel) sel.focus(); return; }
         const dev = deviceByName(name);
         const deviceValue = dev && isNum(dev.standard) ? dev.standard : (dev && isNum(dev.minimum) ? dev.minimum : null);
-        const qty = parseFloat(val && val.value);
-        (hqAdds[pk] = hqAdds[pk] || []).push({ product: name, fy2627: isNaN(qty) ? 0 : qty, deviceValue });
+        let qty = parseFloat(val && val.value); if (isNaN(qty) || qty < 0) qty = 0;
+        (hqAdds[pk] = hqAdds[pk] || []).push({ product: name, fy2627: qty, deviceValue });
         saveEdits();
         mountHqDetail(D.hqTargets[hqIndex]);
       };
@@ -984,6 +997,8 @@
   // Hide monetary (Value in Lakhs / Std Value) figures — units only on screen.
   const isMoney = (label) => /value|lakh|inr|₹/i.test(String(label));
   function hqDetail(h) {
+    if (hqYear == null) hqYear = hqYears()[0];
+    const yearBar = `<div class="controls" style="margin-bottom:14px"><div class="seg">${hqYears().map((y) => `<button data-hqyear="${y}" class="${hqYear === y ? "active" : ""}">${y}</button>`).join("")}</div></div>`;
     const summary = (h.summary || []).filter((s) => !isMoney(s.label)).map((s) => `
       <div class="stat">
         <b>${isNum(s.value) ? inr(s.value) : esc(s.value)}</b>
@@ -998,25 +1013,29 @@
     const plans = (h.plans && h.plans.length ? h.plans : []).map((pl, pi) => {
       const pk = h.sheet + "#" + pi;
       const pid = idfor(pk);
-      const head = ["Product", "FY25-26", "FY26-27", "Q1", "Q2", "Q3", "Q4"]
+      const QK = ["q1", "q2", "q3", "q4"];
+      const baseYear = hqYears()[0];
+      const head = ["Product", "FY25-26", "FY26-27", `Q1 ${hqYear}`, `Q2 ${hqYear}`, `Q3 ${hqYear}`, `Q4 ${hqYear}`]
         .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
       const productRows = pl.rows.filter((r) => !r.isTotal);
       const adds = hqAdds[pk] || [];
-      const QK = ["q1", "q2", "q3", "q4"];
-      // Effective quarter value: explicit override wins, else the annual FY26-27
-      // target auto-divided evenly across the four quarters.
-      const qEff = (vals, annual, q) => (vals && vals[q] != null) ? vals[q] : splitQuarters(annual)[q];
+      // Effective quarter value for the selected year: explicit override wins;
+      // else (base year only) the annual FY26-27 auto-split across quarters.
+      const qEff = (rowKey, annual, q) => {
+        const v = hqQtr[`${pk}#${rowKey}#${hqYear}`];
+        if (v && v[q] != null) return v[q];
+        return hqYear === baseYear ? splitQuarters(annual)[q] : "";
+      };
       // units total over device rows (numeric deviceValue) incl. added products
       let tu = 0; const tq = { q1: 0, q2: 0, q3: 0, q4: 0 };
-      const addQtr = (vals, annual) => QK.forEach((q) => { const n = parseFloat(qEff(vals, annual, q)); if (!isNaN(n)) tq[q] += n; });
-      productRows.forEach((r, ri) => { const ann = effVal(pk, ri, r.fy2627); if (isNum(r.deviceValue) && isNum(ann)) tu += ann; addQtr(hqQtr[pk + "#" + ri], ann); });
-      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; addQtr(a, a.fy2627); });
+      const addQtr = (rowKey, annual) => QK.forEach((q) => { const n = parseFloat(qEff(rowKey, annual, q)); if (!isNaN(n)) tq[q] += n; });
+      productRows.forEach((r, ri) => { const ann = effVal(pk, ri, r.fy2627); if (isNum(r.deviceValue) && isNum(ann)) tu += ann; addQtr(String(ri), ann); });
+      adds.forEach((a, ai) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; addQtr("a" + ai, a.fy2627); });
 
-      // Q1–Q4 editable cells (admin). Pre-filled with the even split of FY26-27.
-      const qtrCells = (attrs, vals, annual) => QK.map((q) => {
-        const dv = qEff(vals, annual, q);
+      const qtrCells = (rowKey, annual) => QK.map((q) => {
+        const dv = qEff(rowKey, annual, q);
         return isAdmin()
-          ? `<td class="num"><input class="hq-qtr" type="number" min="0" ${attrs} data-q="${q}" value="${esc(dv == null || dv === "" ? "" : dv)}" style="max-width:58px"></td>`
+          ? `<td class="num"><input class="hq-qtr" type="number" min="0" data-pk="${esc(pk)}" data-row="${rowKey}" data-q="${q}" value="${esc(dv == null || dv === "" ? "" : dv)}" style="max-width:58px"></td>`
           : `<td class="num">${dv == null || dv === "" ? "—" : esc(dv)}</td>`;
       }).join("");
 
@@ -1024,17 +1043,17 @@
         const editable = isNum(r.fy2627);
         const v = effVal(pk, ri, r.fy2627);
         const fyCell = editable
-          ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
+          ? `<input class="tgt-input" type="number" min="0" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
-        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-ri="${ri}"`, hqQtr[pk + "#" + ri], v)}</tr>`;
+        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${qtrCells(String(ri), v)}</tr>`;
       }).join("");
 
       const addHtml = adds.map((a, ai) => {
         const fyCell = isAdmin()
-          ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
+          ? `<input class="tgt-input" type="number" min="0" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
           : esc(a.fy2627);
         const rm = isAdmin() ? ` <button class="linkish hq-add-rm" data-pk="${esc(pk)}" data-ai="${ai}" title="Remove">✕</button>` : "";
-        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-add="${ai}"`, a, a.fy2627)}</tr>`;
+        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${qtrCells("a" + ai, a.fy2627)}</tr>`;
       }).join("");
 
       const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td>${QK.map((q) => `<td class="num" id="totq_${pid}_${q}">${inr(tq[q])}</td>`).join("")}</tr>`;
@@ -1045,7 +1064,7 @@
             <option value="">＋ Add product from Device list…</option>
             ${deviceNames().map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
           </select>
-          <input class="hq-add-val" type="number" placeholder="FY26-27 qty" data-pk="${esc(pk)}">
+          <input class="hq-add-val" type="number" min="0" placeholder="FY26-27 qty" data-pk="${esc(pk)}">
           <button class="ghost-btn hq-add-btn" data-pk="${esc(pk)}" type="button">Add</button>
         </div>` : "";
 
@@ -1067,6 +1086,8 @@
       <div class="callout">${esc(h.title)}${h.subtitle ? `<div class="muted-note" style="margin-top:6px">${esc(h.subtitle)}</div>` : ""}</div>
       ${summary ? `<div class="card" style="margin-bottom:22px"><div class="stat-row">${summary}</div></div>` : ""}
       ${datalist}
+      <div class="muted-note" style="margin-bottom:6px">Quarterly targets — pick a year (next 5 years). Q1–Q4 columns below are for the selected year.</div>
+      ${yearBar}
       ${plans || `<div class="empty">No product plan — placeholder HQ pending hire.</div>`}
       ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}
       ${hqSalesSection(h, "dev")}
