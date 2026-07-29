@@ -89,7 +89,7 @@
     { id: "targets", label: "HQ Targets", render: renderTargets },
     { id: "incentives", label: "Incentives", render: renderIncentives },
     { id: "prices", label: "Device", render: renderPrices },
-    { id: "esthemax", label: "Esthemax Market", render: renderEsthemax },
+    { id: "esthemax", label: "Esthemax", render: renderEsthemax },
     { id: "order", label: "Inventory", render: renderOrder },
     { id: "demo", label: "Demo Machines", render: renderDemo },
     { id: "challan", label: "Delivery Challan", render: renderChallan },
@@ -1073,61 +1073,53 @@
 
   /* ================= PRICE BOOK ================= */
   let priceView = "device";
+  // Sales vs Admin pricing view (shared by the Device and Esthemax tabs).
+  // Admin view exposes landing/cost + profit tools and is admin-only.
+  let pricingMode = "sales";
+  const priceAdmin = () => pricingMode === "admin" && canSeeLanding();
+  const priceModeToggle = () => `
+    <div class="seg">
+      <button data-pmode="sales" class="${!priceAdmin() ? "active" : ""}">Sales Price</button>
+      ${canSeeLanding() ? `<button data-pmode="admin" class="${priceAdmin() ? "active" : ""}">Admin Price</button>` : ""}
+    </div>`;
   function renderPrices() {
+    const refresh = () => { $("#priceBody").innerHTML = priceBody(); wirePriceAdd(); wireProfitCalc(); };
     setTimeout(() => {
       document.querySelectorAll("[data-price]").forEach((b) => {
         b.onclick = () => {
           priceView = b.dataset.price;
           document.querySelectorAll("[data-price]").forEach((x) => x.classList.toggle("active", x === b));
-          $("#priceBody").innerHTML = priceBody();
-          wirePriceAdd();
+          refresh();
         };
       });
-      wirePriceAdd();
+      document.querySelectorAll("[data-pmode]").forEach((b) => {
+        b.onclick = () => {
+          pricingMode = b.dataset.pmode;
+          document.querySelectorAll("[data-pmode]").forEach((x) => x.classList.toggle("active", x === b));
+          refresh();
+        };
+      });
+      wirePriceAdd(); wireProfitCalc();
     }, 0);
     return `
       <div class="section-head">
         <h1>Device</h1>
-        <p>Landing cost, quotation, standard and minimum selling prices across devices, Celluma models and Esthemax skincare. All values excl. GST.</p>
+        <p>${priceAdmin() ? "Admin view — landing cost plus quotation, standard and minimum prices, with a profit calculator." : "Sales view — quotation, standard and minimum selling prices."} All values excl. GST.</p>
       </div>
       <div class="controls">
+        ${priceModeToggle()}
         <div class="seg">
           <button data-price="device" class="${priceView === "device" ? "active" : ""}">Devices</button>
           <button data-price="celluma" class="${priceView === "celluma" ? "active" : ""}">Celluma</button>
-          <button data-price="esthemax" class="${priceView === "esthemax" ? "active" : ""}">Esthemax</button>
         </div>
       </div>
       <div id="priceBody">${priceBody()}</div>`;
   }
 
   function priceBody() {
-    if (priceView === "device") {
-      const cols = ["Device"].concat(canSeeLanding() ? ["Landing Cost (L)"] : []).concat(["Quotation (L)", "Standard (L)", "Minimum (L)"]);
-      const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
-      const body = deviceList().map((r) => `<tr>
-        <td class="t-name">${esc(r.device)}</td>
-        ${canSeeLanding() ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}
-        <td class="num">${r.quotation ?? "—"}</td>
-        <td class="num">${r.standard ?? "—"}</td>
-        <td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
-      const addForm = isAdmin() ? `
-        <div class="card" style="margin-top:16px">
-          <h2 style="margin-top:0">Add device</h2>
-          <form id="addDeviceForm" class="admin-form">
-            <div class="ch-grid">
-              <label class="ord-field"><span>Device name</span><input id="adName" required placeholder="e.g. New Laser X"></label>
-              <label class="ord-field"><span>Landing cost (L)</span><input id="adLanding" type="number" step="0.01"></label>
-              <label class="ord-field"><span>Quotation (L)</span><input id="adQuote" type="number" step="0.01"></label>
-              <label class="ord-field"><span>Standard (L)</span><input id="adStd" type="number" step="0.01"></label>
-              <label class="ord-field"><span>Minimum (L)</span><input id="adMin" type="number" step="0.01"></label>
-            </div>
-            <button type="submit" class="dl-btn">Add device</button>
-            <div id="adMsg" class="lock-error" style="min-height:16px"></div>
-          </form>
-        </div>` : "";
-      return `<div class="callout">${canSeeLanding() ? "Landing = EXW + ~30% (customs + transport). " : "Landing cost is admin-only. "}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}${addForm}`;
-    }
+    const adm = priceAdmin();
     if (priceView === "celluma") {
+      // Celluma: sales sees Quotation + Selling; admin adds nothing extra here.
       const head = ["Model", "Quotation (₹)", "Selling Price (₹)"]
         .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
       const body = D.costs.celluma.map((r) => `<tr>
@@ -1136,26 +1128,65 @@
         <td class="num">${rupee(r.selling)}</td></tr>`).join("");
       return `<div class="callout teal">Quotation includes the +₹50K FY26-27 uplift. Selling = standard customer price. Excl. GST.</div>${table(head, body)}`;
     }
-    // esthemax
-    const sec = (title, rows) => {
-      if (!rows || !rows.length) return "";
-      const cols = ["Variant", "Pack"].concat(canSeeLanding() ? ["Landing Cost"] : []).concat(["Standard (Total)", "MRP", "New MRP", "Min (EXW)"]);
-      const head = cols.map((x, i) => `<th class="${i >= 2 ? "num" : ""}">${x}</th>`).join("");
-      const body = rows.map((r) => `<tr>
-        <td class="t-name">${esc(r.variant)}</td>
-        <td class="t-muted">${esc(r.pack)}</td>
-        ${canSeeLanding() ? `<td class="num">${rupee(r.landingCost)}</td>` : ""}
-        <td class="num">${rupee(r.standardTotal)}</td>
-        <td class="num">${rupee(r.mrp)}</td>
-        <td class="num">${rupee(r.newMrp)}</td>
-        <td class="num">${rupee(r.minEXW)}</td></tr>`).join("");
-      return `<div class="block"><h2>${esc(title)}</h2>${table(head, body)}</div>`;
+    // devices
+    const cols = ["Device"].concat(adm ? ["Landing Cost (L)"] : []).concat(["Quotation (L)", "Standard (L)", "Minimum (L)"]);
+    const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
+    const body = deviceList().map((r) => `<tr>
+      <td class="t-name">${esc(r.device)}</td>
+      ${adm ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}
+      <td class="num">${r.quotation ?? "—"}</td>
+      <td class="num">${r.standard ?? "—"}</td>
+      <td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
+    const addForm = (adm && isAdmin()) ? `
+      <div class="card" style="margin-top:16px">
+        <h2 style="margin-top:0">Add device</h2>
+        <form id="addDeviceForm" class="admin-form">
+          <div class="ch-grid">
+            <label class="ord-field"><span>Device name</span><input id="adName" required placeholder="e.g. New Laser X"></label>
+            <label class="ord-field"><span>Landing cost (L)</span><input id="adLanding" type="number" step="0.01"></label>
+            <label class="ord-field"><span>Quotation (L)</span><input id="adQuote" type="number" step="0.01"></label>
+            <label class="ord-field"><span>Standard (L)</span><input id="adStd" type="number" step="0.01"></label>
+            <label class="ord-field"><span>Minimum (L)</span><input id="adMin" type="number" step="0.01"></label>
+          </div>
+          <button type="submit" class="dl-btn">Add device</button>
+          <div id="adMsg" class="lock-error" style="min-height:16px"></div>
+        </form>
+      </div>` : "";
+    const calc = adm ? profitCalcHtml() : "";
+    return `<div class="callout">${adm ? "Landing = EXW + ~30% (customs + transport). " : ""}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}${calc}${addForm}`;
+  }
+
+  function profitCalcHtml() {
+    const opts = deviceList().map((r, i) => `<option value="${i}">${esc(r.device)}</option>`).join("");
+    return `
+      <div class="card" style="margin-top:16px">
+        <h2 style="margin-top:0">Profit calculator</h2>
+        <div class="ch-grid">
+          <label class="ord-field"><span>Device (optional)</span><select id="pcDevice" class="select"><option value="">— pick a device —</option>${opts}</select></label>
+          <label class="ord-field"><span>Landing cost (L)</span><input id="pcLanding" type="number" step="0.01"></label>
+          <label class="ord-field"><span>Selling price (L)</span><input id="pcSell" type="number" step="0.01"></label>
+        </div>
+        <div id="pcOut" class="stat-row" style="margin-top:12px"></div>
+      </div>`;
+  }
+
+  function wireProfitCalc() {
+    const dev = document.getElementById("pcDevice");
+    if (!dev) return;
+    const landing = document.getElementById("pcLanding"), sell = document.getElementById("pcSell"), out = document.getElementById("pcOut");
+    const recompute = () => {
+      const L = parseFloat(landing.value), S = parseFloat(sell.value);
+      if (isNaN(L) || isNaN(S)) { out.innerHTML = `<div class="stat"><b>—</b><span>Enter landing &amp; selling price</span></div>`; return; }
+      const profit = S - L, margin = S ? (profit / S * 100) : 0, markup = L ? (profit / L * 100) : 0;
+      const cls = profit >= 0 ? "k-good" : "k-warn";
+      out.innerHTML = `
+        <div class="stat ${cls}"><b>₹${profit.toFixed(2)} L</b><span>Profit / unit</span></div>
+        <div class="stat"><b>${margin.toFixed(1)}%</b><span>Margin on selling</span></div>
+        <div class="stat"><b>${L ? markup.toFixed(1) + "%" : "—"}</b><span>Markup on landing</span></div>`;
     };
-    const e = D.costs.esthemax;
-    return `<div class="callout">${canSeeLanding() ? "Landing = EXW + 44% customs + transport. " : "Landing cost is admin-only. "}Standard (Total) = landing + marketing + profit. Min (EXW) = Primelaze ex-works price. Per box, excl. GST.</div>
-      ${sec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
-      ${sec("Retail Hydrojelly (2 masks / box)", e.retail)}
-      ${sec("Collagen Foot Mask", e.footMask)}`;
+    dev.onchange = () => { const r = deviceList()[+dev.value]; if (r) { landing.value = r.landingCost ?? ""; if (!sell.value) sell.value = r.quotation ?? ""; } recompute(); };
+    landing.oninput = recompute; sell.oninput = recompute;
+    recompute();
   }
 
   function wirePriceAdd() {
@@ -1170,34 +1201,43 @@
       newDevices.push({ device: name, landingCost: numOr("adLanding"), quotation: numOr("adQuote"), standard: numOr("adStd"), minimum: numOr("adMin") });
       saveEdits();
       $("#priceBody").innerHTML = priceBody();
-      wirePriceAdd();
+      wirePriceAdd(); wireProfitCalc();
     };
   }
 
   /* ================= ESTHEMAX MARKET ================= */
   let mkt = "salon", mktGroup = "HYDROJELLYMASK";
+  const MKT_GROUPS = [
+    { id: "HYDROJELLYMASK", label: "Hydrojelly" },
+    { id: "RETAIL HYDROJELLYMASK", label: "Retail" },
+    { id: "Foot Mask", label: "Foot Mask" },
+  ];
   function renderEsthemax() {
+    const refresh = () => { $("#mktBody").innerHTML = mktBody(); };
     setTimeout(() => {
       document.querySelectorAll("[data-mkt]").forEach((b) => {
-        b.onclick = () => { mkt = b.dataset.mkt; document.querySelectorAll("[data-mkt]").forEach((x) => x.classList.toggle("active", x === b)); $("#mktBody").innerHTML = mktBody(); };
+        b.onclick = () => { mkt = b.dataset.mkt; document.querySelectorAll("[data-mkt]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
       });
       document.querySelectorAll("[data-grp]").forEach((b) => {
-        b.onclick = () => { mktGroup = b.dataset.grp; document.querySelectorAll("[data-grp]").forEach((x) => x.classList.toggle("active", x === b)); $("#mktBody").innerHTML = mktBody(); };
+        b.onclick = () => { mktGroup = b.dataset.grp; document.querySelectorAll("[data-grp]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
+      });
+      document.querySelectorAll("[data-pmode]").forEach((b) => {
+        b.onclick = () => { pricingMode = b.dataset.pmode; document.querySelectorAll("[data-pmode]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
       });
     }, 0);
     return `
       <div class="section-head">
-        <h1>Esthemax Market Pricing</h1>
-        <p>Salon and doctor market pricing on the New Structure (+15% MRP hike), with bulk offer tiers and effective net prices (incl. GST) per box.</p>
+        <h1>Esthemax Pricing</h1>
+        <p>${priceAdmin() ? "Admin view — full MRP, doctor price and every bulk-offer tier with effective net prices, plus the cost breakdown." : "Sales view — MRP and offer (doctor) price per product."} New Structure (+15% MRP hike). Excl. GST unless stated.</p>
       </div>
       <div class="controls">
+        ${priceModeToggle()}
         <div class="seg">
           <button data-mkt="salon" class="${mkt === "salon" ? "active" : ""}">Salon Market</button>
           <button data-mkt="doctor" class="${mkt === "doctor" ? "active" : ""}">Doctor Market</button>
         </div>
         <div class="seg">
-          <button data-grp="HYDROJELLYMASK" class="${mktGroup === "HYDROJELLYMASK" ? "active" : ""}">Hydrojelly</button>
-          <button data-grp="RETAIL HYDROJELLYMASK" class="${mktGroup === "RETAIL HYDROJELLYMASK" ? "active" : ""}">Retail</button>
+          ${MKT_GROUPS.map((g) => `<button data-grp="${g.id}" class="${mktGroup === g.id ? "active" : ""}">${g.label}</button>`).join("")}
         </div>
       </div>
       <div id="mktBody">${mktBody()}</div>`;
@@ -1208,22 +1248,36 @@
     const cols = m.columns;
     const rows = (m.groups[mktGroup] || []);
     if (!rows.length) return `<div class="empty">No rows in this group.</div>`;
+    const adm = priceAdmin();
 
-    // Only the "New Structure @15% Hike in MRP" columns are shown — the old
-    // structure is dropped. Pack Size (index 2) is product info, kept.
+    // New Structure block start (the "@15% hike" columns). The old structure
+    // is always dropped. Pack Size (index 2) is product info, kept.
     const band = m.band || [];
     let newStart = band.findIndex((b, i) => i > 2 && String(b).toLowerCase().includes("new"));
     if (newStart < 0) newStart = Math.floor(cols.length / 2);
 
-    const colIdx = [];
+    let colIdx = [];
     if (String(cols[2] || "").trim() !== "") colIdx.push(2); // Pack Size
-    cols.forEach((c, i) => { if (i >= newStart && String(c).trim() !== "") colIdx.push(i); });
+    if (adm) {
+      // Admin: every New Structure column.
+      cols.forEach((c, i) => { if (i >= newStart && String(c).trim() !== "") colIdx.push(i); });
+    } else {
+      // Sales: just MRP + Offer (Doctor Price @10%) from the New Structure.
+      const mrpI = cols.findIndex((c, i) => i >= newStart && /^mrp$/i.test(String(c).trim()));
+      const offI = cols.findIndex((c, i) => i >= newStart && /doctor price/i.test(String(c)));
+      [mrpI, offI].forEach((i) => { if (i >= 0) colIdx.push(i); });
+    }
 
+    const labelFor = (i) => {
+      let label = String(cols[i]).replace(/\n/g, " ").trim();
+      if (!adm && /doctor price/i.test(label)) {
+        const pct = label.match(/@\s*\d+%/);
+        label = "Offer Price" + (pct ? " (Doctor " + pct[0].replace(/\s/g, "") + ")" : " (Doctor)");
+      }
+      return label;
+    };
     const headCells = ["<th>Sr</th>", "<th>Name</th>"].concat(
-      colIdx.map((i) => {
-        const label = String(cols[i]).replace(/\n/g, " ").trim();
-        return `<th class="${i === 2 ? "" : "num"}" title="${esc(label)}">${esc(label)}</th>`;
-      })
+      colIdx.map((i) => `<th class="${i === 2 ? "" : "num"}" title="${esc(labelFor(i))}">${esc(labelFor(i))}</th>`)
     ).join("");
 
     const body = rows.map((r) => {
@@ -1235,10 +1289,36 @@
       return `<tr><td class="num t-muted">${r.srNo}</td><td class="t-name">${esc(r.name)}</td>${cells}</tr>`;
     }).join("");
 
+    const grpLabel = (MKT_GROUPS.find((g) => g.id === mktGroup) || {}).label || mktGroup;
     return `
-      <div class="callout teal">${esc(mkt === "salon" ? "Salon Market" : "Doctor Market")} · ${mktGroup === "HYDROJELLYMASK" ? "Hydrojelly Mask (850ml)" : "Retail Hydrojelly (2 masks/box)"} — New Structure (+15% MRP hike). Offer columns show bill/MRP value and effective net price (incl. GST) per box.</div>
+      <div class="callout teal">${esc(mkt === "salon" ? "Salon Market" : "Doctor Market")} · ${esc(grpLabel)} — New Structure (+15% MRP hike). ${adm ? "Offer columns show bill/MRP value and effective net price (incl. GST) per box." : "Offer price is the doctor price at 10% discount."}</div>
       ${table(headCells, body)}
-      <div class="muted-note">Scroll horizontally to see all offer tiers. Effective net prices are per box, inclusive of GST.</div>`;
+      ${adm ? `<div class="muted-note">Scroll horizontally to see all offer tiers. Effective net prices are per box, inclusive of GST.</div>${esthemaxCostSection()}` : ""}`;
+  }
+
+  // Admin-only cost breakdown (landing / standard / min-EXW) for Esthemax skincare.
+  function esthemaxCostSection() {
+    const e = D.costs && D.costs.esthemax;
+    if (!e) return "";
+    const sec = (title, list) => {
+      if (!list || !list.length) return "";
+      const head = ["Variant", "Pack", "Landing Cost", "Standard (Total)", "MRP", "New MRP", "Min (EXW)"]
+        .map((x, i) => `<th class="${i >= 2 ? "num" : ""}">${x}</th>`).join("");
+      const body = list.map((r) => `<tr>
+        <td class="t-name">${esc(r.variant)}</td>
+        <td class="t-muted">${esc(r.pack)}</td>
+        <td class="num">${rupee(r.landingCost)}</td>
+        <td class="num">${rupee(r.standardTotal)}</td>
+        <td class="num">${rupee(r.mrp)}</td>
+        <td class="num">${rupee(r.newMrp)}</td>
+        <td class="num">${rupee(r.minEXW)}</td></tr>`).join("");
+      return `<div class="block"><h2>${esc(title)}</h2>${table(head, body)}</div>`;
+    };
+    return `<div class="block" style="margin-top:22px"><h2>Cost breakdown (admin)</h2>
+      <div class="callout">Landing = EXW + 44% customs + transport. Standard (Total) = landing + marketing + profit. Min (EXW) = Primelaze ex-works. Per box, excl. GST.</div></div>
+      ${sec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
+      ${sec("Retail Hydrojelly (2 masks / box)", e.retail)}
+      ${sec("Collagen Foot Mask", e.footMask)}`;
   }
 
   /* ================= DEMO MACHINES ================= */
