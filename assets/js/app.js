@@ -2373,7 +2373,6 @@
 
   let booted = false;
   function bootApp() {
-    $("#fyPill").textContent = D.meta.fiscalYear;
     const pill = document.getElementById("userPill");
     if (pill) { pill.textContent = (sessionUser && sessionUser.email ? sessionUser.email : "") + (roleIsAdmin() ? " · admin" : " · view"); pill.hidden = false; }
     const lo = document.getElementById("logoutBtn");

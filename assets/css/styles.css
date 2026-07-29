@@ -275,6 +275,12 @@ thead th {
 tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--surface-2); }
+
+/* Cleaner look: hide descriptive/explanatory text, keep data. */
+.section-head > p { display: none; }
+.kpi-note { display: none; }
+.zone-hqs { display: none; }
+
 @keyframes rowFlash { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
 tbody tr.row-flash td { animation: rowFlash 1.8s ease-out; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
