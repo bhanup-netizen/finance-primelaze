@@ -1555,14 +1555,41 @@
     { id: "won", label: "Deal Won" },
     { id: "lost", label: "Deal Lost" },
   ];
-  const crmLeads = []; // [{ id, firstName, lastName, mobile, company, gender, type, state, city, source, product, stage, demo, amount, notes }]
+  const crmLeads = []; // [{ id, firstName, lastName, mobile, company, gender, type, state, city, location, mapUrl, source, product, stage, amount, stages:{[sid]:{remark,files:[{name,data}]}} }]
   let crmSeq = 0, crmStage = "all", crmSearch = "";
-  const CRM_FIELDS = ["firstName", "lastName", "mobile", "company", "gender", "type", "state", "city", "source", "product", "stage", "demo", "amount", "notes"];
+  let crmView = "list", crmCurrentId = null, crmDraft = null;
   const crmName = (l) => `${l.firstName || ""} ${l.lastName || ""}`.trim() || "—";
   const crmStageLabel = (id) => (CRM_STAGES.find((s) => s.id === id) || {}).label || id;
   const crmById = (id) => crmLeads.find((l) => l.id === id);
+  const crmStageObj = (l, sid) => { l.stages = l.stages || {}; return (l.stages[sid] = l.stages[sid] || { remark: "", files: [] }); };
+  const crmMapUrl = (l) => l.mapUrl || ((l.city || l.location) ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([l.location, l.city, l.state].filter(Boolean).join(", "))}` : "");
+
+  // CRM lives in its own Firestore doc (edits/crm) so per-stage files don't
+  // bloat the main overrides doc. Covered by the existing edits/{doc} rule.
+  function crmDoc() { return db ? db.collection("edits").doc("crm") : null; }
+  let crmSaveTimer = null;
+  function saveCrm() {
+    if (!db || !roleIsAdmin()) return;
+    clearTimeout(crmSaveTimer);
+    crmSaveTimer = setTimeout(async () => {
+      try { await crmDoc().set({ leads: crmLeads, updatedBy: (sessionUser && sessionUser.email) || "" }); }
+      catch (e) { console.warn("crm save failed", e); }
+    }, 700);
+  }
+  async function loadCrm() {
+    if (!db) return;
+    try {
+      const s = await crmDoc().get();
+      if (s.exists && Array.isArray(s.data().leads)) {
+        crmLeads.length = 0; s.data().leads.forEach((l) => crmLeads.push(l));
+      }
+    } catch (e) { console.warn("crm load failed", e); }
+    const ids = crmLeads.map((x) => +String(x.id).slice(1)).filter((n) => !isNaN(n));
+    crmSeq = ids.length ? Math.max(...ids) + 1 : 0;
+  }
 
   function renderCRM() {
+    if (crmView === "detail") { setTimeout(wireCrmDetail, 0); return crmDetail(); }
     setTimeout(wireCRM, 0);
     const admin = isAdmin();
     const counts = {}; CRM_STAGES.forEach((s) => (counts[s.id] = 0));
@@ -1590,42 +1617,32 @@
 
   function crmTable() {
     const admin = isAdmin();
-    const prods = esthemaxProductNames();
     const sQ = crmSearch.toLowerCase();
     const list = crmLeads.filter((l) => {
       if (crmStage !== "all" && l.stage !== crmStage) return false;
       if (sQ) { const hay = `${crmName(l)} ${l.company || ""} ${l.city || ""} ${l.state || ""} ${l.mobile || ""}`.toLowerCase(); if (!hay.includes(sQ)) return false; }
       return true;
     });
-    const din = (l, f, ph, list2) => admin
-      ? `<input class="crm-in" type="text" data-id="${l.id}" data-field="${f}"${list2 ? ` list="${list2}"` : ""} value="${esc(l[f] || "")}" placeholder="${ph}">`
-      : esc(l[f] || "—");
-    const num = (l, f, ph) => admin
-      ? `<input class="crm-in" type="number" min="0" data-id="${l.id}" data-field="${f}" value="${esc(l[f] ?? "")}" placeholder="${ph}" style="max-width:110px">`
-      : (l[f] == null || l[f] === "" ? "—" : esc(l[f]));
-    const stageSel = (l) => admin
-      ? `<select class="crm-in crm-stage" data-id="${l.id}" data-field="stage">${CRM_STAGES.map((s) => `<option value="${s.id}"${l.stage === s.id ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select>`
-      : `<span class="badge ${l.stage === "won" ? "b-good" : l.stage === "lost" ? "b-bad" : "b-info"}">${esc(crmStageLabel(l.stage))}</span>`;
-    const prodCell = (l) => admin
-      ? `<input class="crm-in" type="text" data-id="${l.id}" data-field="product" list="crmProducts" value="${esc(l.product || "")}" placeholder="Esthemax product">`
-      : esc(l.product || "—");
-
+    const stageBadge = (l) => `<span class="badge ${l.stage === "won" ? "b-good" : l.stage === "lost" ? "b-bad" : "b-info"}">${esc(crmStageLabel(l.stage))}</span>`;
     const rows = list.map((l) => `<tr>
-      <td class="t-name">${din(l, "firstName", "First")} ${din(l, "lastName", "Last")}</td>
-      <td>${din(l, "company", "Salon / company")}</td>
-      <td>${din(l, "mobile", "Mobile")}</td>
-      <td>${din(l, "city", "City", "crmStates")}</td>
-      <td>${prodCell(l)}</td>
-      <td>${stageSel(l)}</td>
-      <td>${din(l, "demo", "Demo requirements / notes")}</td>
-      <td class="num">${num(l, "amount", "₹ deal value")}</td>
-      ${admin ? `<td class="num"><button class="ghost-btn danger crm-del" data-id="${l.id}" title="Delete contact">🗑</button></td>` : ""}
-    </tr>`).join("") || `<tr><td colspan="${admin ? 9 : 8}" class="empty">No contacts${crmStage !== "all" ? " in this stage" : ""}. ${admin ? "Add one or import a CSV." : ""}</td></tr>`;
-    const head = ["Contact", "Company", "Mobile", "City", "Interested product", "Stage", "Demo details", "Deal value (₹)"].concat(admin ? [""] : [])
+      <td class="t-name">${esc(crmName(l))}</td>
+      <td>${esc(l.company || "—")}</td>
+      <td>${esc(l.mobile || "—")}</td>
+      <td>${esc(l.city || "—")}</td>
+      <td>${esc(l.product || "—")}</td>
+      <td>${stageBadge(l)}</td>
+      <td class="num">${l.amount ? rupee(+l.amount) : "—"}</td>
+      <td class="num"><button class="ghost-btn crm-open" data-id="${l.id}">${admin ? "Open / edit" : "View"}</button></td>
+    </tr>`).join("") || `<tr><td colspan="8" class="empty">No contacts${crmStage !== "all" ? " in this stage" : ""}. ${admin ? "Add one or import a file." : ""}</td></tr>`;
+    const head = ["Contact", "Company", "Mobile", "City", "Interested product", "Stage", "Deal value (₹)", ""]
       .map((x) => `<th>${x}</th>`).join("");
-    const datalists = `<datalist id="crmProducts">${prods.map((p) => `<option value="${esc(p)}">`).join("")}</datalist>` +
-      `<datalist id="crmStates">${((D.refs && D.refs.states) || []).map((s) => `<option value="${esc(s)}">`).join("")}</datalist>`;
-    return datalists + table(head, rows);
+    return table(head, rows);
+  }
+
+  function wireCrmOpen() {
+    document.querySelectorAll("#crmBody .crm-open").forEach((b) => {
+      b.onclick = () => { crmCurrentId = b.dataset.id; crmView = "detail"; go("crm"); };
+    });
   }
 
   function wireCRM() {
@@ -1633,12 +1650,9 @@
       b.onclick = () => { crmStage = b.dataset.crmstage; document.querySelectorAll("[data-crmstage]").forEach((x) => x.classList.toggle("active", x === b)); go("crm"); };
     });
     const search = document.getElementById("crmSearch");
-    if (search) search.oninput = (e) => { crmSearch = e.target.value; $("#crmBody").innerHTML = crmTable(); wireCRMBody(); };
+    if (search) search.oninput = (e) => { crmSearch = e.target.value; $("#crmBody").innerHTML = crmTable(); wireCrmOpen(); };
     const add = document.getElementById("crmAdd");
-    if (add) add.onclick = () => {
-      crmLeads.unshift({ id: "c" + (crmSeq++), firstName: "New", lastName: "contact", mobile: "", company: "", gender: "", type: "Salon", state: "", city: "", source: "", product: "", stage: "initial", demo: "", amount: "", notes: "" });
-      crmStage = "all"; saveEdits(); go("crm");
-    };
+    if (add) add.onclick = () => { crmDraft = crmBlankLead(); crmCurrentId = crmDraft.id; crmView = "detail"; go("crm"); };
     const tpl = document.getElementById("crmTemplate");
     if (tpl) tpl.onclick = () => downloadCsvTemplate();
     const csv = document.getElementById("crmCsv");
@@ -1660,42 +1674,116 @@
       } else {
         const r = new FileReader(); r.onload = () => importCrmCsv(r.result); r.readAsText(f);
       }
-      csv.value = ""; // allow re-importing the same file
+      csv.value = "";
     };
-    wireCRMBody();
+    wireCrmOpen();
   }
 
-  function wireCRMBody() {
+  function crmBlankLead() {
+    return { id: "c" + (crmSeq++), firstName: "", lastName: "", mobile: "", company: "", gender: "", type: "Salon", state: "", city: "", location: "", mapUrl: "", source: "", product: "", stage: "initial", amount: "", stages: {} };
+  }
+
+  function crmDetail() {
+    const l = crmById(crmCurrentId) || (crmDraft && crmDraft.id === crmCurrentId ? crmDraft : null);
+    if (!l) { crmView = "list"; return renderCRM(); }
+    const admin = isAdmin();
+    const isNew = !crmById(l.id);
+    const ro = admin ? "" : "readonly";
+    const field = (lbl, f, ph, type) => `<label class="ord-field"><span>${lbl}</span><input id="cd_${f}" type="${type || "text"}" value="${esc(l[f] == null ? "" : l[f])}" placeholder="${ph || ""}" ${ro}></label>`;
+    const genderSel = `<label class="ord-field"><span>Gender</span><select id="cd_gender" class="select" ${admin ? "" : "disabled"}>${["", "Female", "Male", "Other"].map((g) => `<option${l.gender === g ? " selected" : ""}>${g || "—"}</option>`).join("")}</select></label>`;
+    const stageSel = `<label class="ord-field"><span>Current stage</span><select id="cd_stage" class="select" ${admin ? "" : "disabled"}>${CRM_STAGES.map((s) => `<option value="${s.id}"${l.stage === s.id ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>`;
+    const prodField = `<label class="ord-field"><span>Interested product (Esthemax)</span><input id="cd_product" list="crmProducts" value="${esc(l.product || "")}" placeholder="Esthemax product" ${ro}></label>`;
+    const mapLink = crmMapUrl(l) ? `<a href="${esc(crmMapUrl(l))}" target="_blank" rel="noopener" class="linkish">📍 Open in Google Maps</a>` : "";
+
+    const stageCards = CRM_STAGES.map((s) => {
+      const so = crmStageObj(l, s.id);
+      return `<div class="card crm-stage-card">
+        <h3 style="margin-top:0">${esc(s.label)}</h3>
+        <label class="ord-field"><span>Remark</span><textarea class="crm-remark" data-stage="${s.id}" rows="2" placeholder="Notes for this stage…" ${ro}>${esc(so.remark || "")}</textarea></label>
+        <div class="crm-files" id="crmFiles_${s.id}">${crmFilesHtml(l, s.id)}</div>
+        ${admin ? `<label class="ghost-btn" style="cursor:pointer;margin-top:8px;display:inline-block">📎 Attach file<input type="file" class="crm-file-in" data-stage="${s.id}" style="display:none"></label>` : ""}
+      </div>`;
+    }).join("");
+
+    return `
+      <div class="section-head"><h1>${isNew ? "New contact" : esc(crmName(l))}</h1></div>
+      <div class="controls"><button id="crmBack" class="ghost-btn" type="button">← Back to list</button></div>
+      <datalist id="crmProducts">${esthemaxProductNames().map((p) => `<option value="${esc(p)}">`).join("")}</datalist>
+      <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-top:0">Contact details</h2>
+        <div class="ch-grid">
+          ${field("First name", "firstName")}
+          ${field("Last name", "lastName")}
+          ${field("Mobile", "mobile")}
+          ${field("Company / salon", "company")}
+          ${genderSel}
+          ${field("Type (Salon / Spa / Doctor)", "type")}
+          ${field("State", "state")}
+          ${field("City", "city")}
+          ${field("Location / address", "location")}
+          ${field("Google Maps link (optional)", "mapUrl", "paste a Google Maps URL")}
+          ${prodField}
+          ${field("Deal value (₹)", "amount", "", "number")}
+          ${stageSel}
+          ${field("Lead source", "source")}
+        </div>
+        ${mapLink ? `<div style="margin-top:8px">${mapLink}</div>` : ""}
+      </div>
+      <h2>Pipeline — remark &amp; files per stage</h2>
+      <div class="grid crm-stage-grid">${stageCards}</div>
+      ${admin ? `<div class="controls" style="margin-top:16px">
+        <button id="crmSave" class="dl-btn" type="button">${isNew ? "Create contact" : "Save &amp; back to list"}</button>
+        ${isNew ? "" : `<button id="crmDelete" class="ghost-btn danger" type="button">🗑 Delete contact</button>`}
+      </div>` : ""}`;
+  }
+
+  function crmFilesHtml(l, sid) {
+    const so = crmStageObj(l, sid);
+    return (so.files || []).map((f, i) => `<div class="crm-file"><a href="${f.data}" download="${esc(f.name)}">📄 ${esc(f.name)}</a>${isAdmin() ? ` <button class="linkish crm-file-rm" data-stage="${sid}" data-i="${i}" title="Remove">✕</button>` : ""}</div>`).join("") || `<span class="t-muted">No files</span>`;
+  }
+
+  function wireCrmDetail() {
+    const l = crmById(crmCurrentId) || (crmDraft && crmDraft.id === crmCurrentId ? crmDraft : null);
+    if (!l) return;
+    const back = document.getElementById("crmBack");
+    if (back) back.onclick = () => { crmDraft = null; crmView = "list"; go("crm"); };
     if (!isAdmin()) return;
-    document.querySelectorAll("#crmBody .crm-in").forEach((el) => {
-      const commit = () => { const l = crmById(el.dataset.id); if (l) { l[el.dataset.field] = el.value; saveEdits(); } };
-      if (el.tagName === "SELECT" || el.type === "number") el.onchange = () => { commit(); if (el.classList.contains("crm-stage")) { $("#crmBody").innerHTML = crmTable(); wireCRMBody(); } };
-      else { el.onchange = commit; el.onblur = commit; }
+    const touch = () => { if (crmById(l.id)) saveCrm(); };
+    const renderFiles = (sid) => {
+      const box = document.getElementById("crmFiles_" + sid); if (!box) return;
+      box.innerHTML = crmFilesHtml(l, sid);
+      box.querySelectorAll(".crm-file-rm").forEach((b) => {
+        b.onclick = () => { crmStageObj(l, b.dataset.stage).files.splice(+b.dataset.i, 1); touch(); renderFiles(sid); };
+      });
+    };
+    ["firstName", "lastName", "mobile", "company", "type", "state", "city", "location", "mapUrl", "product", "amount", "source"].forEach((f) => {
+      const el = document.getElementById("cd_" + f); if (el) el.oninput = () => { l[f] = el.value; touch(); };
     });
-    document.querySelectorAll("#crmBody .crm-del").forEach((b) => {
-      b.onclick = () => {
-        if (!window.confirm("Delete this contact?")) return;
-        const i = crmLeads.findIndex((l) => l.id === b.dataset.id);
-        if (i >= 0) crmLeads.splice(i, 1);
-        saveEdits(); go("crm");
+    ["gender", "stage"].forEach((f) => {
+      const el = document.getElementById("cd_" + f); if (el) el.onchange = () => { l[f] = el.value; touch(); };
+    });
+    document.querySelectorAll(".crm-remark").forEach((t) => {
+      t.oninput = () => { crmStageObj(l, t.dataset.stage).remark = t.value; touch(); };
+    });
+    document.querySelectorAll(".crm-file-in").forEach((inp) => {
+      inp.onchange = () => {
+        const f = inp.files[0]; if (!f) return;
+        if (f.size > 400000) { window.alert("File too large (max ~400 KB). Please attach a smaller file."); inp.value = ""; return; }
+        const r = new FileReader();
+        r.onload = () => { crmStageObj(l, inp.dataset.stage).files.push({ name: f.name, data: r.result }); touch(); renderFiles(inp.dataset.stage); inp.value = ""; };
+        r.readAsDataURL(f);
       };
     });
-  }
-
-  // Minimal CSV parser (handles quotes and embedded commas/newlines).
-  function parseCSV(text) {
-    const rows = []; let row = [], cur = "", q = false;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
-      else if (c === '"') q = true;
-      else if (c === ",") { row.push(cur); cur = ""; }
-      else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
-      else if (c === "\r") { /* skip */ }
-      else cur += c;
-    }
-    if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
-    return rows.filter((r) => r.some((x) => String(x).trim() !== ""));
+    CRM_STAGES.forEach((s) => renderFiles(s.id));
+    const save = document.getElementById("crmSave");
+    if (save) save.onclick = () => { if (!crmById(l.id)) { crmLeads.unshift(l); crmDraft = null; } saveCrm(); crmView = "list"; go("crm"); };
+    const del = document.getElementById("crmDelete");
+    if (del) del.onclick = () => {
+      if (!window.confirm("Delete this contact?")) return;
+      const i = crmLeads.findIndex((x) => x.id === l.id);
+      if (i >= 0) crmLeads.splice(i, 1);
+      crmDraft = null; saveCrm(); crmView = "list"; go("crm");
+    };
   }
 
   function importCrmCsv(text) { importCrmRows(parseCSV(text)); }
@@ -1720,9 +1808,9 @@
     if (rows.length < 2) { window.alert("The file looks empty."); return; }
     const headers = rows[0].map((h) => h.replace(/\s+/g, " ").trim().toLowerCase());
     const col = (...names) => { for (const n of names) { const i = headers.indexOf(n.toLowerCase()); if (i >= 0) return i; } return -1; };
-    const iFn = col("first name"), iLn = col("last name", "last name "), iMob = col("mobile", "phone"),
+    const iFn = col("first name"), iLn = col("last name"), iMob = col("mobile", "phone"),
       iCo = col("company name", "company"), iGen = col("gender"), iType = col("doctor qualification", "type"),
-      iState = col("state", "state "), iCity = col("city"), iSrc = col("lead source", "lead source "), iDesc = col("description"),
+      iState = col("state"), iCity = col("city"), iSrc = col("lead source", "lead source "), iDesc = col("description"),
       iAmt = col("amount"), iDeal = col("deal name");
     const get = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : "");
     let n = 0;
@@ -1732,14 +1820,31 @@
       crmLeads.push({
         id: "c" + (crmSeq++), firstName: fn, lastName: ln, mobile: get(r, iMob), company: co,
         gender: get(r, iGen), type: get(r, iType) || "Salon", state: get(r, iState), city: get(r, iCity),
-        source: get(r, iSrc), product: "", stage: "initial", demo: get(r, iDeal),
-        amount: (parseFloat(get(r, iAmt)) || "") || "", notes: get(r, iDesc),
+        location: "", mapUrl: "", source: get(r, iSrc), product: "", stage: "initial",
+        amount: (parseFloat(get(r, iAmt)) || "") || "",
+        stages: { initial: { remark: [get(r, iDeal), get(r, iDesc)].filter(Boolean).join(" — "), files: [] } },
       });
       n++;
     });
-    saveEdits();
+    saveCrm();
     window.alert(`Imported ${n} contact${n === 1 ? "" : "s"}.`);
-    go("crm");
+    crmView = "list"; go("crm");
+  }
+
+  // Minimal CSV parser (handles quotes and embedded commas/newlines).
+  function parseCSV(text) {
+    const rows = []; let row = [], cur = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === ",") { row.push(cur); cur = ""; }
+      else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+      else if (c === "\r") { /* skip */ }
+      else cur += c;
+    }
+    if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+    return rows.filter((r) => r.some((x) => String(x).trim() !== ""));
   }
 
   function downloadCsvTemplate() {
@@ -2777,6 +2882,7 @@
 
     D = await decryptData(key);
     await loadEdits();
+    await loadCrm();
   }
 
   async function loadEdits() {
@@ -2837,7 +2943,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, crmLeads, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }

@@ -358,6 +358,13 @@ tr.total-row:hover td { background: var(--surface-3); }
 .org-card.org-tojoin { border-color: #a9c3f5; background: color-mix(in srgb, #3b82f6 12%, var(--surface)); }
 .org-card.org-spa { border-color: #9fd8d6; background: color-mix(in srgb, #0ea5a4 12%, var(--surface)); }
 
+/* ---------- Salon CRM ---------- */
+.crm-stage-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.crm-stage-card h3 { font-size: 13.5px; margin: 0 0 8px; color: var(--accent); }
+.crm-files { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; font-size: 12.5px; }
+.crm-file a { color: var(--accent); text-decoration: none; }
+.crm-file a:hover { text-decoration: underline; }
+
 /* ---------- Accordion ---------- */
 .accordion { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); box-shadow: var(--shadow-sm); }
 .acc-item + .acc-item { border-top: 1px solid var(--border); }
