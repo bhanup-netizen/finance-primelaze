@@ -208,7 +208,7 @@
   }
 
   /* ================= TEAM ROSTER ================= */
-  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster";
+  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDiv = "all";
   const rosterEdits = {}; // `${num}#${field}` -> value
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
   let rosterAddSeq = 0;
@@ -290,9 +290,13 @@
   }
 
   // Build the reporting-hierarchy tree from Reports-To + designation data.
-  function renderOrgChart() {
+  // divFilter: "all" | "Derma" | "Salon/Spa" (Arjun is NSM of every division).
+  function renderOrgChart(divFilter) {
+    divFilter = divFilter || "all";
     const ROOT = "Arjun";
-    const all = roster().map((p) => ({
+    const all = roster()
+      .filter((p) => divFilter === "all" || (rval(p, "division") || "Derma") === divFilter)
+      .map((p) => ({
       name: (rval(p, "name") || "").trim(),
       desig: rval(p, "designation") || "",
       rep: (rval(p, "reportsTo") || "").trim(),
@@ -441,6 +445,14 @@
       });
       wireRosterEdit();
       wireTeamSubnav();
+      document.querySelectorAll("[data-orgdiv]").forEach((b) => {
+        b.onclick = () => {
+          orgDiv = b.dataset.orgdiv;
+          document.querySelectorAll("[data-orgdiv]").forEach((x) => x.classList.toggle("active", x === b));
+          const box = document.getElementById("orgScroll");
+          if (box) box.innerHTML = renderOrgChart(orgDiv);
+        };
+      });
     }, 0);
 
     return teamSubnav() + `
@@ -451,7 +463,14 @@
       <div class="card" style="margin-bottom:20px"><div class="stat-row">${summaryCards}</div></div>
       <details class="card org-wrap" style="margin-bottom:20px" open>
         <summary class="org-summary">Reporting hierarchy</summary>
-        <div class="org-scroll">${renderOrgChart()}</div>
+        <div class="controls" style="margin:12px 0 0">
+          <div class="seg">
+            <button data-orgdiv="all" class="${orgDiv === "all" ? "active" : ""}">All</button>
+            <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">Derma</button>
+            <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">Salon/Spa</button>
+          </div>
+        </div>
+        <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
       </details>
       <div class="controls">
         <input id="teamSearch" class="search" type="search" placeholder="Search name, HQ, zone, division…" />
@@ -706,6 +725,15 @@
   let hqIndex = 0;
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
   const hqAdds = {};  // `${sheet}#${planIdx}` -> [{product, fy2627, deviceValue}]
+  const hqAchieved = {}; // `${pk}#${ri}` -> { done: number, by: string } (sales so far)
+  // Salesperson name suggestions for the "By" field (roster + refs + custom).
+  const salesPeopleList = () => {
+    const s = new Set();
+    (D.roster && D.roster.people || []).concat(rosterAdds).forEach((p) => { const n = rval(p, "name"); if (n && !/^vacant/i.test(n)) s.add(n); });
+    ((D.refs && D.refs.employees) || []).forEach((n) => n && s.add(n));
+    customPeople.forEach((n) => n && s.add(n));
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  };
   const newDevices = []; // admin-added devices for the Device (price book) tab
   const idfor = (s) => s.replace(/[^a-z0-9]/gi, "_");
 
@@ -792,6 +820,32 @@
         mountHqDetail(D.hqTargets[hqIndex]);
       };
     });
+    // Achieved-so-far (units sold) + who closed it.
+    const commitAchieved = (el) => {
+      const pk = el.dataset.pk, field = el.classList.contains("hq-done") ? "done" : "by";
+      const val = field === "done" ? el.value : el.value;
+      if (el.dataset.add != null) {
+        const a = (hqAdds[pk] || [])[+el.dataset.add];
+        if (a) a[field] = val;
+      } else {
+        const k = pk + "#" + el.dataset.ri;
+        (hqAchieved[k] || (hqAchieved[k] = {}))[field] = val;
+      }
+      recomputeHqAchieved(pk);
+      saveEdits();
+    };
+    document.querySelectorAll(".hq-done").forEach((el) => { el.oninput = () => commitAchieved(el); });
+    document.querySelectorAll(".hq-by").forEach((el) => { el.onchange = () => commitAchieved(el); el.onblur = () => commitAchieved(el); });
+  }
+
+  function recomputeHqAchieved(pk) {
+    const pid = idfor(pk);
+    let ta = 0;
+    document.querySelectorAll(`.hq-done[data-pk="${CSS.escape(pk)}"]`).forEach((el) => {
+      const v = parseFloat(el.value); if (!isNaN(v)) ta += v;
+    });
+    const el = document.getElementById(`tota_${pid}`);
+    if (el) el.textContent = inr(ta);
   }
 
   // Only rows with a numeric Device Value count toward the plan TOTAL (matches
@@ -832,14 +886,22 @@
     const plans = (h.plans && h.plans.length ? h.plans : []).map((pl, pi) => {
       const pk = h.sheet + "#" + pi;
       const pid = idfor(pk);
-      const head = ["Product", "FY25-26", "FY26-27"]
-        .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
+      const head = ["Product", "FY25-26", "FY26-27", "Achieved", "By (salesperson)"]
+        .map((x, i) => `<th class="${i >= 1 && i <= 3 ? "num" : ""}">${x}</th>`).join("");
       const productRows = pl.rows.filter((r) => !r.isTotal);
       const adds = hqAdds[pk] || [];
       // units total over device rows (numeric deviceValue) incl. added products
-      let tu = 0;
-      productRows.forEach((r, ri) => { if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; } });
-      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; });
+      let tu = 0, ta = 0;
+      productRows.forEach((r, ri) => {
+        if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; }
+        const ac = hqAchieved[pk + "#" + ri]; if (ac && isNum(parseFloat(ac.done))) ta += parseFloat(ac.done);
+      });
+      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; if (isNum(parseFloat(a.done))) ta += parseFloat(a.done); });
+
+      const achCells = (doneVal, byVal, attrs) => isAdmin()
+        ? `<td class="num"><input class="hq-done" type="number" min="0" ${attrs} value="${esc(doneVal)}" style="max-width:80px"></td>
+           <td><input class="hq-by" list="salesPeople" ${attrs} value="${esc(byVal)}" placeholder="name" style="min-width:120px"></td>`
+        : `<td class="num">${doneVal === "" ? "—" : esc(doneVal)}</td><td>${byVal ? esc(byVal) : "—"}</td>`;
 
       const prodHtml = productRows.map((r, ri) => {
         const editable = isNum(r.fy2627);
@@ -847,7 +909,8 @@
         const fyCell = editable
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
-        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td></tr>`;
+        const ac = hqAchieved[pk + "#" + ri] || {};
+        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${achCells(ac.done ?? "", ac.by ?? "", `data-pk="${esc(pk)}" data-ri="${ri}"`)}</tr>`;
       }).join("");
 
       const addHtml = adds.map((a, ai) => {
@@ -855,10 +918,10 @@
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
           : esc(a.fy2627);
         const rm = isAdmin() ? ` <button class="linkish hq-add-rm" data-pk="${esc(pk)}" data-ai="${ai}" title="Remove">✕</button>` : "";
-        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td></tr>`;
+        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${achCells(a.done ?? "", a.by ?? "", `data-pk="${esc(pk)}" data-add="${ai}"`)}</tr>`;
       }).join("");
 
-      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td></tr>`;
+      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td><td class="num" id="tota_${pid}">${inr(ta)}</td><td></td></tr>`;
 
       const addCtrl = isAdmin() ? `
         <div class="hq-add-row">
@@ -882,9 +945,11 @@
         </div>
       </div>`).join("");
 
+    const datalist = `<datalist id="salesPeople">${salesPeopleList().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>`;
     return `
       <div class="callout">${esc(h.title)}${h.subtitle ? `<div class="muted-note" style="margin-top:6px">${esc(h.subtitle)}</div>` : ""}</div>
       ${summary ? `<div class="card" style="margin-bottom:22px"><div class="stat-row">${summary}</div></div>` : ""}
+      ${datalist}
       ${plans || `<div class="empty">No product plan — placeholder HQ pending hire.</div>`}
       ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}`;
   }
@@ -2307,6 +2372,7 @@
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
+      if (e.hqAchieved) Object.keys(e.hqAchieved).forEach((k) => { hqAchieved[k] = e.hqAchieved[k]; });
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
     } catch (err) { console.warn("edits read failed", err); }
   }
@@ -2323,7 +2389,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqAchieved, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
