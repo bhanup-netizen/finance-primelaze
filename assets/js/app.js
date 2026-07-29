@@ -1559,7 +1559,13 @@
   let crmSeq = 0, crmStage = "all", crmSearch = "";
   let crmView = "list", crmCurrentId = null, crmDraft = null;
   const crmName = (l) => `${l.firstName || ""} ${l.lastName || ""}`.trim() || "—";
-  const crmStageLabel = (id) => (CRM_STAGES.find((s) => s.id === id) || {}).label || id;
+  const crmStageLabel = (id) => id === "outcome" ? "Awaiting outcome" : ((CRM_STAGES.find((s) => s.id === id) || {}).label || id);
+  const CRM_PIPE = ["initial", "demo_sched", "demo_done"];
+  const crmCurIdx = (l) => {
+    if (l.stage === "won" || l.stage === "lost" || l.stage === "outcome") return 3;
+    const i = CRM_PIPE.indexOf(l.stage);
+    return i < 0 ? 0 : i;
+  };
   const crmById = (id) => crmLeads.find((l) => l.id === id);
   const crmStageObj = (l, sid) => { l.stages = l.stages || {}; return (l.stages[sid] = l.stages[sid] || { remark: "", files: [] }); };
   const crmMapUrl = (l) => l.mapUrl || ((l.city || l.location) ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([l.location, l.city, l.state].filter(Boolean).join(", "))}` : "");
@@ -1702,24 +1708,8 @@
     const ro = admin ? "" : "readonly";
     const field = (lbl, f, ph, type) => `<label class="ord-field"><span>${lbl}</span><input id="cd_${f}" type="${type || "text"}" value="${esc(l[f] == null ? "" : l[f])}" placeholder="${ph || ""}" ${ro}></label>`;
     const genderSel = `<label class="ord-field"><span>Gender</span><select id="cd_gender" class="select" ${admin ? "" : "disabled"}>${["", "Female", "Male", "Other"].map((g) => `<option${l.gender === g ? " selected" : ""}>${g || "—"}</option>`).join("")}</select></label>`;
-    const stageSel = `<label class="ord-field"><span>Current stage</span><select id="cd_stage" class="select" ${admin ? "" : "disabled"}>${CRM_STAGES.map((s) => `<option value="${s.id}"${l.stage === s.id ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>`;
     const prodField = `<label class="ord-field"><span>Interested product (Esthemax)</span><input id="cd_product" list="crmProducts" value="${esc(l.product || "")}" placeholder="Esthemax product" ${ro}></label>`;
     const mapLink = crmMapUrl(l) ? `<a href="${esc(crmMapUrl(l))}" target="_blank" rel="noopener" class="linkish">📍 Open in Google Maps</a>` : "";
-
-    const stageDone = (so) => so.status === "done" || (so.status !== "skipped" && (so.remark || "").trim());
-    const stageCards = CRM_STAGES.map((s) => {
-      const so = crmStageObj(l, s.id);
-      const badge = so.status === "skipped" ? `<span class="badge b-warn">Skipped</span>`
-        : stageDone(so) ? `<span class="badge b-good">Done</span>`
-        : `<span class="badge b-neutral">Pending</span>`;
-      return `<div class="card crm-stage-card${l.stage === s.id ? " crm-current" : ""}">
-        <h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:8px">${esc(s.label)} ${badge}</h3>
-        <label class="ord-field"><span>Remark</span><textarea class="crm-remark" data-stage="${s.id}" rows="2" placeholder="Notes for this stage…" ${ro}>${esc(so.remark || "")}</textarea></label>
-        ${so.status === "skipped" ? `<div class="muted-note">Skip reason: ${esc(so.reason || "—")}</div>` : ""}
-        <div class="crm-files" id="crmFiles_${s.id}">${crmFilesHtml(l, s.id)}</div>
-        ${admin ? `<label class="ghost-btn" style="cursor:pointer;margin-top:8px;display:inline-block">📎 Attach file<input type="file" class="crm-file-in" data-stage="${s.id}" style="display:none"></label>` : ""}
-      </div>`;
-    }).join("");
 
     return `
       <div class="section-head"><h1>${isNew ? "New contact" : esc(crmName(l))}</h1></div>
@@ -1740,13 +1730,12 @@
           ${field("Google Maps link (optional)", "mapUrl", "paste a Google Maps URL")}
           ${prodField}
           ${field("Deal value (₹)", "amount", "", "number")}
-          ${stageSel}
           ${field("Lead source", "source")}
         </div>
         ${mapLink ? `<div style="margin-top:8px">${mapLink}</div>` : ""}
       </div>
-      <h2>Pipeline — remark &amp; files per stage</h2>
-      <div class="grid crm-stage-grid">${stageCards}</div>
+      <h2>Pipeline</h2>
+      ${crmPipelineHtml(l)}
       ${admin ? `<div class="controls" style="margin-top:16px">
         <button id="crmSave" class="dl-btn" type="button">${isNew ? "Create contact" : "Save &amp; back to list"}</button>
         ${isNew ? "" : `<button id="crmDelete" class="ghost-btn danger" type="button">🗑 Delete contact</button>`}
@@ -1756,6 +1745,52 @@
   function crmFilesHtml(l, sid) {
     const so = crmStageObj(l, sid);
     return (so.files || []).map((f, i) => `<div class="crm-file"><a href="${f.data}" download="${esc(f.name)}">📄 ${esc(f.name)}</a>${isAdmin() ? ` <button class="linkish crm-file-rm" data-stage="${sid}" data-i="${i}" title="Remove">✕</button>` : ""}</div>`).join("") || `<span class="t-muted">No files</span>`;
+  }
+
+  // Step-by-step pipeline: only the current step is editable; earlier steps
+  // collapse to a summary; later steps stay locked.
+  function crmPipelineHtml(l) {
+    const admin = isAdmin(), ro = admin ? "" : "readonly";
+    const cur = crmCurIdx(l);
+    const outcome = (l.stage === "won" || l.stage === "lost") ? l.stage : null;
+
+    const labels = ["Initial Conversation", "Demo Scheduled", "Demo Performed", outcome ? crmStageLabel(outcome) : "Outcome"];
+    const chips = labels.map((lab, i) => {
+      let cls = "step-chip";
+      if (i < 3) { const so = crmStageObj(l, CRM_PIPE[i]); if (i < cur) cls += so.status === "skipped" ? " skipped" : " done"; else if (i === cur) cls += " current"; else cls += " locked"; }
+      else { cls += i === cur ? (outcome === "lost" ? " skipped" : outcome === "won" ? " done" : " current") : " locked"; }
+      return `<span class="${cls}">${i + 1}. ${esc(lab)}</span>`;
+    }).join('<span class="step-sep">→</span>');
+
+    const summaries = CRM_PIPE.slice(0, Math.min(cur, 3)).map((sid) => {
+      const so = crmStageObj(l, sid);
+      const badge = so.status === "skipped" ? `<span class="badge b-warn">Skipped</span>` : `<span class="badge b-good">Done</span>`;
+      const detail = so.status === "skipped" ? `Reason: ${esc(so.reason || "—")}` : esc((so.remark || "—").slice(0, 140));
+      const nf = (so.files || []).length;
+      return `<div class="card crm-done-row"><b>${esc(crmStageLabel(sid))}</b> ${badge} <span class="t-muted">${detail}${nf ? ` · ${nf} file(s)` : ""}</span>${admin ? ` <button class="linkish crm-goto" data-stage="${sid}">edit</button>` : ""}</div>`;
+    }).join("");
+
+    const attach = (sid) => admin ? `<label class="ghost-btn" style="cursor:pointer;margin-top:8px;display:inline-block">📎 Attach file<input type="file" class="crm-file-in" data-stage="${sid}" style="display:none"></label>` : "";
+    const remarkBox = (sid, ph) => { const so = crmStageObj(l, sid); return `<label class="ord-field"><span>Remark</span><textarea class="crm-remark" data-stage="${sid}" rows="3" placeholder="${ph}" ${ro}>${esc(so.remark || "")}</textarea></label><div class="crm-files" id="crmFiles_${sid}">${crmFilesHtml(l, sid)}</div>${attach(sid)}`; };
+
+    let active = "";
+    if (cur <= 2) {
+      const sid = CRM_PIPE[cur];
+      const back = (cur > 0 && admin) ? `<button class="ghost-btn crm-back-step" type="button">← Back</button>` : "";
+      let nav = "";
+      if (admin) {
+        if (cur === 0) nav = `<button class="dl-btn crm-next" type="button">Next → Demo Scheduled</button>`;
+        else if (cur === 1) nav = `<button class="dl-btn crm-next" type="button">Done → Demo Performed</button> <button class="ghost-btn crm-skip" type="button">Skip (reason) →</button>`;
+        else nav = `<button class="dl-btn crm-next" type="button">Done → Outcome</button> <button class="ghost-btn crm-skip" type="button">Skip (reason) →</button>`;
+      }
+      active = `<div class="card crm-stage-card crm-current"><h3 style="margin-top:0">${esc(crmStageLabel(sid))}</h3>${remarkBox(sid, "What happened at this stage…")}<div class="controls" style="margin-top:12px">${back}${nav}</div></div>`;
+    } else if (outcome) {
+      const back = admin ? `<button class="ghost-btn crm-back-step" type="button">← Back to Demo Performed</button>` : "";
+      active = `<div class="card crm-stage-card crm-current"><h3 style="margin-top:0">${esc(crmStageLabel(outcome))} ${outcome === "won" ? `<span class="badge b-good">Won</span>` : `<span class="badge b-bad">Lost</span>`}</h3>${remarkBox(outcome, "Closing notes…")}<div class="controls" style="margin-top:12px">${back}</div></div>`;
+    } else {
+      active = `<div class="card crm-stage-card crm-current"><h3 style="margin-top:0">Close the deal</h3><p class="muted-note">Demo performed — choose the outcome.</p>${admin ? `<div class="controls"><button class="dl-btn crm-won" type="button">🏆 Deal Won</button> <button class="ghost-btn danger crm-lost" type="button">Deal Lost</button> <button class="ghost-btn crm-back-step" type="button">← Back</button></div>` : ""}</div>`;
+    }
+    return `<div class="step-bar">${chips}</div>${summaries}${active}`;
   }
 
   function wireCrmDetail() {
@@ -1777,28 +1812,29 @@
     });
     const gEl = document.getElementById("cd_gender");
     if (gEl) gEl.onchange = () => { l.gender = gEl.value; touch(); };
-    // Gated stage progression: can't pass Initial Conversation until it has a
-    // remark; skipping Demo Scheduled / Demo Performed needs a reason.
-    const stEl = document.getElementById("cd_stage");
-    if (stEl) stEl.onchange = () => {
-      const target = stEl.value;
-      const ti = CRM_STAGES.findIndex((s) => s.id === target);
-      for (let i = 0; i < ti; i++) {
-        const s = CRM_STAGES[i];
-        if (s.id === "won" || s.id === "lost") continue;
-        const so = crmStageObj(l, s.id);
-        const doneish = so.status === "skipped" || so.status === "done" || (so.remark || "").trim();
-        if (doneish) { if (so.status !== "skipped") so.status = "done"; continue; }
-        if (s.id === "initial") {
-          window.alert("Complete the Initial Conversation first — add a remark before moving to the next step.");
-          stEl.value = l.stage; return;
-        }
-        const reason = (window.prompt(`You're skipping "${s.label}". Why didn't this step happen?`) || "").trim();
-        if (!reason) { window.alert(`A reason is required to skip "${s.label}".`); stEl.value = l.stage; return; }
-        so.status = "skipped"; so.reason = reason;
-      }
-      l.stage = target; touch(); go("crm");
+    // ---- Step navigation (one active step at a time) ----
+    const cur = crmCurIdx(l);
+    const advance = (to) => { l.stage = to; touch(); go("crm"); };
+    const nextBtn = document.querySelector(".crm-next");
+    if (nextBtn) nextBtn.onclick = () => {
+      const sid = CRM_PIPE[cur], so = crmStageObj(l, sid);
+      if (!(so.remark || "").trim()) { window.alert(`Add a remark for “${crmStageLabel(sid)}” before continuing${cur > 0 ? " (or use Skip with a reason)" : ""}.`); return; }
+      so.status = "done";
+      advance(cur === 0 ? "demo_sched" : cur === 1 ? "demo_done" : "outcome");
     };
+    const skipBtn = document.querySelector(".crm-skip");
+    if (skipBtn) skipBtn.onclick = () => {
+      const sid = CRM_PIPE[cur];
+      const reason = (window.prompt(`Skipping “${crmStageLabel(sid)}”. Why didn't this step happen?`) || "").trim();
+      if (!reason) { window.alert("A reason is required to skip this step."); return; }
+      const so = crmStageObj(l, sid); so.status = "skipped"; so.reason = reason;
+      advance(cur === 1 ? "demo_done" : "outcome");
+    };
+    const backStep = document.querySelector(".crm-back-step");
+    if (backStep) backStep.onclick = () => advance(cur === 1 ? "initial" : cur === 2 ? "demo_sched" : "demo_done");
+    const wonBtn = document.querySelector(".crm-won"); if (wonBtn) wonBtn.onclick = () => advance("won");
+    const lostBtn = document.querySelector(".crm-lost"); if (lostBtn) lostBtn.onclick = () => advance("lost");
+    document.querySelectorAll(".crm-goto").forEach((b) => { b.onclick = () => advance(b.dataset.stage); });
     document.querySelectorAll(".crm-remark").forEach((t) => {
       t.oninput = () => { crmStageObj(l, t.dataset.stage).remark = t.value; touch(); };
     });
