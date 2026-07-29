@@ -725,8 +725,20 @@
   let hqIndex = 0;
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
   const hqAdds = {};  // `${sheet}#${planIdx}` -> [{product, fy2627, deviceValue}]
-  const hqAchieved = {}; // `${pk}#${ri}` -> { done: number, by: string } (sales so far)
-  // Salesperson name suggestions for the "By" field (roster + refs + custom).
+  // Sales achieved per HQ sheet: each record = one machine sold.
+  const hqSales = {}; // `${sheet}` -> [{ id, product, buyer, location, soldBy }]
+  let hqSaleSeq = 0;
+  // Product names available in an HQ (its plan products + added + device list).
+  const hqProductNames = (h) => {
+    const s = new Set();
+    (h.plans || []).forEach((pl, pi) => {
+      pl.rows.filter((r) => !r.isTotal).forEach((r) => { if (r.product) s.add(r.product); });
+      (hqAdds[h.sheet + "#" + pi] || []).forEach((a) => { if (a.product) s.add(a.product); });
+    });
+    deviceNames().forEach((n) => s.add(n));
+    return Array.from(s);
+  };
+  // Salesperson name suggestions for the "sold by" field (roster + refs + custom).
   const salesPeopleList = () => {
     const s = new Set();
     (D.roster && D.roster.people || []).concat(rosterAdds).forEach((p) => { const n = rval(p, "name"); if (n && !/^vacant/i.test(n)) s.add(n); });
@@ -820,32 +832,67 @@
         mountHqDetail(D.hqTargets[hqIndex]);
       };
     });
-    // Achieved-so-far (units sold) + who closed it.
-    const commitAchieved = (el) => {
-      const pk = el.dataset.pk, field = el.classList.contains("hq-done") ? "done" : "by";
-      const val = field === "done" ? el.value : el.value;
-      if (el.dataset.add != null) {
-        const a = (hqAdds[pk] || [])[+el.dataset.add];
-        if (a) a[field] = val;
-      } else {
-        const k = pk + "#" + el.dataset.ri;
-        (hqAchieved[k] || (hqAchieved[k] = {}))[field] = val;
-      }
-      recomputeHqAchieved(pk);
-      saveEdits();
+    // Sales-achieved records (who bought / where / who sold).
+    const h = D.hqTargets[hqIndex];
+    const key = h && h.sheet;
+    document.querySelectorAll(".sale-in").forEach((el) => {
+      const commit = () => {
+        const rec = (hqSales[key] || []).find((x) => x.id === el.dataset.id);
+        if (rec) { rec[el.dataset.field] = el.value; saveEdits(); }
+      };
+      el.onchange = commit;
+      if (el.tagName === "INPUT" && el.type === "text") el.onblur = commit;
+    });
+    document.querySelectorAll(".sale-rm").forEach((b) => {
+      b.onclick = () => {
+        hqSales[key] = (hqSales[key] || []).filter((x) => x.id !== b.dataset.id);
+        saveEdits(); mountHqDetail(h);
+      };
+    });
+    const addSale = document.getElementById("hqSaleAdd");
+    if (addSale) addSale.onclick = () => {
+      (hqSales[key] = hqSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", buyer: "", location: "", soldBy: "" });
+      saveEdits(); mountHqDetail(h);
     };
-    document.querySelectorAll(".hq-done").forEach((el) => { el.oninput = () => commitAchieved(el); });
-    document.querySelectorAll(".hq-by").forEach((el) => { el.onchange = () => commitAchieved(el); el.onblur = () => commitAchieved(el); });
   }
 
-  function recomputeHqAchieved(pk) {
-    const pid = idfor(pk);
-    let ta = 0;
-    document.querySelectorAll(`.hq-done[data-pk="${CSS.escape(pk)}"]`).forEach((el) => {
-      const v = parseFloat(el.value); if (!isNaN(v)) ta += v;
-    });
-    const el = document.getElementById(`tota_${pid}`);
-    if (el) el.textContent = inr(ta);
+  function hqSalesSection(h) {
+    const key = h.sheet;
+    const list = hqSales[key] || [];
+    const admin = isAdmin();
+    const prodOpts = hqProductNames(h);
+    const sel = (rec) => admin
+      ? `<select class="sale-in" data-id="${rec.id}" data-field="product"><option value=""${rec.product ? "" : " selected"}>— product —</option>${prodOpts.concat(rec.product && !prodOpts.includes(rec.product) ? [rec.product] : []).map((n) => `<option${n === rec.product ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`
+      : esc(rec.product || "—");
+    const txt = (rec, field, ph, listId) => admin
+      ? `<input class="sale-in" type="text" data-id="${rec.id}" data-field="${field}"${listId ? ` list="${listId}"` : ""} value="${esc(rec[field] || "")}" placeholder="${ph}">`
+      : esc(rec[field] || "—");
+    const rows = list.map((rec) => `<tr>
+      <td>${sel(rec)}</td>
+      <td>${txt(rec, "buyer", "Dr. / Clinic name")}</td>
+      <td>${txt(rec, "location", "City / location", "hqStates")}</td>
+      <td>${txt(rec, "soldBy", "Salesperson", "salesPeople")}</td>
+      ${admin ? `<td class="num"><button class="linkish sale-rm" data-id="${rec.id}" title="Remove">✕</button></td>` : ""}
+    </tr>`).join("") || `<tr><td colspan="${admin ? 5 : 4}" class="empty">No sales recorded yet.${admin ? " Click “Add sale”." : ""}</td></tr>`;
+    const head = ["Product", "Bought by (Doctor / Clinic)", "Location", "Sold by"].concat(admin ? [""] : [])
+      .map((x) => `<th>${x}</th>`).join("");
+
+    // Achieved rollup: total machines sold + per-product breakdown.
+    const total = list.length;
+    const byProd = {};
+    list.forEach((r) => { if (r.product) byProd[r.product] = (byProd[r.product] || 0) + 1; });
+    const chips = Object.keys(byProd).sort().map((p) => `<span class="badge b-neutral">${esc(p)}: ${byProd[p]}</span>`).join(" ");
+    const statesDl = `<datalist id="hqStates">${((D.refs && D.refs.states) || []).map((s) => `<option value="${esc(s)}">`).join("")}</datalist>`;
+
+    return `<div class="block" style="margin-top:24px">
+      <h2>Sales achieved</h2>
+      <div class="card" style="margin-bottom:14px"><div class="stat-row">
+        <div class="stat k-good"><b>${total}</b><span>Machines sold (this HQ)</span></div>
+      </div>${chips ? `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>` : ""}</div>
+      ${statesDl}
+      ${table(head, rows)}
+      ${admin ? `<div class="hq-add-row" style="margin-top:12px"><button id="hqSaleAdd" class="dl-btn" type="button">＋ Add sale</button></div>` : ""}
+    </div>`;
   }
 
   // Only rows with a numeric Device Value count toward the plan TOTAL (matches
@@ -886,22 +933,14 @@
     const plans = (h.plans && h.plans.length ? h.plans : []).map((pl, pi) => {
       const pk = h.sheet + "#" + pi;
       const pid = idfor(pk);
-      const head = ["Product", "FY25-26", "FY26-27", "Achieved", "By (salesperson)"]
-        .map((x, i) => `<th class="${i >= 1 && i <= 3 ? "num" : ""}">${x}</th>`).join("");
+      const head = ["Product", "FY25-26", "FY26-27"]
+        .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
       const productRows = pl.rows.filter((r) => !r.isTotal);
       const adds = hqAdds[pk] || [];
       // units total over device rows (numeric deviceValue) incl. added products
-      let tu = 0, ta = 0;
-      productRows.forEach((r, ri) => {
-        if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; }
-        const ac = hqAchieved[pk + "#" + ri]; if (ac && isNum(parseFloat(ac.done))) ta += parseFloat(ac.done);
-      });
-      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; if (isNum(parseFloat(a.done))) ta += parseFloat(a.done); });
-
-      const achCells = (doneVal, byVal, attrs) => isAdmin()
-        ? `<td class="num"><input class="hq-done" type="number" min="0" ${attrs} value="${esc(doneVal)}" style="max-width:80px"></td>
-           <td><input class="hq-by" list="salesPeople" ${attrs} value="${esc(byVal)}" placeholder="name" style="min-width:120px"></td>`
-        : `<td class="num">${doneVal === "" ? "—" : esc(doneVal)}</td><td>${byVal ? esc(byVal) : "—"}</td>`;
+      let tu = 0;
+      productRows.forEach((r, ri) => { if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; } });
+      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; });
 
       const prodHtml = productRows.map((r, ri) => {
         const editable = isNum(r.fy2627);
@@ -909,8 +948,7 @@
         const fyCell = editable
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
-        const ac = hqAchieved[pk + "#" + ri] || {};
-        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${achCells(ac.done ?? "", ac.by ?? "", `data-pk="${esc(pk)}" data-ri="${ri}"`)}</tr>`;
+        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td></tr>`;
       }).join("");
 
       const addHtml = adds.map((a, ai) => {
@@ -918,10 +956,10 @@
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
           : esc(a.fy2627);
         const rm = isAdmin() ? ` <button class="linkish hq-add-rm" data-pk="${esc(pk)}" data-ai="${ai}" title="Remove">✕</button>` : "";
-        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${achCells(a.done ?? "", a.by ?? "", `data-pk="${esc(pk)}" data-add="${ai}"`)}</tr>`;
+        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td></tr>`;
       }).join("");
 
-      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td><td class="num" id="tota_${pid}">${inr(ta)}</td><td></td></tr>`;
+      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td></tr>`;
 
       const addCtrl = isAdmin() ? `
         <div class="hq-add-row">
@@ -951,7 +989,8 @@
       ${summary ? `<div class="card" style="margin-bottom:22px"><div class="stat-row">${summary}</div></div>` : ""}
       ${datalist}
       ${plans || `<div class="empty">No product plan — placeholder HQ pending hire.</div>`}
-      ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}`;
+      ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}
+      ${hqSalesSection(h)}`;
   }
 
   /* ---- HQ target PDF (targets + incentives + T&C) ---- */
@@ -2372,7 +2411,11 @@
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
-      if (e.hqAchieved) Object.keys(e.hqAchieved).forEach((k) => { hqAchieved[k] = e.hqAchieved[k]; });
+      if (e.hqSales) {
+        Object.keys(e.hqSales).forEach((k) => { if (Array.isArray(e.hqSales[k])) hqSales[k] = e.hqSales[k]; });
+        const ids = Object.values(hqSales).flat().map((x) => +String(x.id).slice(1)).filter((n) => !isNaN(n));
+        hqSaleSeq = ids.length ? Math.max(...ids) + 1 : 0;
+      }
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
     } catch (err) { console.warn("edits read failed", err); }
   }
@@ -2389,7 +2432,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqAchieved, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
