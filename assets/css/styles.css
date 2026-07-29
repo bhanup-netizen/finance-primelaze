@@ -158,6 +158,17 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
   font-family: inherit; font-size: 12.5px;
 }
 .demo-select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+/* Unified control look for the various in-table editors (roster / vacancy /
+   sales / quarter / CRM), so every editable cell reads as one system. */
+.roster-sel, .roster-status, .vac-in, .vac-rsel, .sale-in, .hq-qtr, .hq-done, .hq-by, .demo-text, .crm-remark {
+  font-family: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px; font-size: 12.5px;
+}
+.crm-remark { width: 100%; resize: vertical; }
+.roster-sel:focus, .roster-status:focus, .vac-in:focus, .vac-rsel:focus, .sale-in:focus,
+.hq-qtr:focus, .hq-done:focus, .hq-by:focus, .demo-text:focus, .crm-remark:focus {
+  outline: 2px solid var(--accent-soft); border-color: var(--accent);
+}
 .hq-add-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
 .hq-add-row .hq-add-select { min-width: 220px; }
 .hq-add-row .hq-add-val { width: 120px; padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 14px; }
@@ -196,6 +207,7 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 }
 .tab:hover { background: var(--surface-2); color: var(--text); }
 .tab.active { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
+.tab-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 18px; background: var(--border-strong); margin: 0 5px; }
 
 /* ---------- Layout ---------- */
 .view {
@@ -622,8 +634,24 @@ tr.total-row:hover td { background: var(--surface-3); }
    any input under 16px triggers the zoom, so bump form text on touch. */
 @media (max-width: 680px) {
   .search, .select, .stock-input, .lock-field input,
-  .ord-field input, .eta-input, .tgt-input { font-size: 16px; }
+  .ord-field input, .eta-input, .tgt-input,
+  .roster-sel, .roster-status, .vac-in, .vac-rsel, .sale-in,
+  .hq-qtr, .hq-done, .hq-by, .demo-text, .demo-select, .crm-remark,
+  .view input, .view select, .view textarea { font-size: 16px; }
   .stock-input { width: 76px; }
+}
+
+/* Narrow phones: keep the top bar uncluttered and give tables more room. */
+@media (max-width: 560px) {
+  .user-pill { display: none !important; }
+  .topbar { padding: 10px 14px; gap: 10px; }
+  .topbar-meta { gap: 8px; }
+  .view { padding: 16px 14px 40px; }
+  .crm-stage-grid { grid-template-columns: 1fr; }
+  .step-bar { gap: 4px; }
+  .step-chip { padding: 5px 9px; font-size: 11.5px; }
+  .controls { gap: 8px; }
+  .hq-actions { margin-left: 0; width: 100%; }
 }
 
 @media (max-width: 380px) {

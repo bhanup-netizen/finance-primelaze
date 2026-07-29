@@ -84,18 +84,18 @@
 
   /* ---------------- tab registry ---------------- */
   const TABS = [
-    { id: "overview", label: "Overview", render: renderOverview },
-    { id: "team", label: "Team Roster", render: renderTeam },
-    { id: "targets", label: "HQ Targets", render: renderTargets },
-    { id: "incentives", label: "Incentives", render: renderIncentives },
-    { id: "prices", label: "Device", render: renderPrices },
-    { id: "esthemax", label: "Esthemax", render: renderEsthemax },
-    { id: "crm", label: "Salon CRM", render: renderCRM },
-    { id: "order", label: "Inventory", render: renderOrder },
-    { id: "demo", label: "Demo Machines", render: renderDemo },
-    { id: "challan", label: "Delivery Challan", render: renderChallan },
-    { id: "review", label: "Review Log", render: renderReview },
-    { id: "admin", label: "⚙ Admin", render: renderAdmin },
+    { id: "overview", label: "Overview", group: "", render: renderOverview },
+    { id: "team", label: "Team Roster", group: "People", render: renderTeam },
+    { id: "targets", label: "HQ Targets", group: "Sales", render: renderTargets },
+    { id: "incentives", label: "Incentives", group: "Sales", render: renderIncentives },
+    { id: "crm", label: "Salon CRM", group: "Sales", render: renderCRM },
+    { id: "prices", label: "Device", group: "Catalog", render: renderPrices },
+    { id: "esthemax", label: "Esthemax", group: "Catalog", render: renderEsthemax },
+    { id: "order", label: "Inventory", group: "Operations", render: renderOrder },
+    { id: "demo", label: "Demo Machines", group: "Operations", render: renderDemo },
+    { id: "challan", label: "Delivery Challan", group: "Operations", render: renderChallan },
+    { id: "review", label: "Review Log", group: "Records", render: renderReview },
+    { id: "admin", label: "⚙ Admin", group: "Records", render: renderAdmin },
   ];
 
   // rupees → short ₹ Cr / ₹ L / ₹ form
@@ -2766,7 +2766,12 @@
   function mountTabs() {
     const nav = $("#tabs");
     const visible = TABS.filter((t) => canSeePage(t.id));
-    nav.innerHTML = visible.map((t) => `<button class="tab" data-tab="${t.id}" role="tab">${t.label}</button>`).join("");
+    let lastGroup = null;
+    nav.innerHTML = visible.map((t) => {
+      const sep = (lastGroup !== null && t.group && t.group !== lastGroup) ? `<span class="tab-sep" aria-hidden="true"></span>` : "";
+      lastGroup = t.group;
+      return `${sep}<button class="tab" data-tab="${t.id}" role="tab" title="${esc(t.group || "")}">${t.label}</button>`;
+    }).join("");
     nav.querySelectorAll(".tab").forEach((b) => (b.onclick = () => go(b.dataset.tab)));
   }
 
