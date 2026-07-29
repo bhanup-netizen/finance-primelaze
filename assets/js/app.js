@@ -607,14 +607,13 @@
         ${rSel(p, "designation", rosterOptions("designation"))}
         ${rSel(p, "baseHQ", rosterOptions("baseHQ", customHQs), true)}
         ${rSel(p, "zone", rosterOptions("zone"))}
-        ${rSel(p, "reportsTo", rosterOptions("reportsTo"))}
         ${prCell}
         ${fillCell}
         ${remarkCell}
       </tr>`;
-    }).join("") || `<tr><td colspan="9" class="empty">No vacant positions — every seat is filled. 🎉</td></tr>`;
+    }).join("") || `<tr><td colspan="8" class="empty">No vacant positions — every seat is filled. 🎉</td></tr>`;
 
-    const head = ["#", "Position / Name", "Designation", "Base HQ", "Zone", "Reports To", "Priority", "Target fill by", "Remark"]
+    const head = ["#", "Position / Name", "Designation", "Base HQ", "Zone", "Priority", "Target fill by", "Remark"]
       .map((h, i) => `<th class="${i === 0 ? "num" : ""}">${h}</th>`).join("");
 
     setTimeout(() => {
