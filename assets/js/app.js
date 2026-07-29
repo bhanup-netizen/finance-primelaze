@@ -1632,7 +1632,7 @@
       <td>${esc(l.product || "—")}</td>
       <td>${stageBadge(l)}</td>
       <td class="num">${l.amount ? rupee(+l.amount) : "—"}</td>
-      <td class="num"><button class="ghost-btn crm-open" data-id="${l.id}">${admin ? "Open / edit" : "View"}</button></td>
+      <td class="num" style="white-space:nowrap"><button class="ghost-btn crm-open" data-id="${l.id}">${admin ? "Open / edit" : "View"}</button>${admin ? ` <button class="ghost-btn danger crm-del" data-id="${l.id}" title="Delete contact">🗑</button>` : ""}</td>
     </tr>`).join("") || `<tr><td colspan="8" class="empty">No contacts${crmStage !== "all" ? " in this stage" : ""}. ${admin ? "Add one or import a file." : ""}</td></tr>`;
     const head = ["Contact", "Company", "Mobile", "City", "Interested product", "Stage", "Deal value (₹)", ""]
       .map((x) => `<th>${x}</th>`).join("");
@@ -1642,6 +1642,17 @@
   function wireCrmOpen() {
     document.querySelectorAll("#crmBody .crm-open").forEach((b) => {
       b.onclick = () => { crmCurrentId = b.dataset.id; crmView = "detail"; go("crm"); };
+    });
+    document.querySelectorAll("#crmBody .crm-del").forEach((b) => {
+      b.onclick = () => {
+        const l = crmById(b.dataset.id);
+        if (!window.confirm(`⚠ Delete "${l ? crmName(l) : "this contact"}" permanently? This cannot be undone.`)) return;
+        const i = crmLeads.findIndex((x) => x.id === b.dataset.id);
+        if (i >= 0) crmLeads.splice(i, 1);
+        saveCrm();
+        $("#crmBody").innerHTML = crmTable();
+        wireCrmOpen();
+      };
     });
   }
 
