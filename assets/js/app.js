@@ -815,8 +815,10 @@
     if (vEl) vEl.textContent = inr(value);
   }
 
+  // Hide monetary (Value in Lakhs / Std Value) figures — units only on screen.
+  const isMoney = (label) => /value|lakh|inr|₹/i.test(String(label));
   function hqDetail(h) {
-    const summary = (h.summary || []).map((s) => `
+    const summary = (h.summary || []).filter((s) => !isMoney(s.label)).map((s) => `
       <div class="stat">
         <b>${isNum(s.value) ? inr(s.value) : esc(s.value)}</b>
         <span>${esc(s.label)}${s.note ? " · " + esc(s.note) : ""}</span>
@@ -871,7 +873,7 @@
       return `${pl.label ? `<div class="subplan-title">${esc(pl.label)}</div>` : ""}${table(head, prodHtml + addHtml + totalHtml)}${addCtrl}`;
     }).join("");
 
-    const quarters = (h.quarterly || []).map((q) => `
+    const quarters = (h.quarterly || []).filter((q) => !isMoney(q.basis)).map((q) => `
       <div class="card">
         <div class="q-label" style="margin-bottom:8px;font-weight:700;color:var(--text-2)">${esc(q.basis)} · Annual ${isNum(q.annual) ? inr(q.annual) : q.annual}</div>
         <div class="grid quarter-grid">
@@ -1496,6 +1498,9 @@
     addr: "Leo House, Shaheed Bhagat Singh Nagar, Dugri-Dhandra Rd, Near Joseph School, Ludhiana, Punjab 141001",
   };
   const TRANSPORT_MODES = ["Air", "Surface", "Road", "Rail", "Courier", "Sea", "By Hand"];
+  const customAddresses = []; // admin-added challan addresses (appear in From & To)
+  const fromBook = () => (D.challanRefs && D.challanRefs.from || []).concat(customAddresses);
+  const toBook = () => (D.challanRefs && D.challanRefs.to || []).concat(customAddresses);
 
   // Fixed company letterhead for the printed challan (issuing entity + GSTIN).
   const COMPANY = {
@@ -1575,9 +1580,9 @@
           </div>
           <div class="ch-grid">
             <label class="ord-field"><span>From — pick office</span>
-              <select id="chFromPick" class="select"><option value="">— pick from address book —</option>${(D.challanRefs && D.challanRefs.from || []).map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join("")}</select></label>
+              <select id="chFromPick" class="select">${challanPickOptions(fromBook())}</select></label>
             <label class="ord-field"><span>To — pick consignee</span>
-              <select id="chToPick" class="select"><option value="">— pick from address book —</option>${(D.challanRefs && D.challanRefs.to || []).map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join("")}</select></label>
+              <select id="chToPick" class="select">${challanPickOptions(toBook())}</select></label>
             <label class="ord-field"><span>From — name</span><input id="chFromName" value="${esc(c.fromName || DEFAULT_FROM.name)}"></label>
             <label class="ord-field"><span>To — name (consignee)</span><input id="chToName" value="${esc(c.toName || "")}" placeholder="Dr. Name / Clinic"></label>
             <label class="ord-field"><span>From — address</span><textarea id="chFromAddr" rows="2">${esc(c.fromAddr || DEFAULT_FROM.addr)}</textarea></label>
@@ -1630,6 +1635,28 @@
     };
   }
 
+  function challanPickOptions(book) {
+    return `<option value="">— pick from address book —</option>` +
+      book.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join("") +
+      `<option value="__add__">＋ Add new address…</option>`;
+  }
+  function refreshChallanPicks() {
+    const f = document.getElementById("chFromPick"), t = document.getElementById("chToPick");
+    if (f) f.innerHTML = challanPickOptions(fromBook());
+    if (t) t.innerHTML = challanPickOptions(toBook());
+  }
+  // Prompt for a new address, store it (shows in both From & To books), and fill.
+  function addChallanAddress(nameSel, addrSel) {
+    const nm = (window.prompt("Name / label (e.g. Dr. Sharma Clinic, or Primelaze Chennai office):") || "").trim();
+    if (!nm) return;
+    const ad = (window.prompt("Full address for " + nm + ":") || "").trim();
+    customAddresses.push({ name: nm, addr: ad });
+    saveEdits();
+    if (nameSel && $(nameSel)) $(nameSel).value = nm;
+    if (addrSel && $(addrSel)) $(addrSel).value = ad;
+    refreshChallanPicks();
+  }
+
   function openChallanForm(existing) {
     $("#challanForm").innerHTML = challanFormHtml(existing);
     const wrapItems = () => {
@@ -1644,12 +1671,14 @@
     // pick From/To from the imported address book → auto-fill name + address
     const fromPick = document.getElementById("chFromPick");
     if (fromPick) fromPick.onchange = () => {
-      const x = (D.challanRefs && D.challanRefs.from || [])[+fromPick.value];
+      if (fromPick.value === "__add__") { addChallanAddress("#chFromName", "#chFromAddr"); fromPick.value = ""; return; }
+      const x = fromBook()[+fromPick.value];
       if (x) { $("#chFromName").value = x.name; $("#chFromAddr").value = x.addr; }
     };
     const toPick = document.getElementById("chToPick");
     if (toPick) toPick.onchange = () => {
-      const x = (D.challanRefs && D.challanRefs.to || [])[+toPick.value];
+      if (toPick.value === "__add__") { addChallanAddress("#chToName", "#chToAddr"); toPick.value = ""; return; }
+      const x = toBook()[+toPick.value];
       if (x) {
         $("#chToName").value = x.name; $("#chToAddr").value = x.addr;
         if (x.purpose && !$("#chNotes").value) $("#chNotes").value = x.purpose;
@@ -2275,6 +2304,7 @@
       if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
       if (Array.isArray(e.customPeople)) { customPeople.length = 0; e.customPeople.forEach((h) => customPeople.push(h)); }
+      if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
@@ -2293,7 +2323,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
