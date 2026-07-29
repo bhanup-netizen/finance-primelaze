@@ -361,6 +361,7 @@ tr.total-row:hover td { background: var(--surface-3); }
 /* ---------- Salon CRM ---------- */
 .crm-stage-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .crm-stage-card h3 { font-size: 13.5px; margin: 0 0 8px; color: var(--accent); }
+.crm-stage-card.crm-current { outline: 2px solid var(--accent); outline-offset: -1px; }
 .crm-files { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; font-size: 12.5px; }
 .crm-file a { color: var(--accent); text-decoration: none; }
 .crm-file a:hover { text-decoration: underline; }

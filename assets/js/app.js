@@ -1706,11 +1706,16 @@
     const prodField = `<label class="ord-field"><span>Interested product (Esthemax)</span><input id="cd_product" list="crmProducts" value="${esc(l.product || "")}" placeholder="Esthemax product" ${ro}></label>`;
     const mapLink = crmMapUrl(l) ? `<a href="${esc(crmMapUrl(l))}" target="_blank" rel="noopener" class="linkish">📍 Open in Google Maps</a>` : "";
 
+    const stageDone = (so) => so.status === "done" || (so.status !== "skipped" && (so.remark || "").trim());
     const stageCards = CRM_STAGES.map((s) => {
       const so = crmStageObj(l, s.id);
-      return `<div class="card crm-stage-card">
-        <h3 style="margin-top:0">${esc(s.label)}</h3>
+      const badge = so.status === "skipped" ? `<span class="badge b-warn">Skipped</span>`
+        : stageDone(so) ? `<span class="badge b-good">Done</span>`
+        : `<span class="badge b-neutral">Pending</span>`;
+      return `<div class="card crm-stage-card${l.stage === s.id ? " crm-current" : ""}">
+        <h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:8px">${esc(s.label)} ${badge}</h3>
         <label class="ord-field"><span>Remark</span><textarea class="crm-remark" data-stage="${s.id}" rows="2" placeholder="Notes for this stage…" ${ro}>${esc(so.remark || "")}</textarea></label>
+        ${so.status === "skipped" ? `<div class="muted-note">Skip reason: ${esc(so.reason || "—")}</div>` : ""}
         <div class="crm-files" id="crmFiles_${s.id}">${crmFilesHtml(l, s.id)}</div>
         ${admin ? `<label class="ghost-btn" style="cursor:pointer;margin-top:8px;display:inline-block">📎 Attach file<input type="file" class="crm-file-in" data-stage="${s.id}" style="display:none"></label>` : ""}
       </div>`;
@@ -1770,9 +1775,30 @@
     ["firstName", "lastName", "mobile", "company", "type", "state", "city", "location", "mapUrl", "product", "amount", "source"].forEach((f) => {
       const el = document.getElementById("cd_" + f); if (el) el.oninput = () => { l[f] = el.value; touch(); };
     });
-    ["gender", "stage"].forEach((f) => {
-      const el = document.getElementById("cd_" + f); if (el) el.onchange = () => { l[f] = el.value; touch(); };
-    });
+    const gEl = document.getElementById("cd_gender");
+    if (gEl) gEl.onchange = () => { l.gender = gEl.value; touch(); };
+    // Gated stage progression: can't pass Initial Conversation until it has a
+    // remark; skipping Demo Scheduled / Demo Performed needs a reason.
+    const stEl = document.getElementById("cd_stage");
+    if (stEl) stEl.onchange = () => {
+      const target = stEl.value;
+      const ti = CRM_STAGES.findIndex((s) => s.id === target);
+      for (let i = 0; i < ti; i++) {
+        const s = CRM_STAGES[i];
+        if (s.id === "won" || s.id === "lost") continue;
+        const so = crmStageObj(l, s.id);
+        const doneish = so.status === "skipped" || so.status === "done" || (so.remark || "").trim();
+        if (doneish) { if (so.status !== "skipped") so.status = "done"; continue; }
+        if (s.id === "initial") {
+          window.alert("Complete the Initial Conversation first — add a remark before moving to the next step.");
+          stEl.value = l.stage; return;
+        }
+        const reason = (window.prompt(`You're skipping "${s.label}". Why didn't this step happen?`) || "").trim();
+        if (!reason) { window.alert(`A reason is required to skip "${s.label}".`); stEl.value = l.stage; return; }
+        so.status = "skipped"; so.reason = reason;
+      }
+      l.stage = target; touch(); go("crm");
+    };
     document.querySelectorAll(".crm-remark").forEach((t) => {
       t.oninput = () => { crmStageObj(l, t.dataset.stage).remark = t.value; touch(); };
     });
