@@ -1580,8 +1580,8 @@
         <div class="seg">${filters}</div>
         ${admin ? `<div class="hq-actions">
           <button id="crmAdd" class="dl-btn" type="button">＋ Add contact</button>
-          <label class="ghost-btn" for="crmCsv" style="cursor:pointer">⤒ Import CSV</label>
-          <input id="crmCsv" type="file" accept=".csv,text/csv" style="display:none">
+          <label class="ghost-btn" for="crmCsv" style="cursor:pointer">⤒ Import CSV / Excel</label>
+          <input id="crmCsv" type="file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="display:none">
           <button id="crmTemplate" class="ghost-btn" type="button">CSV template</button>
         </div>` : ""}
       </div>
@@ -1642,7 +1642,26 @@
     const tpl = document.getElementById("crmTemplate");
     if (tpl) tpl.onclick = () => downloadCsvTemplate();
     const csv = document.getElementById("crmCsv");
-    if (csv) csv.onchange = () => { const f = csv.files[0]; if (f) { const r = new FileReader(); r.onload = () => importCrmCsv(r.result); r.readAsText(f); } };
+    if (csv) csv.onchange = () => {
+      const f = csv.files[0]; if (!f) return;
+      const name = (f.name || "").toLowerCase();
+      if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+        loadSheetJS().then((XLSX) => {
+          const r = new FileReader();
+          r.onload = () => {
+            try {
+              const wb = XLSX.read(new Uint8Array(r.result), { type: "array" });
+              const ws = wb.Sheets[wb.SheetNames[0]];
+              importCrmRows(XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }));
+            } catch (e) { window.alert("Couldn't read the Excel file: " + (e.message || e)); }
+          };
+          r.readAsArrayBuffer(f);
+        }).catch((e) => window.alert(e.message || e));
+      } else {
+        const r = new FileReader(); r.onload = () => importCrmCsv(r.result); r.readAsText(f);
+      }
+      csv.value = ""; // allow re-importing the same file
+    };
     wireCRMBody();
   }
 
@@ -1679,9 +1698,26 @@
     return rows.filter((r) => r.some((x) => String(x).trim() !== ""));
   }
 
-  function importCrmCsv(text) {
-    const rows = parseCSV(text);
-    if (rows.length < 2) { window.alert("CSV looks empty."); return; }
+  function importCrmCsv(text) { importCrmRows(parseCSV(text)); }
+
+  // Lazy-load SheetJS only when an Excel file is imported.
+  let sheetJsLoading = null;
+  function loadSheetJS() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (sheetJsLoading) return sheetJsLoading;
+    sheetJsLoading = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = () => reject(new Error("Couldn't load the Excel reader (offline?). Please export the sheet to CSV and import that."));
+      document.head.appendChild(s);
+    });
+    return sheetJsLoading;
+  }
+
+  function importCrmRows(rows) {
+    rows = (rows || []).map((r) => r.map((c) => (c == null ? "" : String(c))));
+    if (rows.length < 2) { window.alert("The file looks empty."); return; }
     const headers = rows[0].map((h) => h.replace(/\s+/g, " ").trim().toLowerCase());
     const col = (...names) => { for (const n of names) { const i = headers.indexOf(n.toLowerCase()); if (i >= 0) return i; } return -1; };
     const iFn = col("first name"), iLn = col("last name", "last name "), iMob = col("mobile", "phone"),
