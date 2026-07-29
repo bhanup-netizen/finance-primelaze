@@ -1741,10 +1741,11 @@
       <text x="95" y="33" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">Primelaze</text>
       <text x="95" y="63" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#3a3a3a" text-anchor="middle">We rise by our service</text>
     </svg>`;
-  const challanLogo = () => (window.PRIMELAZE_LOGO ? `<img src="${window.PRIMELAZE_LOGO}" alt="Primelaze" style="height:64px">` : LOGO_SVG);
-  // Optional Director signature image (data-URI). Set window.PRIMELAZE_SIGNATURE
-  // to embed the real signature; otherwise a signing space is printed.
-  const challanSign = () => (window.PRIMELAZE_SIGNATURE ? `<img src="${window.PRIMELAZE_SIGNATURE}" alt="" style="height:56px">` : `<div style="height:52px"></div>`);
+  // Brand images (data-URIs) — admin uploads them; stored in Firestore config.
+  let brandLogo = window.PRIMELAZE_LOGO || "";
+  let brandSign = window.PRIMELAZE_SIGNATURE || "";
+  const challanLogo = () => (brandLogo ? `<img src="${brandLogo}" alt="Primelaze" style="height:64px">` : LOGO_SVG);
+  const challanSign = () => (brandSign ? `<img src="${brandSign}" alt="" style="height:56px">` : `<div style="height:52px"></div>`);
 
   // Standard "purpose of this item" declarations (from the official template).
   const PURPOSE_STATEMENTS = [
@@ -1777,9 +1778,32 @@
         <h1>Delivery Challan</h1>
         <p>${roleIsAdmin() ? "Create delivery challans and download them as PDF. " : "View and download delivery challans. "}Everyone can view &amp; download; only admins can create.</p>
       </div>
-      ${roleIsAdmin() ? `<div class="controls"><button id="newChallanBtn" class="dl-btn" type="button">＋ New challan</button></div>` : ""}
+      ${roleIsAdmin() ? `<div class="controls"><button id="newChallanBtn" class="dl-btn" type="button">＋ New challan</button>
+        <button id="brandBtn" class="ghost-btn" type="button">🖼 Logo &amp; signature</button></div>` : ""}
+      <div id="brandBox"></div>
       <div id="challanForm"></div>
       <div id="challanList"><div class="empty">Loading…</div></div>`;
+  }
+
+  function challanBrandHtml() {
+    return `
+      <div class="card" style="margin-bottom:20px">
+        <h2 style="margin-top:0">Challan logo &amp; signature</h2>
+        <p class="muted-note">Upload your Primelaze logo and the Director signature (PNG, ideally transparent background). They print on every challan and are saved for everyone. Keep each image small (under ~300&nbsp;KB).</p>
+        <div class="ch-grid">
+          <label class="ord-field"><span>Logo image</span><input id="brandLogoFile" type="file" accept="image/*"></label>
+          <label class="ord-field"><span>Signature image</span><input id="brandSignFile" type="file" accept="image/*"></label>
+        </div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;margin:10px 0">
+          <div><div class="muted-note">Logo preview</div><div id="brandLogoPrev" style="border:1px solid var(--border);border-radius:8px;padding:8px;min-width:120px;min-height:50px">${challanLogo()}</div></div>
+          <div><div class="muted-note">Signature preview</div><div id="brandSignPrev" style="border:1px solid var(--border);border-radius:8px;padding:8px;min-width:120px;min-height:50px">${brandSign ? challanSign() : '<span class="t-muted">none</span>'}</div></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button id="brandSave" class="dl-btn" type="button">Save branding</button>
+          <button id="brandClose" class="ghost-btn" type="button">Close</button>
+        </div>
+        <div id="brandMsg" class="lock-error" style="min-height:16px"></div>
+      </div>`;
   }
 
   function challanFormHtml(c) {
@@ -1943,7 +1967,41 @@
   function initChallanUI() {
     const nb = document.getElementById("newChallanBtn");
     if (nb) nb.onclick = () => openChallanForm(null);
+    const bb = document.getElementById("brandBtn");
+    if (bb) bb.onclick = () => {
+      const box = document.getElementById("brandBox");
+      if (!box) return;
+      box.innerHTML = box.innerHTML ? "" : challanBrandHtml();
+      if (box.innerHTML) wireChallanBrand();
+    };
     loadChallans();
+  }
+
+  function readImageFile(file, cb) {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => cb(r.result);
+    r.readAsDataURL(file);
+  }
+
+  function wireChallanBrand() {
+    const msg = document.getElementById("brandMsg");
+    const lf = document.getElementById("brandLogoFile");
+    const sf = document.getElementById("brandSignFile");
+    if (lf) lf.onchange = () => readImageFile(lf.files[0], (d) => { brandLogo = d; document.getElementById("brandLogoPrev").innerHTML = challanLogo(); });
+    if (sf) sf.onchange = () => readImageFile(sf.files[0], (d) => { brandSign = d; document.getElementById("brandSignPrev").innerHTML = challanSign(); });
+    const close = document.getElementById("brandClose");
+    if (close) close.onclick = () => { document.getElementById("brandBox").innerHTML = ""; };
+    const save = document.getElementById("brandSave");
+    if (save) save.onclick = async () => {
+      const size = (brandLogo.length + brandSign.length);
+      if (size > 900000) { msg.style.color = "var(--bad)"; msg.textContent = "Images too large — please use smaller PNGs (under ~300 KB each)."; return; }
+      if (!db) { msg.style.color = "var(--accent-2)"; msg.textContent = "Saved for this session (no Firebase connection to persist)."; return; }
+      try {
+        await db.collection("config").doc("app").set({ challanLogo: brandLogo, challanSignature: brandSign }, { merge: true });
+        msg.style.color = "var(--accent-2)"; msg.textContent = "Saved — the logo & signature now print on every challan.";
+      } catch (e) { msg.style.color = "var(--bad)"; msg.textContent = "Save failed: " + (e.message || e); }
+    };
   }
 
   async function loadChallans() {
@@ -2502,8 +2560,13 @@
     let key = DEFAULT_DATA_KEY;
     try {
       const cs = await db.collection("config").doc("app").get();
-      if (cs.exists && cs.data().dataKey) key = cs.data().dataKey;
-      else if (roleIsAdmin()) await db.collection("config").doc("app").set({ dataKey: DEFAULT_DATA_KEY }, { merge: true });
+      if (cs.exists) {
+        const cd = cs.data() || {};
+        if (cd.dataKey) key = cd.dataKey;
+        else if (roleIsAdmin()) await db.collection("config").doc("app").set({ dataKey: DEFAULT_DATA_KEY }, { merge: true });
+        if (cd.challanLogo) brandLogo = cd.challanLogo;
+        if (cd.challanSignature) brandSign = cd.challanSignature;
+      } else if (roleIsAdmin()) await db.collection("config").doc("app").set({ dataKey: DEFAULT_DATA_KEY }, { merge: true });
     } catch (e) { console.warn("config read failed, using default key", e); }
 
     D = await decryptData(key);
