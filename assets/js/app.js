@@ -962,6 +962,16 @@
     if (vEl) vEl.textContent = inr(value);
   }
 
+  // Split an annual target evenly across 4 quarters (remainder to earlier Qs).
+  function splitQuarters(annual) {
+    const n = parseFloat(annual);
+    if (isNaN(n) || n <= 0) return { q1: "", q2: "", q3: "", q4: "" };
+    const base = Math.floor(n / 4); let rem = Math.round(n - base * 4);
+    const q = [base, base, base, base];
+    for (let i = 0; i < rem && i < 4; i++) q[i] += 1;
+    return { q1: q[0], q2: q[1], q3: q[2], q4: q[3] };
+  }
+
   function recomputeHqQtr(pk) {
     const pid = idfor(pk);
     const t = { q1: 0, q2: 0, q3: 0, q4: 0 };
@@ -993,16 +1003,22 @@
       const productRows = pl.rows.filter((r) => !r.isTotal);
       const adds = hqAdds[pk] || [];
       const QK = ["q1", "q2", "q3", "q4"];
+      // Effective quarter value: explicit override wins, else the annual FY26-27
+      // target auto-divided evenly across the four quarters.
+      const qEff = (vals, annual, q) => (vals && vals[q] != null) ? vals[q] : splitQuarters(annual)[q];
       // units total over device rows (numeric deviceValue) incl. added products
       let tu = 0; const tq = { q1: 0, q2: 0, q3: 0, q4: 0 };
-      const addQtr = (vals) => QK.forEach((q) => { const n = parseFloat(vals && vals[q]); if (!isNaN(n)) tq[q] += n; });
-      productRows.forEach((r, ri) => { if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; } addQtr(hqQtr[pk + "#" + ri]); });
-      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; addQtr(a); });
+      const addQtr = (vals, annual) => QK.forEach((q) => { const n = parseFloat(qEff(vals, annual, q)); if (!isNaN(n)) tq[q] += n; });
+      productRows.forEach((r, ri) => { const ann = effVal(pk, ri, r.fy2627); if (isNum(r.deviceValue) && isNum(ann)) tu += ann; addQtr(hqQtr[pk + "#" + ri], ann); });
+      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; addQtr(a, a.fy2627); });
 
-      // Q1–Q4 editable cells (admin). attrs identifies the row; vals holds q1..q4.
-      const qtrCells = (attrs, vals) => QK.map((q) => isAdmin()
-        ? `<td class="num"><input class="hq-qtr" type="number" min="0" ${attrs} data-q="${q}" value="${esc(vals && vals[q] != null ? vals[q] : "")}" style="max-width:58px"></td>`
-        : `<td class="num">${vals && vals[q] != null && vals[q] !== "" ? esc(vals[q]) : "—"}</td>`).join("");
+      // Q1–Q4 editable cells (admin). Pre-filled with the even split of FY26-27.
+      const qtrCells = (attrs, vals, annual) => QK.map((q) => {
+        const dv = qEff(vals, annual, q);
+        return isAdmin()
+          ? `<td class="num"><input class="hq-qtr" type="number" min="0" ${attrs} data-q="${q}" value="${esc(dv == null || dv === "" ? "" : dv)}" style="max-width:58px"></td>`
+          : `<td class="num">${dv == null || dv === "" ? "—" : esc(dv)}</td>`;
+      }).join("");
 
       const prodHtml = productRows.map((r, ri) => {
         const editable = isNum(r.fy2627);
@@ -1010,7 +1026,7 @@
         const fyCell = editable
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
-        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-ri="${ri}"`, hqQtr[pk + "#" + ri])}</tr>`;
+        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-ri="${ri}"`, hqQtr[pk + "#" + ri], v)}</tr>`;
       }).join("");
 
       const addHtml = adds.map((a, ai) => {
@@ -1018,7 +1034,7 @@
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
           : esc(a.fy2627);
         const rm = isAdmin() ? ` <button class="linkish hq-add-rm" data-pk="${esc(pk)}" data-ai="${ai}" title="Remove">✕</button>` : "";
-        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-add="${ai}"`, a)}</tr>`;
+        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-add="${ai}"`, a, a.fy2627)}</tr>`;
       }).join("");
 
       const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td>${QK.map((q) => `<td class="num" id="totq_${pid}_${q}">${inr(tq[q])}</td>`).join("")}</tr>`;
