@@ -857,6 +857,7 @@
     });
     document.querySelectorAll(".sale-rm").forEach((b) => {
       b.onclick = () => {
+        if (!window.confirm("Remove this sale record?")) return;
         const map = storeFor(b.dataset.store);
         map[key] = (map[key] || []).filter((x) => x.id !== b.dataset.id);
         saveEdits(); mountHqDetail(h);
@@ -899,10 +900,10 @@
       <td>${txt(rec, "location", "City / location", "hqStates")}</td>
       <td>${txt(rec, "soldBy", "Salesperson", "salesPeople")}</td>
       <td class="num">${num(rec, "amount", "₹ sold for")}</td>
-      ${admin ? `<td class="num"><button class="linkish sale-rm" data-store="${store}" data-id="${rec.id}" title="Remove">✕</button></td>` : ""}
+      ${admin ? `<td class="num"><button class="ghost-btn sale-rm" data-store="${store}" data-id="${rec.id}" title="Remove this sale">Remove</button></td>` : ""}
     </tr>`).join("") || `<tr><td colspan="${(isEsth ? 6 : 5) + (admin ? 1 : 0)}" class="empty">No sales recorded yet.${admin ? " Click “Add sale”." : ""}</td></tr>`;
 
-    const head = ["Product"].concat(isEsth ? ["Qty (boxes)"] : [], ["Bought by (Doctor / Clinic)", "Location", "Sold by", "Sold for (₹)"], admin ? [""] : [])
+    const head = ["Product"].concat(isEsth ? ["Qty (boxes)"] : [], ["Bought by (Doctor / Clinic)", "Location", "Sold by", "Sold for (₹)"], admin ? ["Action"] : [])
       .map((x, i) => `<th class="${isEsth && i === 1 ? "num" : ""}">${x}</th>`).join("");
 
     // Rollup: units/boxes sold + total value.
