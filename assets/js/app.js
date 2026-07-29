@@ -725,6 +725,7 @@
   let hqIndex = 0;
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
   const hqAdds = {};  // `${sheet}#${planIdx}` -> [{product, fy2627, deviceValue}]
+  const hqQtr = {};   // `${pk}#${ri}` -> { q1, q2, q3, q4 } per-product quarterly target
   // Sales achieved per HQ sheet.
   const hqSales = {};     // device sales: `${sheet}` -> [{ id, product, buyer, location, soldBy, amount }]
   const hqEsthSales = {}; // esthemax sales: `${sheet}` -> [{ id, product, qty, buyer, location, soldBy, amount }]
@@ -811,6 +812,21 @@
           hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = isNaN(v) ? null : v;
         }
         recomputeHqPlan(inp.dataset.pk);
+        saveEdits();
+      };
+    });
+    // Per-product quarterly targets (Q1–Q4).
+    document.querySelectorAll(".hq-qtr").forEach((inp) => {
+      inp.oninput = () => {
+        const q = inp.dataset.q, val = inp.value === "" ? "" : parseFloat(inp.value);
+        if (inp.dataset.add != null) {
+          const a = (hqAdds[inp.dataset.pk] || [])[+inp.dataset.add];
+          if (a) a[q] = val;
+        } else {
+          const k = inp.dataset.pk + "#" + inp.dataset.ri;
+          (hqQtr[k] || (hqQtr[k] = {}))[q] = val;
+        }
+        recomputeHqQtr(inp.dataset.pk);
         saveEdits();
       };
     });
@@ -946,6 +962,15 @@
     if (vEl) vEl.textContent = inr(value);
   }
 
+  function recomputeHqQtr(pk) {
+    const pid = idfor(pk);
+    const t = { q1: 0, q2: 0, q3: 0, q4: 0 };
+    document.querySelectorAll(`.hq-qtr[data-pk="${CSS.escape(pk)}"]`).forEach((inp) => {
+      const n = parseFloat(inp.value); if (!isNaN(n)) t[inp.dataset.q] += n;
+    });
+    ["q1", "q2", "q3", "q4"].forEach((q) => { const el = document.getElementById(`totq_${pid}_${q}`); if (el) el.textContent = inr(t[q]); });
+  }
+
   // Hide monetary (Value in Lakhs / Std Value) figures — units only on screen.
   const isMoney = (label) => /value|lakh|inr|₹/i.test(String(label));
   function hqDetail(h) {
@@ -963,14 +988,21 @@
     const plans = (h.plans && h.plans.length ? h.plans : []).map((pl, pi) => {
       const pk = h.sheet + "#" + pi;
       const pid = idfor(pk);
-      const head = ["Product", "FY25-26", "FY26-27"]
+      const head = ["Product", "FY25-26", "FY26-27", "Q1", "Q2", "Q3", "Q4"]
         .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
       const productRows = pl.rows.filter((r) => !r.isTotal);
       const adds = hqAdds[pk] || [];
+      const QK = ["q1", "q2", "q3", "q4"];
       // units total over device rows (numeric deviceValue) incl. added products
-      let tu = 0;
-      productRows.forEach((r, ri) => { if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; } });
-      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; });
+      let tu = 0; const tq = { q1: 0, q2: 0, q3: 0, q4: 0 };
+      const addQtr = (vals) => QK.forEach((q) => { const n = parseFloat(vals && vals[q]); if (!isNaN(n)) tq[q] += n; });
+      productRows.forEach((r, ri) => { if (isNum(r.deviceValue)) { const v = effVal(pk, ri, r.fy2627); if (isNum(v)) tu += v; } addQtr(hqQtr[pk + "#" + ri]); });
+      adds.forEach((a) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; addQtr(a); });
+
+      // Q1–Q4 editable cells (admin). attrs identifies the row; vals holds q1..q4.
+      const qtrCells = (attrs, vals) => QK.map((q) => isAdmin()
+        ? `<td class="num"><input class="hq-qtr" type="number" min="0" ${attrs} data-q="${q}" value="${esc(vals && vals[q] != null ? vals[q] : "")}" style="max-width:58px"></td>`
+        : `<td class="num">${vals && vals[q] != null && vals[q] !== "" ? esc(vals[q]) : "—"}</td>`).join("");
 
       const prodHtml = productRows.map((r, ri) => {
         const editable = isNum(r.fy2627);
@@ -978,7 +1010,7 @@
         const fyCell = editable
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
           : (r.fy2627 ?? "—");
-        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td></tr>`;
+        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-ri="${ri}"`, hqQtr[pk + "#" + ri])}</tr>`;
       }).join("");
 
       const addHtml = adds.map((a, ai) => {
@@ -986,10 +1018,10 @@
           ? `<input class="tgt-input" type="number" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
           : esc(a.fy2627);
         const rm = isAdmin() ? ` <button class="linkish hq-add-rm" data-pk="${esc(pk)}" data-ai="${ai}" title="Remove">✕</button>` : "";
-        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td></tr>`;
+        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${qtrCells(`data-pk="${esc(pk)}" data-add="${ai}"`, a)}</tr>`;
       }).join("");
 
-      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td></tr>`;
+      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td>${QK.map((q) => `<td class="num" id="totq_${pid}_${q}">${inr(tq[q])}</td>`).join("")}</tr>`;
 
       const addCtrl = isAdmin() ? `
         <div class="hq-add-row">
@@ -1715,9 +1747,9 @@
             <label class="ord-field"><span>Weight</span><input id="chWeight" value="${esc(c.weight || "")}" placeholder="e.g. 12 kg"></label>
           </div>
           <div class="ch-grid">
-            <label class="ord-field"><span>From — pick office</span>
+            <label class="ord-field"><span>From — pick office <button type="button" id="chSaveFrom" class="linkish" title="Save the From name+address below to the address book">💾 Save current</button></span>
               <select id="chFromPick" class="select">${challanPickOptions(fromBook())}</select></label>
-            <label class="ord-field"><span>To — pick consignee</span>
+            <label class="ord-field"><span>To — pick consignee <button type="button" id="chSaveTo" class="linkish" title="Save the To name+address below to the address book">💾 Save current</button></span>
               <select id="chToPick" class="select">${challanPickOptions(toBook())}</select></label>
             <label class="ord-field"><span>From — name</span><input id="chFromName" value="${esc(c.fromName || DEFAULT_FROM.name)}"></label>
             <label class="ord-field"><span>To — name (consignee)</span><input id="chToName" value="${esc(c.toName || "")}" placeholder="Dr. Name / Clinic"></label>
@@ -1820,6 +1852,17 @@
         if (x.purpose && !$("#chNotes").value) $("#chNotes").value = x.purpose;
       }
     };
+    // Save the currently-typed From/To name + address to the address book.
+    const saveCurrent = (nameSel, addrSel) => {
+      const nm = ($(nameSel).value || "").trim();
+      if (!nm) { const m = $("#chMsg"); if (m) { m.style.color = "var(--bad)"; m.textContent = "Enter a name first, then Save current."; } return; }
+      const ad = ($(addrSel).value || "").trim();
+      if (!customAddresses.some((x) => x.name === nm && x.addr === ad)) { customAddresses.push({ name: nm, addr: ad }); saveEdits(); }
+      refreshChallanPicks();
+      const m = $("#chMsg"); if (m) { m.style.color = "var(--accent-2)"; m.textContent = `Saved “${nm}” to the address book.`; }
+    };
+    const sf = document.getElementById("chSaveFrom"); if (sf) sf.onclick = () => saveCurrent("#chFromName", "#chFromAddr");
+    const st = document.getElementById("chSaveTo"); if (st) st.onclick = () => saveCurrent("#chToName", "#chToAddr");
     $("#chCancel").onclick = () => { $("#challanForm").innerHTML = ""; };
     $("#chForm").onsubmit = async (e) => {
       e.preventDefault();
@@ -2443,6 +2486,7 @@
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
+      if (e.hqQtr) Object.keys(e.hqQtr).forEach((k) => { hqQtr[k] = e.hqQtr[k]; });
       if (e.hqSales) Object.keys(e.hqSales).forEach((k) => { if (Array.isArray(e.hqSales[k])) hqSales[k] = e.hqSales[k]; });
       if (e.hqEsthSales) Object.keys(e.hqEsthSales).forEach((k) => { if (Array.isArray(e.hqEsthSales[k])) hqEsthSales[k] = e.hqEsthSales[k]; });
       {
@@ -2465,7 +2509,7 @@
       });
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqSales, hqEsthSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
