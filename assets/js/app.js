@@ -916,7 +916,7 @@
       <td>${txt(rec, "location", "City / location", "hqStates")}</td>
       <td>${txt(rec, "soldBy", "Salesperson", "salesPeople")}</td>
       <td class="num">${num(rec, "amount", "₹ sold for")}</td>
-      ${admin ? `<td class="num"><button class="ghost-btn sale-rm" data-store="${store}" data-id="${rec.id}" title="Remove this sale">Remove</button></td>` : ""}
+      ${admin ? `<td class="num"><button class="ghost-btn danger sale-rm" data-store="${store}" data-id="${rec.id}" title="Delete this sale">🗑 Delete</button></td>` : ""}
     </tr>`).join("") || `<tr><td colspan="${(isEsth ? 6 : 5) + (admin ? 1 : 0)}" class="empty">No sales recorded yet.${admin ? " Click “Add sale”." : ""}</td></tr>`;
 
     const head = ["Product"].concat(isEsth ? ["Qty (boxes)"] : [], ["Bought by (Doctor / Clinic)", "Location", "Sold by", "Sold for (₹)"], admin ? ["Action"] : [])

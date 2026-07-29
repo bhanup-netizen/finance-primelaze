@@ -479,6 +479,8 @@ tr.total-row:hover td { background: var(--surface-3); }
   cursor: pointer; font-family: inherit; transition: .12s;
 }
 .ghost-btn:hover { background: var(--surface-3); color: var(--text); }
+.ghost-btn.danger { color: #c0202a; border-color: #f0c0c0; }
+.ghost-btn.danger:hover { background: color-mix(in srgb, #ef4444 12%, var(--surface)); color: #c0202a; }
 .stock-input {
   width: 68px; padding: 5px 8px; border-radius: 7px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--text); font-size: 13px; text-align: right;
