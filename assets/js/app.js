@@ -1152,14 +1152,25 @@
   }
 
   /* ================= INCENTIVES ================= */
-  let incView = "device";
+  let incView = "device", incWho = "sales";
+  const incMgr = () => incWho === "manager" && canSeeManagerInc();
   function renderIncentives() {
+    if (incWho === "manager" && !canSeeManagerInc()) incWho = "sales";
+    const refresh = () => { $("#incBody").innerHTML = incBody(); wireAccordion(); };
     setTimeout(() => {
       document.querySelectorAll("[data-inc]").forEach((b) => {
         b.onclick = () => {
           incView = b.dataset.inc;
           document.querySelectorAll("[data-inc]").forEach((x) => x.classList.toggle("active", x === b));
-          $("#incBody").innerHTML = incBody();
+          document.getElementById("incWhoSeg").style.display = incView === "terms" ? "none" : "";
+          refresh();
+        };
+      });
+      document.querySelectorAll("[data-incwho]").forEach((b) => {
+        b.onclick = () => {
+          incWho = b.dataset.incwho;
+          document.querySelectorAll("[data-incwho]").forEach((x) => x.classList.toggle("active", x === b));
+          refresh();
         };
       });
       wireAccordion();
@@ -1176,6 +1187,10 @@
           <button data-inc="celluma" class="${incView === "celluma" ? "active" : ""}">Celluma</button>
           <button data-inc="esthemax" class="${incView === "esthemax" ? "active" : ""}">Esthemax</button>
           <button data-inc="terms" class="${incView === "terms" ? "active" : ""}">Terms &amp; Conditions</button>
+        </div>
+        <div class="seg" id="incWhoSeg" style="${incView === "terms" ? "display:none" : ""}">
+          <button data-incwho="sales" class="${incWho === "sales" ? "active" : ""}">Salesperson</button>
+          ${canSeeManagerInc() ? `<button data-incwho="manager" class="${incWho === "manager" ? "active" : ""}">Manager</button>` : ""}
         </div>
       </div>
       <div id="incBody">${incBody()}</div>`;
@@ -1202,21 +1217,22 @@
         <td class="cell-note">${esc(r.aboveStd || "—")}</td></tr>`).join("");
       return table(head, body);
     };
+    const mgr = incMgr();
     return `
       <div class="callout">Standard = selling price (pricelist + ₹50K FY26-27 uplift). Sell above Standard → +10% of the excess (Sales Person only). Below Standard → 70% of Std. Manager earns a flat 50% of Std on reportee sales, full SP rates on direct sales.</div>
-      <div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson, false)}</div>
-      ${canSeeManagerInc() ? `<div class="block"><h2>Sales Manager plan <span class="pill-inline">flat 50% of Std</span></h2>${mk(D.incentives.device.manager, true)}</div>` : ""}`;
+      ${mgr
+        ? `<div class="block"><h2>Sales Manager plan <span class="pill-inline">flat 50% of Std</span></h2>${mk(D.incentives.device.manager, true)}</div>`
+        : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson, false)}</div>`}`;
   }
 
   function cellumaIncentive() {
-    const mgr = canSeeManagerInc();
-    const cols = ["Model", "Selling Price (excl. GST)", "Salesperson Incentive"].concat(mgr ? ["Sales Manager Incentive"] : []);
+    const mgr = incMgr();
+    const cols = ["Model", "Selling Price (excl. GST)", mgr ? "Sales Manager Incentive" : "Salesperson Incentive"];
     const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
     const body = D.incentives.celluma.map((r) => `<tr>
       <td class="t-name">${esc(r.model)}</td>
       <td class="num">${rupee(r.sellingPrice)}</td>
-      <td class="num">${rupee(r.salespersonIncentive)}</td>
-      ${mgr ? `<td class="num">${rupee(r.managerIncentive)}</td>` : ""}</tr>`).join("");
+      <td class="num">${rupee(mgr ? r.managerIncentive : r.salespersonIncentive)}</td></tr>`).join("");
     return `
       <div class="callout teal">Single Standard (selling) price per model; no minimum. Manager incentive is a flat 50% of the salesperson standard. Target rule: 1 Celluma / IC / month (12/yr), 10 units per HQ per year at HQ level.</div>
       ${table(head, body)}`;
@@ -1234,10 +1250,12 @@
         <td>${esc(t.label)}</td></tr>`).join("");
       return table(head, body);
     };
+    const mgr = incMgr();
     return `
       <div class="callout">Hydrojelly 6-tier per-box slab. Threshold = monthly box achievement; incentive applied per box, retrospective to box 1. Payment terms: full incentive if paid within 45 days, 50% within 60 days, none after 60 days.</div>
-      <div class="block"><h2>Sales Person slab</h2>${mk(D.incentives.esthemax.salesperson)}</div>
-      ${canSeeManagerInc() ? `<div class="block"><h2>Sales Manager slab</h2>${mk(D.incentives.esthemax.manager)}</div>` : ""}`;
+      ${mgr
+        ? `<div class="block"><h2>Sales Manager slab</h2>${mk(D.incentives.esthemax.manager)}</div>`
+        : `<div class="block"><h2>Sales Person slab</h2>${mk(D.incentives.esthemax.salesperson)}</div>`}`;
   }
 
   function termsView() {
