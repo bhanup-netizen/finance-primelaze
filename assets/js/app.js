@@ -1559,6 +1559,7 @@
   let crmSeq = 0, crmStage = "all", crmSearch = "";
   let crmView = "list", crmCurrentId = null, crmDraft = null;
   const crmName = (l) => `${l.firstName || ""} ${l.lastName || ""}`.trim() || "—";
+  const titleCase = (s) => String(s || "").trim().toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
   const crmStageLabel = (id) => id === "outcome" ? "Awaiting outcome" : ((CRM_STAGES.find((s) => s.id === id) || {}).label || id);
   const CRM_PIPE = ["initial", "demo_sched", "demo_done"];
   const crmCurIdx = (l) => {
@@ -1630,16 +1631,27 @@
       return true;
     });
     const stageBadge = (l) => `<span class="badge ${l.stage === "won" ? "b-good" : l.stage === "lost" ? "b-bad" : "b-info"}">${esc(crmStageLabel(l.stage))}</span>`;
-    const rows = list.map((l) => `<tr>
+    const leadRow = (l) => `<tr>
       <td class="t-name">${esc(crmName(l))}</td>
       <td>${esc(l.company || "—")}</td>
       <td>${esc(l.mobile || "—")}</td>
-      <td>${esc(l.city || "—")}</td>
+      <td>${esc(titleCase(l.city) || "—")}</td>
       <td>${esc(l.product || "—")}</td>
       <td>${stageBadge(l)}</td>
       <td class="num">${l.amount ? rupee(+l.amount) : "—"}</td>
       <td class="num" style="white-space:nowrap"><button class="ghost-btn crm-open" data-id="${l.id}">${admin ? "Open / edit" : "View"}</button>${admin ? ` <button class="ghost-btn danger crm-del" data-id="${l.id}" title="Delete contact">🗑</button>` : ""}</td>
-    </tr>`).join("") || `<tr><td colspan="8" class="empty">No contacts${crmStage !== "all" ? " in this stage" : ""}. ${admin ? "Add one or import a file." : ""}</td></tr>`;
+    </tr>`;
+
+    // Group contacts by state; missing state → "Unspecified" bucket (last).
+    const groups = {};
+    list.forEach((l) => { const k = titleCase(l.state) || "Unspecified"; (groups[k] = groups[k] || []).push(l); });
+    const keys = Object.keys(groups).sort((a, b) => (a === "Unspecified") - (b === "Unspecified") || a.localeCompare(b));
+    const rows = keys.map((k) => {
+      const inner = groups[k]
+        .sort((a, b) => (titleCase(a.city) || "￿").localeCompare(titleCase(b.city) || "￿") || crmName(a).localeCompare(crmName(b)))
+        .map(leadRow).join("");
+      return `<tr class="crm-group"><td colspan="8">📍 ${esc(k)} <span class="t-muted">· ${groups[k].length} contact${groups[k].length === 1 ? "" : "s"}</span></td></tr>${inner}`;
+    }).join("") || `<tr><td colspan="8" class="empty">No contacts${crmStage !== "all" ? " in this stage" : ""}. ${admin ? "Add one or import a file." : ""}</td></tr>`;
     const head = ["Contact", "Company", "Mobile", "City", "Interested product", "Stage", "Deal value (₹)", ""]
       .map((x) => `<th>${x}</th>`).join("");
     return table(head, rows);
