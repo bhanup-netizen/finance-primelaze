@@ -924,17 +924,17 @@
       : (rec[field] == null || rec[field] === "" ? "—" : esc(rec[field]));
 
     const rows = list.map((rec) => `<tr>
+      ${admin ? `<td class="num"><button class="ghost-btn danger sale-rm" data-store="${store}" data-id="${rec.id}" title="Delete this sale">🗑</button></td>` : ""}
       <td>${sel(rec)}</td>
       ${isEsth ? `<td class="num">${num(rec, "qty", "boxes")}</td>` : ""}
       <td>${txt(rec, "buyer", "Dr. / Clinic name")}</td>
       <td>${txt(rec, "location", "City / location", "hqStates")}</td>
       <td>${txt(rec, "soldBy", "Salesperson", "salesPeople")}</td>
       <td class="num">${num(rec, "amount", "₹ sold for")}</td>
-      ${admin ? `<td class="num"><button class="ghost-btn danger sale-rm" data-store="${store}" data-id="${rec.id}" title="Delete this sale">🗑 Delete</button></td>` : ""}
     </tr>`).join("") || `<tr><td colspan="${(isEsth ? 6 : 5) + (admin ? 1 : 0)}" class="empty">No sales recorded yet.${admin ? " Click “Add sale”." : ""}</td></tr>`;
 
-    const head = ["Product"].concat(isEsth ? ["Qty (boxes)"] : [], ["Bought by (Doctor / Clinic)", "Location", "Sold by", "Sold for (₹)"], admin ? ["Action"] : [])
-      .map((x, i) => `<th class="${isEsth && i === 1 ? "num" : ""}">${x}</th>`).join("");
+    const head = (admin ? [""] : []).concat("Product", isEsth ? ["Qty (boxes)"] : [], ["Bought by (Doctor / Clinic)", "Location", "Sold by", "Sold for (₹)"])
+      .map((x) => `<th>${x}</th>`).join("");
 
     // Rollup: units/boxes sold + total value.
     const qtySum = isEsth ? list.reduce((s, r) => s + (parseFloat(r.qty) || 0), 0) : list.length;
