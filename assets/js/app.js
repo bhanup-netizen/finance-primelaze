@@ -2095,9 +2095,9 @@
         </div>
 
         <div class="ch-sign">
-          <div class="ch-sign-name">${esc(COMPANY.signName)}</div>
-          ${challanSign()}
-          <div class="ch-sign-role">Director</div>
+          ${brandSign
+            ? challanSign()
+            : `<div class="ch-sign-name">${esc(COMPANY.signName)}</div>${challanSign()}<div class="ch-sign-role">Director</div>`}
         </div>
       </div>`;
   }
