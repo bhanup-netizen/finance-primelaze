@@ -2879,8 +2879,25 @@
     // use a throwaway secondary app so creating the user doesn't sign the admin out
     const sec = firebase.initializeApp(window.FIREBASE_CONFIG, "sec-" + Math.floor(performance.now()));
     try {
-      const cred = await sec.auth().createUserWithEmailAndPassword(email, pass);
-      await db.collection("users").doc(cred.user.uid).set({ email: email.toLowerCase(), ...docData });
+      let uid;
+      try {
+        const cred = await sec.auth().createUserWithEmailAndPassword(email, pass);
+        uid = cred.user.uid;
+      } catch (err) {
+        // The Auth account already exists (e.g. a previously-revoked user, or
+        // an account from another app in this project). Revoke only deletes the
+        // Firestore doc, not the Auth login — so re-grant by signing in with the
+        // password to get the uid and (re)writing the permission doc.
+        if (err && err.code === "auth/email-already-in-use") {
+          try {
+            const cred = await sec.auth().signInWithEmailAndPassword(email, pass);
+            uid = cred.user.uid;
+          } catch (e2) {
+            throw new Error("This email already has an account. Enter that account's current password to re-grant access (or send a password reset first).");
+          }
+        } else throw err;
+      }
+      await db.collection("users").doc(uid).set({ email: email.toLowerCase(), ...docData });
       try { await sec.auth().signOut(); } catch (e) {}
     } finally { try { await sec.delete(); } catch (e) {} }
   }
@@ -2958,7 +2975,7 @@
           if (b.dataset.email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) {
             window.alert("The bootstrap admin can't be revoked here."); return;
           }
-          if (!window.confirm("Revoke access for " + b.dataset.email + "? (Removes their permissions.)")) return;
+          if (!window.confirm("Revoke access for " + b.dataset.email + "?\n\nThis removes their permissions from the database only. Their login still exists — to re-grant later, use Add user with the same email (enter their password to re-link).")) return;
           try { await db.collection("users").doc(b.dataset.uid).delete(); loadUserList(); }
           catch (e) { window.alert("Could not revoke: " + (e.message || e)); }
         };
