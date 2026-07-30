@@ -13,18 +13,27 @@
   let appMode = "view";                 // editing on/off (admins can toggle)
   let currentTab = "overview";
   let userRole = "view";                // "admin" | "view"
-  let perms = { pages: "all", hqs: "all", landing: false, managerInc: false };
+  let perms = { pages: "all", hqs: "all", landing: false, managerInc: false, editPages: [] };
   let sessionUser = null;               // firebase.User
   let auth = null, db = null;           // firebase handles
 
   const roleIsAdmin = () => userRole === "admin";
-  const isAdmin = () => roleIsAdmin() && appMode === "admin";       // editing enabled
+  // A "view" user can be granted edit rights on specific pages (page admin).
+  const canEditPage = (id) => {
+    const ep = perms.editPages;
+    return ep === "all" || (Array.isArray(ep) && ep.includes(id));
+  };
+  const hasAnyEditGrant = () => perms.editPages === "all" || (Array.isArray(perms.editPages) && perms.editPages.length > 0);
+  // "editing enabled" for the CURRENT page: full admins (in admin mode), or a
+  // view-user who was granted edit rights on this specific page.
+  const isAdmin = () => roleIsAdmin() ? appMode === "admin" : canEditPage(currentTab);
   const canSeeLanding = () => roleIsAdmin() || perms.landing === true;
   const canSeeManagerInc = () => roleIsAdmin() || perms.managerInc === true;
   const roAttr = () => (isAdmin() ? "" : "disabled");
   const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
   const canSeePage = (id) => {
-    if (id === "admin") return isAdmin(); // only while an admin is in Admin (edit) mode
+    if (id === "admin") return roleIsAdmin() && appMode === "admin"; // full admins in edit mode
+    if (canEditPage(id)) return true; // page editors can always see what they edit
     const p = allowedPages();
     return p === "all" || p.includes(id);
   };
@@ -2552,13 +2561,13 @@
     catch (e) { console.warn("users read failed", e); }
 
     if (!udoc && isBootstrap) {
-      udoc = { email, role: "admin", pages: "all", hqs: "all", landing: true, managerInc: true, name: "Administrator" };
+      udoc = { email, role: "admin", pages: "all", hqs: "all", landing: true, managerInc: true, editPages: "all", name: "Administrator" };
       try { await db.collection("users").doc(user.uid).set(udoc); } catch (e) { console.warn("bootstrap write failed", e); }
     }
     if (!udoc) throw new Error("no-access");
 
     userRole = udoc.role === "admin" ? "admin" : "view";
-    perms = { pages: udoc.pages || [], hqs: udoc.hqs || [], landing: !!udoc.landing, managerInc: !!udoc.managerInc };
+    perms = { pages: udoc.pages || [], hqs: udoc.hqs || [], landing: !!udoc.landing, managerInc: !!udoc.managerInc, editPages: udoc.editPages || [] };
     appMode = "view";
 
     // data decryption key (kept in Firestore, readable only by signed-in users)
@@ -2621,7 +2630,7 @@
 
   let saveTimer = null;
   function saveEdits() {
-    if (!db || !roleIsAdmin()) return;
+    if (!db || !(roleIsAdmin() || hasAnyEditGrant())) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
       const stock = {}, eta = {};
@@ -2678,7 +2687,7 @@
         D = await decryptData($("#lockPass").value || "");
         const role = new URLSearchParams(location.search).get("role");
         userRole = role === "view" ? "view" : "admin";
-        perms = { pages: "all", hqs: "all", landing: userRole === "admin" };
+        perms = { pages: "all", hqs: "all", landing: userRole === "admin", managerInc: userRole === "admin", editPages: userRole === "admin" ? "all" : [] };
         sessionUser = { email: "dev@localhost" };
         showApp();
       } catch (err) {
@@ -2742,6 +2751,8 @@
     setTimeout(initAdminUI, 0);
     const pageChecks = PERMISSION_PAGES.map((t) =>
       `<label class="chk"><input type="checkbox" class="perm-page" value="${t.id}" checked> ${esc(t.label)}</label>`).join("");
+    const editChecks = PERMISSION_PAGES.map((t) =>
+      `<label class="chk"><input type="checkbox" class="perm-edit" value="${t.id}"> ${esc(t.label)}</label>`).join("");
     const hqChecks = D.hqTargets.map((h) => {
       const n = h.title.split("—")[0].trim();
       return `<label class="chk"><input type="checkbox" class="perm-hq" value="${esc(n)}" checked> ${esc(n)}</label>`;
@@ -2762,7 +2773,9 @@
             </label>
             <label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
             <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label>
-            <div class="perm-group"><div class="perm-title">Pages <button type="button" class="linkish" data-all="perm-page">all/none</button></div><div class="perm-grid">${pageChecks}</div></div>
+            <div class="perm-group"><div class="perm-title">Pages they can VIEW <button type="button" class="linkish" data-all="perm-page">all/none</button></div><div class="perm-grid">${pageChecks}</div></div>
+            <div class="perm-group"><div class="perm-title">Pages they can EDIT (page admin) <button type="button" class="linkish" data-all="perm-edit">all/none</button></div><div class="perm-grid">${editChecks}</div>
+              <div class="muted-note" style="margin-top:6px">Grant edit to make someone a page admin (e.g. HR edits Team Roster) while everyone else stays view-only. Full “Admin” role can edit everything.</div></div>
             <div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>
             <button type="submit" class="dl-btn" id="auSubmit">Create user</button>
             <div id="auMsg" class="lock-error" style="min-height:16px"></div>
@@ -2778,14 +2791,17 @@
   function collectPerms() {
     const pages = Array.from(document.querySelectorAll(".perm-page:checked")).map((c) => c.value);
     const hqs = Array.from(document.querySelectorAll(".perm-hq:checked")).map((c) => c.value);
+    const editPages = Array.from(document.querySelectorAll(".perm-edit:checked")).map((c) => c.value);
     const allPages = pages.length === PERMISSION_PAGES.length;
     const allHqs = hqs.length === D.hqTargets.length;
+    const allEdit = editPages.length === PERMISSION_PAGES.length;
     return {
       role: document.getElementById("auRole").value === "admin" ? "admin" : "view",
       landing: document.getElementById("auLanding").checked,
       managerInc: document.getElementById("auMgrInc").checked,
       pages: allPages ? "all" : pages,
       hqs: allHqs ? "all" : hqs,
+      editPages: allEdit ? "all" : editPages,
     };
   }
 
@@ -2835,8 +2851,10 @@
       const rows = [];
       snap.forEach((doc) => {
         const u = doc.data();
+        const editN = u.editPages === "all" ? "all" : (u.editPages || []).length;
         const scope = [
           u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages"),
+          u.role === "admin" ? "edits all" : (editN === "all" || editN > 0 ? "edits " + editN : "view-only"),
           u.hqs === "all" ? "all HQs" : ((u.hqs || []).length + " HQs"),
           u.landing ? "landing✓" : "no-landing",
           u.managerInc ? "mgr-inc✓" : "no-mgr-inc",

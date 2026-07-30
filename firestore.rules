@@ -19,6 +19,14 @@ service cloud.firestore {
          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
+    // A "view" user granted edit rights on one or more pages (page admin).
+    function isPageEditor() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages == 'all'
+            || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages is list
+                && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages.size() > 0));
+    }
 
     // App config (holds the data-decryption key) — any signed-in user may read;
     // only admins may write.
@@ -27,10 +35,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Shared edits/overrides — signed-in users read; admins write.
+    // Shared edits/overrides — signed-in users read; admins and page editors
+    // write. (Page editors can technically write any field in the shared doc;
+    // acceptable for an internal team tool.)
     match /edits/{doc} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isPageEditor();
     }
 
     // Delivery challans — any signed-in user may read/download; admins write.
