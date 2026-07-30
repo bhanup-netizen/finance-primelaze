@@ -302,7 +302,8 @@
   // divFilter: "all" | "Derma" | "Salon/Spa" (Arjun is NSM of every division).
   function renderOrgChart(divFilter) {
     divFilter = divFilter || "all";
-    const ROOT = "Arjun";
+    const ARJUN = "Arjun";
+    const isCto = (r) => /^cto$/i.test(r);
     const all = roster()
       .filter((p) => divFilter === "all" || (rval(p, "division") || "Derma") === divFilter)
       .map((p) => ({
@@ -316,6 +317,7 @@
     const byName = {}; all.forEach((x) => { byName[x.name] = x; });
     const childrenOf = (mgr) => all.filter((x) => x.rep === mgr && x.name !== mgr)
       .sort((a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name));
+    const rank = (a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name);
 
     const node = (x, seen) => {
       if (seen.has(x.name)) return "";
@@ -332,18 +334,21 @@
       </li>`;
     };
 
-    const seen = new Set([ROOT]);
-    // Direct reports to Arjun + any orphans whose manager isn't in the roster.
-    const roots = all.filter((x) => x.name !== ROOT && (x.rep === ROOT || !byName[x.rep]))
-      .sort((a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name));
+    const seen = new Set([ARJUN, "CTO"]);
+    // Arjun's reports: reportsTo = "Arjun", or orphans (unknown manager, not CTO).
+    const arjunKids = all.filter((x) => x.name !== ARJUN && !isCto(x.rep) && (x.rep === ARJUN || !byName[x.rep])).sort(rank);
+    // Peers of Arjun that report straight to the (vacant) CTO.
+    const ctoPeers = all.filter((x) => x.name !== ARJUN && isCto(x.rep)).sort(rank);
+
+    const arjunNode = `<li class="org-node">
+      <div class="org-card org-root"><span class="org-name">Arjun</span><span class="org-desig">National Sales Manager</span></div>
+      <ul class="org-children">${arjunKids.map((k) => node(k, seen)).join("")}</ul>
+    </li>`;
 
     return `<ul class="org-tree">
       <li class="org-node">
-        <div class="org-card org-root">
-          <span class="org-name">Arjun</span>
-          <span class="org-desig">National Sales Manager</span>
-        </div>
-        <ul class="org-children">${roots.map((k) => node(k, seen)).join("")}</ul>
+        <div class="org-card org-cto"><span class="org-name">CTO</span><span class="org-desig">Chief — position vacant</span></div>
+        <ul class="org-children">${arjunNode}${ctoPeers.map((k) => node(k, seen)).join("")}</ul>
       </li>
     </ul>`;
   }
@@ -422,7 +427,7 @@
           ${ed ? selCell(p, "designation", rosterOptions("designation")) : cell(p, "designation")}
           ${divCell}
           ${ed ? selCell(p, "baseHQ", rosterOptions("baseHQ", customHQs), true) : cell(p, "baseHQ")}
-          ${ed ? selCell(p, "reportsTo", rosterOptions("reportsTo")) : cell(p, "reportsTo")}
+          ${ed ? selCell(p, "reportsTo", rosterOptions("reportsTo", ["CTO", "Arjun"])) : cell(p, "reportsTo")}
           ${ed ? selCell(p, "zone", rosterOptions("zone")) : cell(p, "zone")}
           ${statusCell}
         </tr>`;
@@ -462,6 +467,15 @@
           if (box) box.innerHTML = renderOrgChart(orgDiv);
         };
       });
+      const orgAdd = document.getElementById("orgAddBtn");
+      if (orgAdd) orgAdd.onclick = () => {
+        const aid = "r" + (rosterAddSeq++);
+        rosterAdds.push({ _aid: aid, name: "New position", designation: "", division: "Derma", baseHQ: "", reportsTo: "Arjun", zone: "", status: "tojoin" });
+        saveEdits();
+        teamTab = "roster"; teamFilter = "all"; teamDivision = "all"; teamSearch = "";
+        go("team");
+        flashRow(aid);
+      };
     }, 0);
 
     return teamSubnav() + `
@@ -478,8 +492,10 @@
             <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">Derma</button>
             <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">Salon/Spa</button>
           </div>
+          ${isAdmin() ? `<div class="hq-actions"><button id="orgAddBtn" class="dl-btn" type="button">＋ Add position</button></div>` : ""}
         </div>
         <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
+        ${isAdmin() ? `<div class="muted-note" style="margin-top:8px">Add a position, then set its name, designation and who it reports to (CTO, Arjun, or any manager) in the roster row that appears below.</div>` : ""}
       </details>
       <div class="controls">
         <input id="teamSearch" class="search" type="search" placeholder="Search name, HQ, zone, division…" />
@@ -2625,6 +2641,9 @@
         hqSaleSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
+      editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
+      if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
+      updateLastUpdatedUI();
     } catch (err) { console.warn("edits read failed", err); }
   }
 
@@ -2638,11 +2657,34 @@
         if (orderState.stock[i] != null) stock[it.name] = orderState.stock[i];
         if (orderState.eta[i]) eta[it.name] = orderState.eta[i];
       });
+      const by = (sessionUser && sessionUser.email) || "";
+      const at = Date.now();
+      const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
+      editsUpdatedAt = at; editsUpdatedBy = by;
+      editsLog.unshift({ by, at, tab: tabLabel });
+      if (editsLog.length > 40) editsLog.length = 40;
+      updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
+  }
+
+  // ---- Last-updated / activity log ----
+  let editsUpdatedAt = 0, editsUpdatedBy = "";
+  const editsLog = [];
+  function fmtWhen(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return d.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  function updateLastUpdatedUI() {
+    const el = document.getElementById("lastUpdated");
+    const dot = document.getElementById("luDot");
+    const txt = editsUpdatedAt ? `Last updated ${fmtWhen(editsUpdatedAt)}${editsUpdatedBy ? " · " + editsUpdatedBy : ""}` : "";
+    if (el) el.textContent = txt;
+    if (dot) dot.hidden = !txt;
   }
 
   function authErr(e) {
@@ -2785,6 +2827,14 @@
           <h2 style="margin-top:0">Existing users</h2>
           <div id="userList"><div class="empty">Loading…</div></div>
         </div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <h2 style="margin-top:0">Activity log</h2>
+        <p class="muted-note" style="margin-top:0">Most recent edits (who changed which page, and when). Last ${editsLog.length} shown.</p>
+        ${editsLog.length
+          ? table(["When", "By", "Page"].map((x) => `<th>${x}</th>`).join(""),
+              editsLog.map((e) => `<tr><td>${esc(fmtWhen(e.at))}</td><td class="t-name">${esc(e.by || "—")}</td><td>${esc(e.tab || "—")}</td></tr>`).join(""))
+          : `<div class="empty">No activity recorded yet.</div>`}
       </div>`;
   }
 

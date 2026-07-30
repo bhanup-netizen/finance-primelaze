@@ -365,6 +365,8 @@ tr.total-row:hover td { background: var(--surface-3); }
   background: linear-gradient(135deg, var(--accent), #6d5efc); border-color: transparent;
 }
 .org-card.org-root .org-name, .org-card.org-root .org-desig { color: #fff; }
+.org-card.org-cto { background: var(--surface-3); border: 1px dashed var(--border-strong); }
+.org-card.org-cto .org-name { color: var(--text-2); }
 .org-card.org-vacant { border-color: #f3b0b0; background: color-mix(in srgb, #ef4444 12%, var(--surface)); }
 .org-card.org-tojoin { border-color: #a9c3f5; background: color-mix(in srgb, #3b82f6 12%, var(--surface)); }
 .org-card.org-spa { border-color: #9fd8d6; background: color-mix(in srgb, #0ea5a4 12%, var(--surface)); }
