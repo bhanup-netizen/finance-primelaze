@@ -218,6 +218,7 @@
 
   /* ================= TEAM ROSTER ================= */
   let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDiv = "all";
+  let orgTop = { name: "CTO", title: "Chief — position vacant" }; // editable top node
   const rosterEdits = {}; // `${num}#${field}` -> value
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
   let rosterAddSeq = 0;
@@ -347,7 +348,7 @@
 
     return `<ul class="org-tree">
       <li class="org-node">
-        <div class="org-card org-cto"><span class="org-name">CTO</span><span class="org-desig">Chief — position vacant</span></div>
+        <div class="org-card org-cto"><span class="org-name">${esc(orgTop.name || "CTO")}</span><span class="org-desig">${esc(orgTop.title || "")}</span></div>
         <ul class="org-children">${arjunNode}${ctoPeers.map((k) => node(k, seen)).join("")}</ul>
       </li>
     </ul>`;
@@ -467,6 +468,16 @@
           if (box) box.innerHTML = renderOrgChart(orgDiv);
         };
       });
+      const orgTopBtn = document.getElementById("orgTopBtn");
+      if (orgTopBtn) orgTopBtn.onclick = () => {
+        const name = (window.prompt("Top position title (e.g. CTO, Managing Director):", orgTop.name || "CTO") || "").trim();
+        if (!name) return;
+        const title = (window.prompt("Subtitle / status (e.g. name or 'position vacant'):", orgTop.title || "") || "").trim();
+        orgTop = { name, title };
+        saveEdits();
+        const box = document.getElementById("orgScroll");
+        if (box) box.innerHTML = renderOrgChart(orgDiv);
+      };
       const orgAdd = document.getElementById("orgAddBtn");
       if (orgAdd) orgAdd.onclick = () => {
         const aid = "r" + (rosterAddSeq++);
@@ -492,7 +503,7 @@
             <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">Derma</button>
             <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">Salon/Spa</button>
           </div>
-          ${isAdmin() ? `<div class="hq-actions"><button id="orgAddBtn" class="dl-btn" type="button">＋ Add position</button></div>` : ""}
+          ${isAdmin() ? `<div class="hq-actions"><button id="orgTopBtn" class="ghost-btn" type="button">✎ Rename top</button><button id="orgAddBtn" class="dl-btn" type="button">＋ Add position</button></div>` : ""}
         </div>
         <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
         ${isAdmin() ? `<div class="muted-note" style="margin-top:8px">Add a position, then set its name, designation and who it reports to (CTO, Arjun, or any manager) in the roster row that appears below.</div>` : ""}
@@ -2641,6 +2652,7 @@
         hqSaleSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
+      if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "" };
       editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
       updateLastUpdatedUI();
@@ -2666,7 +2678,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
@@ -2831,9 +2843,14 @@
       <div class="card" style="margin-top:20px">
         <h2 style="margin-top:0">Activity log</h2>
         <p class="muted-note" style="margin-top:0">Most recent edits (who changed which page, and when). Last ${editsLog.length} shown.</p>
-        ${editsLog.length
-          ? table(["When", "By", "Page"].map((x) => `<th>${x}</th>`).join(""),
-              editsLog.map((e) => `<tr><td>${esc(fmtWhen(e.at))}</td><td class="t-name">${esc(e.by || "—")}</td><td>${esc(e.tab || "—")}</td></tr>`).join(""))
+        ${editsLog.length ? `
+        <div class="controls">
+          <label class="ord-field"><span>User</span><select id="logUserFilter" class="select"><option value="all">All users</option>${Array.from(new Set(editsLog.map((e) => e.by).filter(Boolean))).sort().map((u) => `<option>${esc(u)}</option>`).join("")}</select></label>
+          <label class="ord-field"><span>Page</span><select id="logPageFilter" class="select"><option value="all">All pages</option>${Array.from(new Set(editsLog.map((e) => e.tab).filter(Boolean))).sort().map((p) => `<option>${esc(p)}</option>`).join("")}</select></label>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>When</th><th>By</th><th>Page</th></tr></thead>
+          <tbody id="logRows">${editsLog.map((e) => `<tr data-by="${esc(e.by || "")}" data-tab="${esc(e.tab || "")}"><td>${esc(fmtWhen(e.at))}</td><td class="t-name">${esc(e.by || "—")}</td><td>${esc(e.tab || "—")}</td></tr>`).join("")}</tbody>
+        </table></div>`
           : `<div class="empty">No activity recorded yet.</div>`}
       </div>`;
   }
@@ -2873,6 +2890,16 @@
         boxes.forEach((x) => (x.checked = anyOff));
       };
     });
+    const luf = document.getElementById("logUserFilter"), lpf = document.getElementById("logPageFilter");
+    const applyLogFilter = () => {
+      const u = luf ? luf.value : "all", p = lpf ? lpf.value : "all";
+      document.querySelectorAll("#logRows tr").forEach((tr) => {
+        const show = (u === "all" || tr.dataset.by === u) && (p === "all" || tr.dataset.tab === p);
+        tr.style.display = show ? "" : "none";
+      });
+    };
+    if (luf) luf.onchange = applyLogFilter;
+    if (lpf) lpf.onchange = applyLogFilter;
     const form = document.getElementById("addUserForm");
     if (form) form.onsubmit = async (e) => {
       e.preventDefault();
