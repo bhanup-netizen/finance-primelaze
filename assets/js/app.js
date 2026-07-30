@@ -2803,10 +2803,8 @@
   function renderAdmin() {
     if (!roleIsAdmin()) return `<div class="section-head"><h1>Admin</h1></div><div class="empty">Administrator access only.</div>`;
     setTimeout(initAdminUI, 0);
-    const pageChecks = PERMISSION_PAGES.map((t) =>
-      `<label class="chk"><input type="checkbox" class="perm-page" value="${t.id}" checked> ${esc(t.label)}</label>`).join("");
-    const editChecks = PERMISSION_PAGES.map((t) =>
-      `<label class="chk"><input type="checkbox" class="perm-edit" value="${t.id}"> ${esc(t.label)}</label>`).join("");
+    const accessRows = PERMISSION_PAGES.map((t) =>
+      `<label class="chk perm-access-row"><span style="flex:1">${esc(t.label)}</span><select class="perm-access select" data-page="${t.id}"><option value="edit">Edit</option><option value="view" selected>View</option><option value="none">No access</option></select></label>`).join("");
     const hqChecks = D.hqTargets.map((h) => {
       const n = h.title.split("—")[0].trim();
       return `<label class="chk"><input type="checkbox" class="perm-hq" value="${esc(n)}" checked> ${esc(n)}</label>`;
@@ -2827,9 +2825,12 @@
             </label>
             <label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
             <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label>
-            <div class="perm-group"><div class="perm-title">Pages they can VIEW <button type="button" class="linkish" data-all="perm-page">all/none</button></div><div class="perm-grid">${pageChecks}</div></div>
-            <div class="perm-group"><div class="perm-title">Pages they can EDIT (page admin) <button type="button" class="linkish" data-all="perm-edit">all/none</button></div><div class="perm-grid">${editChecks}</div>
-              <div class="muted-note" style="margin-top:6px">Grant edit to make someone a page admin (e.g. HR edits Team Roster) while everyone else stays view-only. Full “Admin” role can edit everything.</div></div>
+            <div class="perm-group"><div class="perm-title">Page access <span>
+              <button type="button" class="linkish" data-access="edit">all edit</button> ·
+              <button type="button" class="linkish" data-access="view">all view</button> ·
+              <button type="button" class="linkish" data-access="none">none</button></span></div>
+              <div class="perm-grid">${accessRows}</div>
+              <div class="muted-note" style="margin-top:6px">Per page: <b>View</b> = read-only, <b>Edit</b> = page admin (can change it, e.g. HR editing Team Roster), <b>No access</b> = hidden. Full “Admin” role edits everything.</div></div>
             <div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>
             <button type="submit" class="dl-btn" id="auSubmit">Create user</button>
             <div id="auMsg" class="lock-error" style="min-height:16px"></div>
@@ -2856,9 +2857,11 @@
   }
 
   function collectPerms() {
-    const pages = Array.from(document.querySelectorAll(".perm-page:checked")).map((c) => c.value);
+    const access = {};
+    document.querySelectorAll(".perm-access").forEach((s) => { access[s.dataset.page] = s.value; });
+    const pages = PERMISSION_PAGES.filter((t) => access[t.id] === "view" || access[t.id] === "edit").map((t) => t.id);
+    const editPages = PERMISSION_PAGES.filter((t) => access[t.id] === "edit").map((t) => t.id);
     const hqs = Array.from(document.querySelectorAll(".perm-hq:checked")).map((c) => c.value);
-    const editPages = Array.from(document.querySelectorAll(".perm-edit:checked")).map((c) => c.value);
     const allPages = pages.length === PERMISSION_PAGES.length;
     const allHqs = hqs.length === D.hqTargets.length;
     const allEdit = editPages.length === PERMISSION_PAGES.length;
@@ -2890,6 +2893,9 @@
         boxes.forEach((x) => (x.checked = anyOff));
       };
     });
+    document.querySelectorAll("[data-access]").forEach((b) => {
+      b.onclick = () => { document.querySelectorAll(".perm-access").forEach((s) => (s.value = b.dataset.access)); };
+    });
     const luf = document.getElementById("logUserFilter"), lpf = document.getElementById("logPageFilter");
     const applyLogFilter = () => {
       const u = luf ? luf.value : "all", p = lpf ? lpf.value : "all";
@@ -2911,7 +2917,8 @@
         await adminCreateUser(email, pass, collectPerms());
         msg.style.color = "var(--good)"; msg.textContent = "User created ✓";
         form.reset();
-        document.querySelectorAll(".perm-page,.perm-hq").forEach((c) => (c.checked = true));
+        document.querySelectorAll(".perm-hq").forEach((c) => (c.checked = true));
+        document.querySelectorAll(".perm-access").forEach((s) => (s.value = "view"));
         loadUserList();
       } catch (err) {
         msg.style.color = "var(--bad)"; msg.textContent = authErr(err);
