@@ -1,0 +1,6 @@
+# Netlify config for the Label & Invoice Splitter.
+# If you set this folder ("label-splitter") as the Base directory in Netlify,
+# this file makes it deploy as-is (pure static site, no build step).
+[build]
+  publish = "."
+  command = ""
