@@ -2799,8 +2799,10 @@
 
   /* ---------------- Admin: user & permission management ---------------- */
   const PERMISSION_PAGES = TABS.filter((t) => t.id !== "admin");
+  let editingUid = null; // set while editing an existing user's access
 
   function renderAdmin() {
+    editingUid = null;
     if (!roleIsAdmin()) return `<div class="section-head"><h1>Admin</h1></div><div class="empty">Administrator access only.</div>`;
     setTimeout(initAdminUI, 0);
     const accessRows = PERMISSION_PAGES.map((t) =>
@@ -2832,7 +2834,7 @@
               <div class="perm-grid">${accessRows}</div>
               <div class="muted-note" style="margin-top:6px">Per page: <b>View</b> = read-only, <b>Edit</b> = page admin (can change it, e.g. HR editing Team Roster), <b>No access</b> = hidden. Full “Admin” role edits everything.</div></div>
             <div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>
-            <button type="submit" class="dl-btn" id="auSubmit">Create user</button>
+            <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="submit" class="dl-btn" id="auSubmit">Create user</button><button type="button" class="ghost-btn" id="auCancel" hidden>Cancel edit</button></div>
             <div id="auMsg" class="lock-error" style="min-height:16px"></div>
           </form>
         </div>
@@ -2873,6 +2875,35 @@
       hqs: allHqs ? "all" : hqs,
       editPages: allEdit ? "all" : editPages,
     };
+  }
+
+  // Load an existing user's access into the form for editing.
+  function fillUserForm(u, uid) {
+    editingUid = uid;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    const emailEl = document.getElementById("auEmail");
+    if (emailEl) { emailEl.value = u.email || ""; emailEl.readOnly = true; }
+    set("auRole", u.role === "admin" ? "admin" : "view");
+    chk("auLanding", u.landing); chk("auMgrInc", u.managerInc);
+    const pagesAll = u.pages === "all", editAll = u.editPages === "all";
+    const pagesList = Array.isArray(u.pages) ? u.pages : [], editList = Array.isArray(u.editPages) ? u.editPages : [];
+    document.querySelectorAll(".perm-access").forEach((s) => {
+      const id = s.dataset.page;
+      s.value = (editAll || editList.includes(id)) ? "edit" : ((pagesAll || pagesList.includes(id)) ? "view" : "none");
+    });
+    const hqsAll = u.hqs === "all", hqList = Array.isArray(u.hqs) ? u.hqs : [];
+    document.querySelectorAll(".perm-hq").forEach((c) => { c.checked = hqsAll || hqList.includes(c.value); });
+    const passEl = document.getElementById("auPass");
+    if (passEl) { passEl.required = false; passEl.value = ""; const f = passEl.closest(".ord-field"); if (f) f.style.display = "none"; }
+    const sub = document.getElementById("auSubmit"); if (sub) sub.textContent = "Save changes";
+    const cancel = document.getElementById("auCancel"); if (cancel) cancel.hidden = false;
+    const msg = document.getElementById("auMsg"); if (msg) { msg.style.color = "var(--text-2)"; msg.textContent = "Editing " + (u.email || "") + " — change access, then Save."; }
+    const form = document.getElementById("addUserForm"); if (form) form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function adminUpdateUser(uid, docData) {
+    await db.collection("users").doc(uid).set(docData, { merge: true });
   }
 
   async function adminCreateUser(email, pass, docData) {
@@ -2923,12 +2954,25 @@
     };
     if (luf) luf.onchange = applyLogFilter;
     if (lpf) lpf.onchange = applyLogFilter;
+    const cancelBtn = document.getElementById("auCancel");
+    if (cancelBtn) cancelBtn.onclick = () => go("admin"); // reset the form to create mode
     const form = document.getElementById("addUserForm");
     if (form) form.onsubmit = async (e) => {
       e.preventDefault();
       const msg = document.getElementById("auMsg"), sub = document.getElementById("auSubmit");
-      msg.style.color = ""; msg.textContent = ""; sub.disabled = true; sub.textContent = "Creating…";
+      const editing = !!editingUid;
+      msg.style.color = ""; msg.textContent = ""; sub.disabled = true; sub.textContent = editing ? "Saving…" : "Creating…";
       try {
+        if (editing) {
+          const perms2 = collectPerms();
+          const em = (document.getElementById("auEmail").value || "").trim().toLowerCase();
+          if (em === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) { perms2.role = "admin"; perms2.editPages = "all"; perms2.pages = "all"; }
+          await adminUpdateUser(editingUid, perms2);
+          editingUid = null;
+          msg.style.color = "var(--good)"; msg.textContent = "Access updated ✓";
+          go("admin");
+          return;
+        }
         const email = document.getElementById("auEmail").value.trim();
         const pass = document.getElementById("auPass").value;
         await adminCreateUser(email, pass, collectPerms());
@@ -2939,7 +2983,7 @@
         loadUserList();
       } catch (err) {
         msg.style.color = "var(--bad)"; msg.textContent = authErr(err);
-      } finally { sub.disabled = false; sub.textContent = "Create user"; }
+      } finally { sub.disabled = false; sub.textContent = editingUid ? "Save changes" : "Create user"; }
     };
     loadUserList();
   }
@@ -2960,16 +3004,20 @@
           u.landing ? "landing✓" : "no-landing",
           u.managerInc ? "mgr-inc✓" : "no-mgr-inc",
         ].join(" · ");
+        const permsJson = esc(JSON.stringify({ email: u.email || "", role: u.role || "view", landing: !!u.landing, managerInc: !!u.managerInc, pages: u.pages || [], hqs: u.hqs || [], editPages: u.editPages || [] }));
         rows.push(`<tr>
           <td class="t-name">${esc(u.email || "—")}</td>
           <td><span class="badge ${u.role === "admin" ? "b-good" : "b-neutral"}">${esc(u.role || "view")}</span></td>
           <td class="t-muted">${esc(scope)}</td>
-          <td><button class="ghost-btn u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
+          <td style="white-space:nowrap"><button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
         </tr>`);
       });
       box.innerHTML = rows.length
         ? table(["User", "Role", "Access", ""].map((h) => `<th>${h}</th>`).join(""), rows.join(""))
         : `<div class="empty">No users yet.</div>`;
+      box.querySelectorAll(".u-edit").forEach((b) => {
+        b.onclick = () => { try { fillUserForm(JSON.parse(b.dataset.perms), b.dataset.uid); } catch (e) {} };
+      });
       box.querySelectorAll(".u-del").forEach((b) => {
         b.onclick = async () => {
           if (b.dataset.email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) {
