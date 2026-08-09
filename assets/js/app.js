@@ -167,7 +167,7 @@
 
     // HQ target value ranking
     const hqVals = D.hqTargets.map((h) => {
-      const sv = (h.summary.find && h.summary.find((s) => /Std Value/i.test(s.label))) || null;
+      const sv = (h.summary && h.summary.find((s) => /Std Value/i.test(s.label))) || null;
       return { name: h.title.split("—")[0].trim(), value: sv && isNum(sv.value) ? sv.value : 0 };
     }).filter((h) => h.value > 0).sort((a, b) => b.value - a.value);
     const maxHq = Math.max(...hqVals.map((h) => h.value), 1);
@@ -509,7 +509,7 @@
         ${isAdmin() ? `<div class="muted-note" style="margin-top:8px">Add a position, then set its name, designation and who it reports to (CTO, Arjun, or any manager) in the roster row that appears below.</div>` : ""}
       </details>
       <div class="controls">
-        <input id="teamSearch" class="search" type="search" placeholder="Search name, HQ, zone, division…" />
+        <input id="teamSearch" class="search" type="search" value="${esc(teamSearch)}" placeholder="Search name, HQ, zone, division…" />
         <div class="seg">
           <button data-tfilter="all" class="${teamFilter === "all" ? "active" : ""}">All</button>
           <button data-tfilter="active" class="${teamFilter === "active" ? "active" : ""}">Active</button>
@@ -1797,6 +1797,7 @@
   function demoAddRow() {
     const ncol = D.demoMachines[demoView].columns.length;
     (demoAdds[demoView] = demoAdds[demoView] || []).push({ id: "a" + (demoAddSeq++), vals: new Array(ncol).fill("") });
+    demoFilter = "all"; // don't let an active status filter hide the new blank row
     saveEdits(); demoRepaint();
   }
 
@@ -2332,7 +2333,7 @@
         const el = document.getElementById(id);
         if (el) el.oninput = (e) => {
           const v = parseFloat(e.target.value);
-          if (!isNaN(v)) { orderState[key] = factor ? v / 100 : v; orderPaint(); }
+          if (!isNaN(v)) { orderState[key] = factor ? v / 100 : v; orderPaint(); saveEdits(); }
         };
       };
       wire("ordUsd", "usdInr", false);
@@ -2353,7 +2354,7 @@
         const p = D.esthemaxOrder.params;
         orderState.usdInr = p.usdInr; orderState.customs = p.customsRate;
         orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.eta = {};
-        renderTab("order");
+        saveEdits(); renderTab("order");
       };
       orderPaint();
     }, 0);
@@ -2794,6 +2795,12 @@
       }
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
       if (e.invLines && typeof e.invLines === "object") orderState.lineData = e.invLines;
+      // Restore the admin-set FX / customs / lot sizes (orderInit only fills
+      // these when still null, so restored values survive the first render).
+      if (e.usdInr != null) orderState.usdInr = e.usdInr;
+      if (e.customs != null) orderState.customs = e.customs;
+      if (e.moqJar != null) orderState.moqJar = e.moqJar;
+      if (e.moqRetail != null) orderState.moqRetail = e.moqRetail;
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "" };
       editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
@@ -2820,7 +2827,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
