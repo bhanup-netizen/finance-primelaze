@@ -1621,19 +1621,31 @@
   // Display-only column renames (keeps the underlying data key for logic).
   const demoColLabel = (c) => (/^manager$/i.test(c) ? "Current Taker" : c);
   let demoView = "current";
+  let demoFilter = "all"; // status filter for the Current-status table
 
   const demoAddById = (rid) => (demoAdds[demoView] || []).find((x) => x.id === rid);
 
   const STATUS_COLS = ["Status"];
   const CONDITION_COLS = ["Condition", "Cond. Out", "Cond. Return"];
 
+  // Colour bucket for a status/condition value:
+  //  green  → free / available / working / good
+  //  blue   → booked / reserved / on hold / assigned
+  //  amber  → in transit / dispatched / cleaning / pending
+  //  red    → in service / repair / breakdown / damaged / not working
   function demoStatusClass(col, val) {
     if (!STATUS_COLS.includes(col) && !CONDITION_COLS.includes(col) && col !== "Demo Status") return "";
     const t = String(val || "").toLowerCase();
-    if (/(not working|booked|pending|damage|missing|repair|out of service|maintenance|cleaning|foam)/.test(t)) return "demo-bad";
-    if (/(working|okay|ok|free|good|excellent|returned|ready for dispatch|completed)/.test(t)) return "demo-good";
+    if (/(not working|repair|out of service|breakdown|damage|missing|in service|servicing|faulty|dead)/.test(t)) return "demo-bad";
+    if (/(booked|reserved|on hold|assigned|allotted|blocked|with doctor|at clinic|deployed)/.test(t)) return "demo-info";
+    if (/(transit|dispatch|shipping|shipped|cleaning|foam|maintenance|pending|checking|inspection)/.test(t)) return "demo-warn";
+    if (/(free|available|working|okay|ok|good|excellent|returned|ready|completed|idle|in stock)/.test(t)) return "demo-good";
     return "";
   }
+
+  // Index of the Status column in the current demo view (-1 if none).
+  const demoStatusColIdx = () =>
+    (D.demoMachines[demoView].columns || []).findIndex((c) => STATUS_COLS.includes(c) || c === "Demo Status");
 
   function distinctDemoValues(colIdx) {
     const set = new Set();
@@ -1685,8 +1697,12 @@
 
   function demoCell(rid, c, colName, ed) {
     const val = demoVal(rid, c);
-    const cls = [c === 0 ? "t-name" : "", demoStatusClass(colName, val)].filter(Boolean).join(" ");
-    if (!ed) return `<td class="${cls}">${esc(val)}</td>`;
+    const sc = demoStatusClass(colName, val);
+    const cls = [c === 0 ? "t-name" : "", sc].filter(Boolean).join(" ");
+    if (!ed) {
+      const chip = sc ? `<span class="demo-chip ${sc}">${esc(val) || "—"}</span>` : esc(val);
+      return `<td class="${cls}">${chip}</td>`;
+    }
     if (FREE_TEXT_COLS.test(colName)) {
       return `<td class="${cls}"><input class="demo-text" type="text" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
     }
@@ -1695,20 +1711,57 @@
       opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("") +
       (PERSON_COLS.test(colName) ? `<option value="__add__">＋ Add new…</option>` : "");
     const rm = (c === 0 && String(rid).startsWith("a")) ? `<button class="linkish demo-rm" data-id="${rid}" title="Remove">✕</button> ` : "";
-    return `<td class="${cls}">${rm}<select class="demo-select" data-r="${rid}" data-c="${c}">${optionHtml}</select></td>`;
+    return `<td class="${cls}"><select class="demo-select ${sc}" data-r="${rid}" data-c="${c}">${optionHtml}</select>${rm}</td>`;
   }
 
   function demoTable() {
     const t = D.demoMachines[demoView];
     const ed = isAdmin();
     const head = t.columns.map((c) => `<th>${esc(demoColLabel(c))}</th>`).join("");
-    const ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
-    const body = ids.map((rid) =>
-      `<tr>${t.columns.map((colName, c) => demoCell(rid, c, colName, ed)).join("")}</tr>`).join("");
+    const scIdx = demoStatusColIdx();
+    let ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
+    if (demoFilter !== "all" && scIdx >= 0) {
+      ids = ids.filter((rid) => demoVal(rid, scIdx) === demoFilter);
+    }
+    const body = ids.length
+      ? ids.map((rid) =>
+          `<tr>${t.columns.map((colName, c) => demoCell(rid, c, colName, ed)).join("")}</tr>`).join("")
+      : `<tr><td colspan="${t.columns.length}" class="muted" style="text-align:center;padding:18px">No machines with status “${esc(demoFilter)}”.</td></tr>`;
     return table(head, body);
   }
 
-  function demoRepaint() { $("#demoBody").innerHTML = demoTable(); wireDemoEdit(); }
+  // Filter bar (status chips) — only meaningful when a Status column exists.
+  function demoFilterBar() {
+    const scIdx = demoStatusColIdx();
+    if (scIdx < 0) return "";
+    const vals = distinctDemoValues(scIdx);
+    if (!vals.length) return "";
+    const counts = {};
+    let total = 0;
+    const t = D.demoMachines[demoView];
+    const ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
+    ids.forEach((rid) => { const v = demoVal(rid, scIdx); if (v) { counts[v] = (counts[v] || 0) + 1; total++; } });
+    const btn = (id, label, n, extraCls) =>
+      `<button data-dfilter="${esc(id)}" class="demo-fbtn ${extraCls || ""} ${demoFilter === id ? "active" : ""}">${esc(label)}<span class="demo-fn">${n}</span></button>`;
+    return `<div class="demo-filter">
+      ${btn("all", "All", total, "")}
+      ${vals.map((v) => btn(v, v, counts[v] || 0, demoStatusClass("Status", v))).join("")}
+    </div>`;
+  }
+
+  function demoRepaint() {
+    const fb = document.getElementById("demoFilterBar");
+    if (fb) fb.innerHTML = demoFilterBar();
+    $("#demoBody").innerHTML = demoTable();
+    wireDemoFilter();
+    wireDemoEdit();
+  }
+
+  function wireDemoFilter() {
+    document.querySelectorAll("[data-dfilter]").forEach((b) => {
+      b.onclick = () => { demoFilter = b.dataset.dfilter; demoRepaint(); };
+    });
+  }
 
   function wireDemoEdit() {
     if (!isAdmin()) return;
@@ -1752,12 +1805,14 @@
       document.querySelectorAll("[data-dview]").forEach((b) => {
         b.onclick = () => {
           demoView = b.dataset.dview;
+          demoFilter = "all";
           document.querySelectorAll("[data-dview]").forEach((x) => x.classList.toggle("active", x === b));
           demoRepaint();
         };
       });
       const add = document.getElementById("demoAddBtn");
       if (add) add.onclick = demoAddRow;
+      wireDemoFilter();
       wireDemoEdit();
     }, 0);
     return `
@@ -1771,6 +1826,7 @@
         </div>
         ${isAdmin() ? `<div class="hq-actions"><button id="demoAddBtn" class="dl-btn" type="button">＋ Add machine</button></div>` : ""}
       </div>
+      <div id="demoFilterBar">${demoFilterBar()}</div>
       <div id="demoBody">${demoTable()}</div>`;
   }
 
