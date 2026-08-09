@@ -677,9 +677,18 @@ tr.total-row:hover td { background: var(--surface-3); }
   .user-pill { display: none !important; }
   .topbar { padding: 10px 14px; gap: 10px; }
   .topbar-meta { gap: 8px; }
+  .tabs { top: 58px; }              /* match the shorter mobile top bar */
   .view { padding: 16px 14px 40px; }
   .controls { gap: 8px; }
   .hq-actions { margin-left: 0; width: 100%; }
+  /* Segmented view switchers scroll horizontally instead of wrapping into a
+     tall stack that pushes the table off-screen. */
+  .seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg button { white-space: nowrap; }
+  /* Status filter chips wrap but stay tappable. */
+  .demo-filter { gap: 6px; }
+  .demo-fbtn { padding: 7px 12px; }
 }
 
 @media (max-width: 380px) {

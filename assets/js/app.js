@@ -1734,13 +1734,13 @@
   function demoFilterBar() {
     const scIdx = demoStatusColIdx();
     if (scIdx < 0) return "";
-    const vals = distinctDemoValues(scIdx);
-    if (!vals.length) return "";
     const counts = {};
     let total = 0;
     const t = D.demoMachines[demoView];
     const ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
     ids.forEach((rid) => { const v = demoVal(rid, scIdx); if (v) { counts[v] = (counts[v] || 0) + 1; total++; } });
+    const vals = Object.keys(counts).sort();
+    if (!vals.length) return "";
     const btn = (id, label, n, extraCls) =>
       `<button data-dfilter="${esc(id)}" class="demo-fbtn ${extraCls || ""} ${demoFilter === id ? "active" : ""}">${esc(label)}<span class="demo-fn">${n}</span></button>`;
     return `<div class="demo-filter">
