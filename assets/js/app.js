@@ -2190,13 +2190,14 @@
   //   money   = toBuy × landing
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
-  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, eta: {}, cat: "All", q: "" };
-  // Which product line's inventory is shown. Only Esthemax has stock data today.
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, eta: {}, cat: "All", q: "", lineData: {} };
+  // Esthemax has the full reorder plan; Devices & Celluma are simple stock logs.
   const INVENTORY_LINES = [
     { id: "esthemax", label: "Esthemax", ready: true },
-    { id: "celluma", label: "Celluma", ready: false },
-    { id: "devices", label: "Devices", ready: false },
+    { id: "devices", label: "Machines (Devices)", ready: true, simple: true },
+    { id: "celluma", label: "Celluma", ready: true, simple: true },
   ];
+  const INV_STATUS = ["In stock", "Low stock", "Reorder", "Out of stock"];
   let inventoryLine = "esthemax";
 
   function orderInit() {
@@ -2241,6 +2242,8 @@
     const lineOpts = INVENTORY_LINES.map((l) =>
       `<option value="${l.id}" ${l.id === inventoryLine ? "selected" : ""}>${esc(l.label)}${l.ready ? "" : " — no data yet"}</option>`).join("");
     const line = INVENTORY_LINES.find((l) => l.id === inventoryLine) || INVENTORY_LINES[0];
+
+    if (line.simple) return renderSimpleInventory(line);
 
     setTimeout(() => {
       const lineSel = document.getElementById("invLine");
@@ -2332,7 +2335,7 @@
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
                  <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
-                 <th>ETA (arrival)</th>${canSeeLanding() ? `<th class="num">Landing/Unit</th><th class="num">Money Required</th>` : ""}`
+                 <th>ETA (arrival)</th>`
               : `<th>Product</th><th class="num">Current stock</th><th>Status</th><th>Estimated arrival</th>`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
@@ -2358,7 +2361,6 @@
       { cls: "k-good", label: "Can sell now", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
     ].concat(admin ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
-      .concat(admin && canSeeLanding() ? [{ cls: "k-warn", label: "Money required", value: rupeeShort(money), note: "landed cost, excl. GST" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
     if (kEl) kEl.innerHTML = kpis;
@@ -2388,12 +2390,72 @@
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
         <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
         <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>
-        ${canSeeLanding() ? `<td class="num">${rupee(r.landing, { decimals: 0 })}</td>
-        <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? (canSeeLanding() ? 11 : 9) : 4}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? 9 : 4}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
+  }
+
+  // Simple stock log for Devices / Celluma (no reorder maths, no money).
+  function simpleInvRows(items, data, q, admin) {
+    return items.filter((n) => !q || n.toLowerCase().includes(q)).map((name) => {
+      const d = data[name] || {};
+      const stockCell = admin
+        ? `<input class="inv-simple stock-input" data-item="${esc(name)}" data-f="stock" type="number" min="0" value="${esc(d.stock == null ? "" : d.stock)}">`
+        : (d.stock == null || d.stock === "" ? "—" : esc(d.stock));
+      const statusCell = admin
+        ? `<select class="inv-simple demo-select" data-item="${esc(name)}" data-f="status" style="max-width:160px"><option value="">—</option>${INV_STATUS.map((s) => `<option${d.status === s ? " selected" : ""}>${s}</option>`).join("")}</select>`
+        : (d.status || "—");
+      const etaCell = admin
+        ? `<input class="inv-simple eta-input" data-item="${esc(name)}" data-f="eta" type="date" value="${esc(d.eta || "")}">`
+        : (d.eta || "—");
+      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td>${statusCell}</td><td>${etaCell}</td></tr>`;
+    }).join("") || `<tr><td colspan="4" class="empty">No items.</td></tr>`;
+  }
+
+  function wireSimpleInv(lineId) {
+    if (!isAdmin()) return;
+    const data = orderState.lineData[lineId] = orderState.lineData[lineId] || {};
+    document.querySelectorAll(".inv-simple").forEach((el) => {
+      el.onchange = () => {
+        const rec = data[el.dataset.item] = data[el.dataset.item] || {};
+        rec[el.dataset.f] = el.dataset.f === "stock" ? (el.value === "" ? "" : Math.max(0, parseFloat(el.value) || 0)) : el.value;
+        saveEdits();
+      };
+    });
+  }
+
+  function renderSimpleInventory(line) {
+    const admin = isAdmin();
+    const items = line.id === "celluma"
+      ? (D.costs.celluma || []).map((c) => c.model).filter(Boolean)
+      : deviceNames();
+    const data = orderState.lineData[line.id] = orderState.lineData[line.id] || {};
+    const lineOpts = INVENTORY_LINES.map((l) => `<option value="${l.id}"${l.id === inventoryLine ? " selected" : ""}>${esc(l.label)}</option>`).join("");
+
+    setTimeout(() => {
+      const lineSel = document.getElementById("invLine");
+      if (lineSel) lineSel.onchange = (e) => { inventoryLine = e.target.value; renderTab("order"); };
+      const s = document.getElementById("ordSearch");
+      if (s) s.oninput = (e) => {
+        orderState.q = e.target.value.toLowerCase();
+        const b = document.getElementById("simpleInvBody");
+        if (b) { b.innerHTML = simpleInvRows(items, data, orderState.q, admin); wireSimpleInv(line.id); }
+      };
+      wireSimpleInv(line.id);
+    }, 0);
+
+    return `
+      <div class="section-head"><h1>Inventory — ${esc(line.label)}</h1></div>
+      <div class="controls">
+        <label class="inv-line"><span>Inventory line</span><select id="invLine" class="select">${lineOpts}</select></label>
+      </div>
+      <div class="controls"><input id="ordSearch" class="search" type="search" placeholder="Search ${line.id === "celluma" ? "variant" : "machine"}…" value="${esc(orderState.q)}"></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Item</th><th class="num">Current stock</th><th>Status</th><th>Estimated arrival</th></tr></thead>
+        <tbody id="simpleInvBody">${simpleInvRows(items, data, orderState.q, admin)}</tbody>
+      </table></div>
+      ${admin ? `<div class="muted-note">Enter current stock, status and expected arrival for each ${line.id === "celluma" ? "Celluma variant" : "machine"}. Saved for everyone.</div>` : ""}`;
   }
 
   function orderBindStockInputs() {
@@ -2652,6 +2714,7 @@
         hqSaleSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (Array.isArray(e.newDevices)) { newDevices.length = 0; e.newDevices.forEach((d) => newDevices.push(d)); }
+      if (e.invLines && typeof e.invLines === "object") orderState.lineData = e.invLines;
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "" };
       editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
@@ -2678,7 +2741,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
