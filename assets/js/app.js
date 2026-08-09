@@ -1579,7 +1579,30 @@
       <div class="callout">Landing = EXW + 44% customs + transport. Standard (Total) = landing + marketing + profit. Min (EXW) = Primelaze ex-works. Per box, excl. GST.</div></div>
       ${sec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
       ${sec("Retail Hydrojelly (2 masks / box)", e.retail)}
-      ${sec("Collagen Foot Mask", e.footMask)}`;
+      ${sec("Collagen Foot Mask", e.footMask)}
+      ${esthemaxReorderMoneySection()}`;
+  }
+
+  // Reorder cost / money-required for Esthemax (moved here from Inventory).
+  function esthemaxReorderMoneySection() {
+    if (!D.esthemaxOrder) return "";
+    orderInit();
+    const rows = orderCompute();
+    const total = rows.reduce((s, r) => s + r.money, 0);
+    const head = ["Item", "Current", "Required", "To buy", "Landing/Unit", "Money required"]
+      .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
+    const body = rows.slice().sort((a, b) => b.money - a.money).map((r) => `<tr>
+      <td class="t-name">${esc(r.it.name)}</td>
+      <td class="num">${inr(r.current)}</td>
+      <td class="num">${inr(r.it.requiredStock)}</td>
+      <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}</td>
+      <td class="num">${rupee(r.landing, { decimals: 0 })}</td>
+      <td class="num t-name">${r.money > 0 ? rupee(r.money, { decimals: 0 }) : "—"}</td></tr>`).join("");
+    return `<div class="block" style="margin-top:22px"><h2>Reorder — money required (admin)</h2>
+      <div class="callout">Landing = EXW × USD→INR × (1 + customs) + transport. Money required = To-buy × landing. Excl. GST. Uses the current stock, FX and customs set on the Inventory tab.</div>
+      ${table(head, body)}
+      <div class="stat-row" style="margin-top:12px"><div class="stat k-warn"><b>${total ? rupeeShort(total) : "—"}</b><span>Total money required</span></div></div>
+    </div>`;
   }
 
   /* ================= DEMO MACHINES ================= */
