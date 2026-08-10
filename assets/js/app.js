@@ -2191,10 +2191,10 @@
         ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
         ${sel("paySp", payFilter.sp, payUniq(rows0, "salesPerson"), "Sales Person")}
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
-        ${admin ? `<div class="hq-actions">
-          <button id="payTplBtn" class="ghost-btn" type="button">⬇ Excel template</button>
-          <label class="dl-btn" style="cursor:pointer">⬆ Upload &amp; append<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>
-        </div>` : ""}
+        <div class="hq-actions">
+          <button id="payTplBtn" class="ghost-btn" type="button">⬇ Download input template</button>
+          ${admin ? `<label class="dl-btn" style="cursor:pointer">⬆ Upload &amp; append<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+        </div>
       </div>
       <div class="two-col" style="margin:6px 0 4px">
         <div class="card"><h2 style="margin-top:0">Pending by category</h2>${payBreakdown(rows0, "category", "Category")}</div>
