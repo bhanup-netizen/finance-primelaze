@@ -3442,6 +3442,7 @@
         </div>
         <div class="card">
           <h2 style="margin-top:0">Existing users</h2>
+          <p class="muted-note" style="margin-top:0">Passwords are managed in the backend only — set or reset them in the Firebase console (Authentication → Users). This screen controls access &amp; roles.</p>
           <div id="userList"><div class="empty">Loading…</div></div>
         </div>
       </div>
@@ -3639,7 +3640,7 @@
           <td class="t-name">${esc(u.email || "—")}</td>
           <td><span class="badge ${isAdm ? "b-good" : "b-neutral"}">${esc(roleLabel)}</span></td>
           <td class="t-muted">${esc(scope)}</td>
-          <td style="white-space:nowrap"><button class="ghost-btn u-view" data-uid="${doc.id}">View</button> <button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
+          <td style="white-space:nowrap"><button class="ghost-btn u-view" data-uid="${doc.id}">View</button> <button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
         </tr>
         <tr class="ua-tr" data-uid="${doc.id}" hidden><td colspan="4">${userAccessDetail(u)}</td></tr>`);
       });
@@ -3654,17 +3655,6 @@
       });
       box.querySelectorAll(".u-edit").forEach((b) => {
         b.onclick = () => { try { fillUserForm(JSON.parse(b.dataset.perms), b.dataset.uid); } catch (e) {} };
-      });
-      box.querySelectorAll(".u-pwd").forEach((b) => {
-        b.onclick = async () => {
-          const email = b.dataset.email;
-          if (!email) return;
-          if (!window.confirm("Send a password-reset email to " + email + "?\n\nThey'll receive a secure link to set a new password themselves.")) return;
-          b.disabled = true;
-          try { await auth.sendPasswordResetEmail(email); window.alert("Password-reset email sent to " + email + " — ask them to check inbox and spam."); }
-          catch (e) { window.alert("Could not send reset email: " + (e.message || e)); }
-          finally { b.disabled = false; }
-        };
       });
       box.querySelectorAll(".u-del").forEach((b) => {
         b.onclick = async () => {
