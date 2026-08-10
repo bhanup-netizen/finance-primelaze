@@ -97,8 +97,7 @@
     { id: "team", label: "Team Roster", group: "People", render: renderTeam },
     { id: "targets", label: "HQ Targets", group: "Sales", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Sales", render: renderIncentives },
-    { id: "prices", label: "Device", group: "Catalog", render: renderPrices },
-    { id: "esthemax", label: "Esthemax", group: "Catalog", render: renderEsthemax },
+    { id: "prices", label: "Pricing", group: "Catalog", render: renderPricing },
     { id: "order", label: "Inventory", group: "Operations", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Operations", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Operations", render: renderChallan },
@@ -227,13 +226,15 @@
   const DIVISIONS = ["Derma", "Salon/Spa"];
   const isRemoved = (p) => p._aid == null && rosterRemovals.includes(p.num);
   function removePerson(p) {
+    let nm = "";
     if (p._aid != null) {
       const i = rosterAdds.findIndex((x) => x._aid === p._aid);
-      if (i >= 0) rosterAdds.splice(i, 1);
+      if (i >= 0) { nm = rosterAdds[i].name || ""; rosterAdds.splice(i, 1); }
     } else if (!rosterRemovals.includes(p.num)) {
+      nm = ((D.roster.people || [])[p.num] || {}).name || "";
       rosterRemovals.push(p.num);
     }
-    saveEdits();
+    saveEdits("Removed person" + (nm ? " " + nm : ""));
   }
   // Living roster = original people (minus deletions) + admin-added rows.
   const roster = () => D.roster.people.filter((p) => !isRemoved(p)).concat(rosterAdds);
@@ -474,7 +475,7 @@
         if (!name) return;
         const title = (window.prompt("Subtitle / status (e.g. name or 'position vacant'):", orgTop.title || "") || "").trim();
         orgTop = { name, title };
-        saveEdits();
+        saveEdits("Renamed top position → " + name);
         const box = document.getElementById("orgScroll");
         if (box) box.innerHTML = renderOrgChart(orgDiv);
       };
@@ -482,7 +483,7 @@
       if (orgAdd) orgAdd.onclick = () => {
         const aid = "r" + (rosterAddSeq++);
         rosterAdds.push({ _aid: aid, name: "New position", designation: "", division: "Derma", baseHQ: "", reportsTo: "Arjun", zone: "", status: "tojoin" });
-        saveEdits();
+        saveEdits("Added a position");
         teamTab = "roster"; teamFilter = "all"; teamDivision = "all"; teamSearch = "";
         go("team");
         flashRow(aid);
@@ -526,6 +527,15 @@
       <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody id="teamBody">${view()}</tbody></table></div>`;
   }
 
+  // "Ravi Kumar · Base HQ → Pune" describing an edited roster field.
+  function rosterWhat(num, aid, field, val) {
+    let nm = "";
+    if (aid) { const p = rosterAdds.find((x) => x._aid === aid); nm = (p && p.name) || ""; }
+    else { const p = (D.roster.people || [])[+num]; nm = (p && p.name) || ""; }
+    const label = { baseHQ: "Base HQ", reportsTo: "Reports To", designation: "Designation", division: "Division", zone: "Zone", status: "Status", name: "Name" }[field] || field;
+    return `${nm ? nm + " · " : ""}${label} → ${val || "—"}`;
+  }
+
   function wireRosterEdit() {
     if (!isAdmin()) return;
     document.querySelectorAll("#teamBody td[contenteditable]").forEach((td) => {
@@ -537,7 +547,7 @@
         } else {
           rosterEdits[td.dataset.num + "#" + field] = val;
         }
-        saveEdits();
+        saveEdits(rosterWhat(td.dataset.num, td.dataset.aid, field, val));
       };
     });
     document.querySelectorAll("#teamBody .roster-sel").forEach((sel) => {
@@ -556,7 +566,7 @@
         } else {
           rosterEdits[sel.dataset.num + "#" + field] = val;
         }
-        saveEdits();
+        saveEdits(rosterWhat(sel.dataset.num, sel.dataset.aid, field, val));
         // Re-render so a new HQ / division change reflects in dropdowns & badges.
         go("team");
       };
@@ -570,7 +580,7 @@
         } else {
           rosterEdits[sel.dataset.num + "#" + field] = val;
         }
-        saveEdits();
+        saveEdits(rosterWhat(sel.dataset.num, sel.dataset.aid, field, val));
         // Re-render so the pill colour and status filter reflect the change.
         go("team");
       };
@@ -586,7 +596,7 @@
     if (add) add.onclick = () => {
       const aid = "r" + (rosterAddSeq++);
       rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "", zone: "" });
-      saveEdits();
+      saveEdits("Added a person");
       // Reset filters/sub-tab so the freshly-added (Active) row is visible —
       // otherwise an active filter (e.g. "Vacant") hides it and it looks broken.
       teamTab = "roster"; teamFilter = "all"; teamDivision = "all"; teamSearch = "";
@@ -866,7 +876,7 @@
           hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = val === "" ? null : val;
         }
         recomputeHqPlan(inp.dataset.pk);
-        saveEdits();
+        saveEdits("Updated annual target");
       };
     });
     // Per-product quarterly targets (Q1–Q4) for the selected year.
@@ -876,7 +886,7 @@
         const k = `${inp.dataset.pk}#${inp.dataset.row}#${hqYear}`;
         (hqQtr[k] || (hqQtr[k] = {}))[q] = val;
         recomputeHqQtr(inp.dataset.pk);
-        saveEdits();
+        saveEdits(`Updated ${q} ${hqYear} target`);
       };
     });
     // Add a product row from the Device list
@@ -891,7 +901,7 @@
         const deviceValue = dev && isNum(dev.standard) ? dev.standard : (dev && isNum(dev.minimum) ? dev.minimum : null);
         let qty = parseFloat(val && val.value); if (isNaN(qty) || qty < 0) qty = 0;
         (hqAdds[pk] = hqAdds[pk] || []).push({ product: name, fy2627: qty, deviceValue });
-        saveEdits();
+        saveEdits("Added target product " + name);
         mountHqDetail(D.hqTargets[hqIndex]);
       };
     });
@@ -899,7 +909,7 @@
       b.onclick = () => {
         const arr = hqAdds[b.dataset.pk];
         if (arr) arr.splice(+b.dataset.ai, 1);
-        saveEdits();
+        saveEdits("Removed a target product");
         mountHqDetail(D.hqTargets[hqIndex]);
       };
     });
@@ -913,7 +923,7 @@
         if (rec) {
           const numField = el.type === "number";
           rec[el.dataset.field] = numField ? (el.value === "" ? "" : parseFloat(el.value)) : el.value;
-          saveEdits();
+          saveEdits("Sale record · " + el.dataset.field + " → " + el.value);
           if (numField) mountHqDetail(h); // refresh rollup totals
         }
       };
@@ -925,18 +935,18 @@
         if (!window.confirm("Remove this sale record?")) return;
         const map = storeFor(b.dataset.store);
         map[key] = (map[key] || []).filter((x) => x.id !== b.dataset.id);
-        saveEdits(); mountHqDetail(h);
+        saveEdits("Removed a sale record"); mountHqDetail(h);
       };
     });
     const addDev = document.getElementById("hqSaleAdd");
     if (addDev) addDev.onclick = () => {
       (hqSales[key] = hqSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", buyer: "", location: "", soldBy: "", amount: "" });
-      saveEdits(); mountHqDetail(h);
+      saveEdits("Added a device sale record"); mountHqDetail(h);
     };
     const addEsth = document.getElementById("hqEsthAdd");
     if (addEsth) addEsth.onclick = () => {
       (hqEsthSales[key] = hqEsthSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", qty: "", buyer: "", location: "", soldBy: "", amount: "" });
-      saveEdits(); mountHqDetail(h);
+      saveEdits("Added an Esthemax sale record"); mountHqDetail(h);
     };
   }
 
@@ -1337,6 +1347,24 @@
   // Sales vs Admin pricing view (shared by the Device and Esthemax tabs).
   // Admin view exposes landing/cost + profit tools and is admin-only.
   let pricingMode = "sales";
+  // Device and Esthemax now live under one "Pricing" tab; this picks which.
+  let catalogView = "device";
+  function renderPricing() {
+    setTimeout(() => {
+      document.querySelectorAll("[data-cat]").forEach((b) => {
+        b.onclick = () => { catalogView = b.dataset.cat; go("prices"); };
+      });
+    }, 0);
+    const seg = `<div class="controls" style="margin-bottom:6px">
+      <div class="seg seg-primary">
+        <button data-cat="device" class="${catalogView === "device" ? "active" : ""}">Device</button>
+        <button data-cat="esthemax" class="${catalogView === "esthemax" ? "active" : ""}">Esthemax</button>
+      </div>
+    </div>`;
+    // Delegate to the existing per-catalog renderers (each wires its own
+    // controls via its own setTimeout, which still fires after go() paints).
+    return seg + (catalogView === "esthemax" ? renderEsthemax() : renderPrices());
+  }
   const priceAdmin = () => pricingMode === "admin" && canSeeLanding();
   const priceModeToggle = () => `
     <div class="seg">
@@ -1615,7 +1643,7 @@
     { id: "movement", label: "Movement log" },
     { id: "packing", label: "Packing condition" },
   ];
-  const FREE_TEXT_COLS = /remark|missing item|accessor|damage report|dimension|purpose$/i;
+  const FREE_TEXT_COLS = /remark|missing item|accessor|damage report|dimension|purpose$|^device$|^machine$|serial|flight case id/i;
   const PERSON_COLS = /salesperson|confirmed by|manager|received by|approved by|checked by|owner|current taker/i;
   const customPeople = []; // admin-added people for person dropdowns
   // Display-only column renames (keeps the underlying data key for logic).
@@ -1797,7 +1825,7 @@
           if (!name) { demoRepaint(); return; }
           if (!customPeople.includes(name)) customPeople.push(name);
           demoSetVal(rid, c, name);
-          saveEdits(); demoRepaint(); return;
+          saveEdits(demoWhat(rid, c, name)); demoRepaint(); return;
         }
         demoSetVal(rid, c, sel.value);
         // Linked logic: choosing a Machine/Device fills its Serial No.
@@ -1806,11 +1834,11 @@
           const ds = (D.refs.deviceSerials || []).filter((x) => x.device === sel.value).map((x) => x.serial).filter(Boolean);
           if (sIdx >= 0 && ds.length) demoSetVal(rid, sIdx, ds[0]);
         }
-        saveEdits(); demoRepaint();
+        saveEdits(demoWhat(rid, c, sel.value)); demoRepaint();
       };
     });
     document.querySelectorAll("#demoBody input.demo-text").forEach((inp) => {
-      inp.onchange = () => { demoSetVal(inp.dataset.r, +inp.dataset.c, inp.value); saveEdits(); };
+      inp.onchange = () => { const c = +inp.dataset.c; demoSetVal(inp.dataset.r, c, inp.value); saveEdits(demoWhat(inp.dataset.r, c, inp.value)); };
     });
     // Booking date range (from / to). Repaint on change so the read-only
     // rendering (and any validation) stays consistent.
@@ -1825,19 +1853,36 @@
           const f = demoVal(rid, fromIdx), t = demoVal(rid, toIdx);
           if (f && t && t < f) demoSetVal(rid, toIdx, f);
         }
-        saveEdits(); demoRepaint();
+        saveEdits(demoWhat(rid, c, inp.value)); demoRepaint();
       };
     });
     document.querySelectorAll("#demoBody .demo-rm").forEach((b) => {
-      b.onclick = () => { demoAdds[demoView] = demoAdds[demoView].filter((x) => x.id !== b.dataset.id); saveEdits(); demoRepaint(); };
+      b.onclick = () => {
+        const label = demoRowLabel(b.dataset.id);
+        demoAdds[demoView] = demoAdds[demoView].filter((x) => x.id !== b.dataset.id);
+        saveEdits("Removed machine" + (label ? " " + label : "")); demoRepaint();
+      };
     });
+  }
+
+  // Human label of a demo row (its Device / first cell) for the activity log.
+  function demoRowLabel(rid) {
+    const v = demoVal(rid, 0);
+    return v ? String(v) : "";
+  }
+  // "Bi Axis 1 · Status → Booked" describing an edited demo cell.
+  function demoWhat(rid, c, value) {
+    const cols = D.demoMachines[demoView].columns;
+    const col = demoColLabel(cols[c] || "");
+    const label = demoRowLabel(rid);
+    return `${label ? label + " · " : ""}${col} → ${value || "—"}`;
   }
 
   function demoAddRow() {
     const ncol = D.demoMachines[demoView].columns.length;
     (demoAdds[demoView] = demoAdds[demoView] || []).push({ id: "a" + (demoAddSeq++), vals: new Array(ncol).fill("") });
     demoFilter = "all"; // don't let an active status filter hide the new blank row
-    saveEdits(); demoRepaint();
+    saveEdits("Added a machine"); demoRepaint();
   }
 
   function renderDemo() {
@@ -2373,7 +2418,7 @@
         const el = document.getElementById(id);
         if (el) el.oninput = (e) => {
           const v = parseFloat(e.target.value);
-          if (!isNaN(v)) { orderState[key] = factor ? v / 100 : v; orderPaint(); saveEdits(); }
+          if (!isNaN(v)) { orderState[key] = factor ? v / 100 : v; orderPaint(); saveEdits("Updated " + id.replace(/^ord/, "")); }
         };
       };
       wire("ordUsd", "usdInr", false);
@@ -2540,7 +2585,7 @@
       el.onchange = () => {
         const rec = data[el.dataset.item] = data[el.dataset.item] || {};
         rec[el.dataset.f] = el.dataset.f === "stock" ? (el.value === "" ? "" : Math.max(0, parseFloat(el.value) || 0)) : el.value;
-        saveEdits();
+        saveEdits(`${el.dataset.item} · ${el.dataset.f} → ${el.value || "—"}`);
       };
     });
   }
@@ -2585,12 +2630,13 @@
         const v = parseFloat(e.target.value);
         orderState.stock[idx] = isNaN(v) ? 0 : v;
         orderPaint();
-        saveEdits();
+        const it = D.esthemaxOrder.items[idx];
+        saveEdits(`Stock · ${(it && it.name) || "item"} → ${orderState.stock[idx]}`);
       };
     });
     // ETA (expected arrival at Primelaze) — informational, no recompute needed.
     document.querySelectorAll(".eta-input").forEach((inp) => {
-      inp.onchange = (e) => { orderState.eta[+e.target.dataset.idx] = e.target.value; saveEdits(); };
+      inp.onchange = (e) => { orderState.eta[+e.target.dataset.idx] = e.target.value; saveEdits("Updated expected arrival"); };
     });
   }
 
@@ -2619,7 +2665,7 @@
     if (!tab || !canSeePage(tab.id)) tab = TABS.find((t) => t.id === firstVisibleTab()) || TABS[0];
     currentTab = tab.id;
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab.id));
-    $("#view").innerHTML = tab.render();
+    $("#view").innerHTML = pageEditNote(tab.id) + tab.render();
     enhanceTables();
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (location.hash.slice(1) !== tab.id) history.replaceState(null, "", "#" + tab.id);
@@ -2777,6 +2823,11 @@
 
     userRole = udoc.role === "admin" ? "admin" : "view";
     perms = { pages: udoc.pages || [], hqs: udoc.hqs || [], landing: !!udoc.landing, managerInc: !!udoc.managerInc, editPages: udoc.editPages || [] };
+    // Migration: the old "esthemax" tab was merged into "prices" (Pricing).
+    // Preserve access for users who were granted only the old page.
+    ["pages", "editPages"].forEach((k) => {
+      if (Array.isArray(perms[k]) && perms[k].includes("esthemax") && !perms[k].includes("prices")) perms[k].push("prices");
+    });
     appMode = "view";
 
     // data decryption key (kept in Firestore, readable only by signed-in users)
@@ -2849,9 +2900,10 @@
   }
 
   let saveTimer = null;
-  function saveEdits() {
+  function saveEdits(what) {
     if (!db || !(roleIsAdmin() || hasAnyEditGrant())) return;
     clearTimeout(saveTimer);
+    const desc = (what == null ? "" : String(what)).slice(0, 120);
     saveTimer = setTimeout(async () => {
       const stock = {}, eta = {};
       D.esthemaxOrder.items.forEach((it, i) => {
@@ -2862,8 +2914,8 @@
       const at = Date.now();
       const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
       editsUpdatedAt = at; editsUpdatedBy = by;
-      editsLog.unshift({ by, at, tab: tabLabel });
-      if (editsLog.length > 40) editsLog.length = 40;
+      editsLog.unshift({ by, at, tab: tabLabel, what: desc });
+      if (editsLog.length > 60) editsLog.length = 60;
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
@@ -2886,6 +2938,34 @@
     const txt = editsUpdatedAt ? `Last updated ${fmtWhen(editsUpdatedAt)}${editsUpdatedBy ? " · " + editsUpdatedBy : ""}` : "";
     if (el) el.textContent = txt;
     if (dot) dot.hidden = !txt;
+    refreshPageEditNote();
+  }
+
+  // Most recent change recorded for a specific page (by its tab label).
+  function pageLastEdit(tabId) {
+    const label = (TABS.find((t) => t.id === tabId) || {}).label;
+    if (!label) return null;
+    return editsLog.find((e) => e.tab === label) || null;
+  }
+  // Inner HTML for the "who changed what, when" note on a page (empty if none).
+  function pageEditHtml(tabId) {
+    const e = pageLastEdit(tabId);
+    if (!e) return "";
+    const who = e.by || "someone";
+    const what = e.what ? ` — <span class="pen-what">${esc(e.what)}</span>` : "";
+    return `<span class="pen-ico">✎</span> Last change by <b>${esc(who)}</b> · ${esc(fmtWhen(e.at))}${what}`;
+  }
+  // The banner element markup, prepended to every rendered page.
+  function pageEditNote(tabId) {
+    const h = pageEditHtml(tabId);
+    return `<div id="pageEditNote" class="page-edit-note"${h ? "" : " hidden"}>${h}</div>`;
+  }
+  function refreshPageEditNote() {
+    const pe = document.getElementById("pageEditNote");
+    if (!pe) return;
+    const h = pageEditHtml(currentTab);
+    pe.innerHTML = h;
+    pe.hidden = !h;
   }
 
   function authErr(e) {
@@ -3040,8 +3120,8 @@
           <label class="ord-field"><span>User</span><select id="logUserFilter" class="select"><option value="all">All users</option>${Array.from(new Set(editsLog.map((e) => e.by).filter(Boolean))).sort().map((u) => `<option>${esc(u)}</option>`).join("")}</select></label>
           <label class="ord-field"><span>Page</span><select id="logPageFilter" class="select"><option value="all">All pages</option>${Array.from(new Set(editsLog.map((e) => e.tab).filter(Boolean))).sort().map((p) => `<option>${esc(p)}</option>`).join("")}</select></label>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>When</th><th>By</th><th>Page</th></tr></thead>
-          <tbody id="logRows">${editsLog.map((e) => `<tr data-by="${esc(e.by || "")}" data-tab="${esc(e.tab || "")}"><td>${esc(fmtWhen(e.at))}</td><td class="t-name">${esc(e.by || "—")}</td><td>${esc(e.tab || "—")}</td></tr>`).join("")}</tbody>
+        <div class="table-wrap"><table><thead><tr><th>When</th><th>By</th><th>Page</th><th>What changed</th></tr></thead>
+          <tbody id="logRows">${editsLog.map((e) => `<tr data-by="${esc(e.by || "")}" data-tab="${esc(e.tab || "")}"><td>${esc(fmtWhen(e.at))}</td><td class="t-name">${esc(e.by || "—")}</td><td>${esc(e.tab || "—")}</td><td>${esc(e.what || "—")}</td></tr>`).join("")}</tbody>
         </table></div>`
           : `<div class="empty">No activity recorded yet.</div>`}
       </div>`;

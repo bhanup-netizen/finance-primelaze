@@ -262,6 +262,22 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
+/* Per-page "who changed what, when" note */
+.page-edit-note {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  margin: 0 0 14px; padding: 7px 12px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text-2); font-size: 12.5px; line-height: 1.4;
+}
+.page-edit-note[hidden] { display: none; }
+.page-edit-note b { color: var(--text); font-weight: 700; }
+.page-edit-note .pen-ico { color: var(--accent); font-weight: 700; }
+.page-edit-note .pen-what { color: var(--text); }
+
+/* Primary in-page switcher (e.g. Device / Esthemax under Pricing) */
+.seg.seg-primary { padding: 4px; }
+.seg.seg-primary button { font-size: 13.5px; padding: 8px 18px; font-weight: 700; }
+
 .section-head { margin: 6px 0 18px; }
 .section-head h1 { font-size: clamp(20px, 3vw, 26px); margin: 0 0 4px; letter-spacing: -.3px; }
 .section-head p { margin: 0; color: var(--text-2); font-size: 14px; max-width: 74ch; }
