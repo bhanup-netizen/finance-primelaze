@@ -1627,6 +1627,25 @@
 
   const STATUS_COLS = ["Status"];
   const CONDITION_COLS = ["Condition", "Cond. Out", "Cond. Return"];
+  const DATE_COLS = /^booked (from|to)$/i; // rendered as date pickers
+  const BOOK_COLS = ["Booked From", "Booked To"];
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  // "2026-08-10" → "10 Aug 2026" (parsed by parts to avoid UTC off-by-one).
+  function fmtDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+    if (!m) return String(iso || "");
+    return `${+m[3]} ${MONTHS[+m[2] - 1] || m[2]} ${m[1]}`;
+  }
+
+  // Ensure the Current-status view carries the two booking-date columns.
+  // Appended in-memory only (data.enc.js is untouched); the values live in the
+  // demo edits store and persist like any other cell. Safe to call repeatedly.
+  function ensureDemoBookingCols() {
+    const cur = D.demoMachines && D.demoMachines.current;
+    if (!cur || !Array.isArray(cur.columns)) return;
+    if (!cur.columns.some((c) => /^booked from$/i.test(c))) cur.columns.push("Booked From");
+    if (!cur.columns.some((c) => /^booked to$/i.test(c))) cur.columns.push("Booked To");
+  }
 
   // Colour bucket for a status/condition value:
   //  green  → free / available / working / good
@@ -1700,8 +1719,12 @@
     const sc = demoStatusClass(colName, val);
     const cls = [c === 0 ? "t-name" : "", sc].filter(Boolean).join(" ");
     if (!ed) {
+      if (DATE_COLS.test(colName)) return `<td class="${cls}">${val ? esc(fmtDate(val)) : "—"}</td>`;
       const chip = sc ? `<span class="demo-chip ${sc}">${esc(val) || "—"}</span>` : esc(val);
       return `<td class="${cls}">${chip}</td>`;
+    }
+    if (DATE_COLS.test(colName)) {
+      return `<td class="${cls}"><input class="demo-date" type="date" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
     }
     if (FREE_TEXT_COLS.test(colName)) {
       return `<td class="${cls}"><input class="demo-text" type="text" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
@@ -1789,6 +1812,22 @@
     document.querySelectorAll("#demoBody input.demo-text").forEach((inp) => {
       inp.onchange = () => { demoSetVal(inp.dataset.r, +inp.dataset.c, inp.value); saveEdits(); };
     });
+    // Booking date range (from / to). Repaint on change so the read-only
+    // rendering (and any validation) stays consistent.
+    document.querySelectorAll("#demoBody input.demo-date").forEach((inp) => {
+      inp.onchange = () => {
+        const rid = inp.dataset.r, c = +inp.dataset.c;
+        demoSetVal(rid, c, inp.value);
+        // Keep the range sane: if "to" ends before "from" starts, snap it up.
+        const fromIdx = cols.findIndex((x) => /^booked from$/i.test(x));
+        const toIdx = cols.findIndex((x) => /^booked to$/i.test(x));
+        if (fromIdx >= 0 && toIdx >= 0) {
+          const f = demoVal(rid, fromIdx), t = demoVal(rid, toIdx);
+          if (f && t && t < f) demoSetVal(rid, toIdx, f);
+        }
+        saveEdits(); demoRepaint();
+      };
+    });
     document.querySelectorAll("#demoBody .demo-rm").forEach((b) => {
       b.onclick = () => { demoAdds[demoView] = demoAdds[demoView].filter((x) => x.id !== b.dataset.id); saveEdits(); demoRepaint(); };
     });
@@ -1802,6 +1841,7 @@
   }
 
   function renderDemo() {
+    ensureDemoBookingCols();
     setTimeout(() => {
       document.querySelectorAll("[data-dview]").forEach((b) => {
         b.onclick = () => {

@@ -205,12 +205,13 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 .demo-fbtn.demo-warn.active .demo-fn { background: var(--warn); color: #fff; }
 /* Unified control look for the various in-table editors (roster / vacancy /
    sales / quarter / demo), so every editable cell reads as one system. */
-.roster-sel, .roster-status, .vac-in, .vac-rsel, .sale-in, .hq-qtr, .hq-done, .hq-by, .demo-text {
+.roster-sel, .roster-status, .vac-in, .vac-rsel, .sale-in, .hq-qtr, .hq-done, .hq-by, .demo-text, .demo-date {
   font-family: inherit; color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px; font-size: 12.5px;
 }
+.demo-date { min-width: 132px; }
 .roster-sel:focus, .roster-status:focus, .vac-in:focus, .vac-rsel:focus, .sale-in:focus,
-.hq-qtr:focus, .hq-done:focus, .hq-by:focus, .demo-text:focus {
+.hq-qtr:focus, .hq-done:focus, .hq-by:focus, .demo-text:focus, .demo-date:focus {
   outline: 2px solid var(--accent-soft); border-color: var(--accent);
 }
 .hq-add-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
