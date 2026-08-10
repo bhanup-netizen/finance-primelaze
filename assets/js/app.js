@@ -226,7 +226,13 @@
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
   let rosterAddSeq = 0;
   const customHQs = [];   // admin-added base-HQ cities
+  const customDesignations = []; // admin-added designations/roles
   const rosterRemovals = []; // nums of original roster people deleted by admin
+  // Prompt + target list for the "＋ Add new…" option, keyed by roster field.
+  const customListFor = (field) =>
+    field === "designation"
+      ? { label: "Add new designation / role:", list: customDesignations }
+      : { label: "Add new HQ (city):", list: customHQs };
   const DIVISIONS = ["Derma", "Salon/Spa"];
   const isRemoved = (p) => p._aid == null && rosterRemovals.includes(p.num);
   function removePerson(p) {
@@ -430,7 +436,7 @@
         return `<tr>
           ${firstCell}
           ${cell(p, "name", "t-name")}
-          ${ed ? selCell(p, "designation", rosterOptions("designation")) : cell(p, "designation")}
+          ${ed ? selCell(p, "designation", rosterOptions("designation", customDesignations), true) : cell(p, "designation")}
           ${divCell}
           ${ed ? selCell(p, "baseHQ", rosterOptions("baseHQ", customHQs), true) : cell(p, "baseHQ")}
           ${ed ? selCell(p, "reportsTo", rosterOptions("reportsTo", ["CTO", "Arjun"])) : cell(p, "reportsTo")}
@@ -559,9 +565,10 @@
         const field = sel.dataset.field;
         let val = sel.value;
         if (val === "__add__") {
-          const name = (window.prompt("Add new HQ (city):") || "").trim();
+          const cfg = customListFor(field);
+          const name = (window.prompt(cfg.label) || "").trim();
           if (!name) { go("team"); return; }
-          if (!customHQs.includes(name)) customHQs.push(name);
+          if (!cfg.list.includes(name)) cfg.list.push(name);
           val = name;
         }
         if (sel.dataset.aid) {
@@ -571,7 +578,7 @@
           rosterEdits[sel.dataset.num + "#" + field] = val;
         }
         saveEdits(rosterWhat(sel.dataset.num, sel.dataset.aid, field, val));
-        // Re-render so a new HQ / division change reflects in dropdowns & badges.
+        // Re-render so a new HQ / designation / division reflects everywhere.
         go("team");
       };
     });
@@ -673,7 +680,7 @@
       return `<tr>
         ${firstCell}
         ${nameCell}
-        ${rSel(p, "designation", rosterOptions("designation"))}
+        ${rSel(p, "designation", rosterOptions("designation", customDesignations), true)}
         ${rSel(p, "baseHQ", rosterOptions("baseHQ", customHQs), true)}
         ${rSel(p, "zone", rosterOptions("zone"))}
         ${prCell}
@@ -742,13 +749,14 @@
       sel.onchange = () => {
         let val = sel.value;
         if (val === "__add__") {
-          const name = (window.prompt("Add new HQ (city):") || "").trim();
+          const cfg = customListFor(sel.dataset.field);
+          const name = (window.prompt(cfg.label) || "").trim();
           if (!name) { go("team"); return; }
-          if (!customHQs.includes(name)) customHQs.push(name);
+          if (!cfg.list.includes(name)) cfg.list.push(name);
           val = name;
         }
         writeRoster(sel, val);
-        saveEdits();
+        saveEdits(rosterWhat(sel.dataset.num, sel.dataset.aid, sel.dataset.field, val));
         go("team");
       };
     });
@@ -2884,6 +2892,7 @@
       }
       if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
+      if (Array.isArray(e.customDesignations)) { customDesignations.length = 0; e.customDesignations.forEach((d) => customDesignations.push(d)); }
       if (Array.isArray(e.customPeople)) { customPeople.length = 0; e.customPeople.forEach((h) => customPeople.push(h)); }
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
@@ -2930,7 +2939,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
