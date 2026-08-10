@@ -105,7 +105,6 @@
     { id: "order", label: "Inventory", group: "Operations", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Operations", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Operations", render: renderChallan },
-    { id: "review", label: "Review Log", group: "Records", render: renderReview },
     { id: "admin", label: "⚙ Admin", group: "Records", render: renderAdmin },
   ];
 
@@ -2678,6 +2677,7 @@
     currentTab = tab.id;
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab.id));
     $("#view").innerHTML = pageEditNote(tab.id) + tab.render();
+    wirePageEditNote();
     enhanceTables();
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (location.hash.slice(1) !== tab.id) history.replaceState(null, "", "#" + tab.id);
@@ -2961,31 +2961,45 @@
     refreshPageEditNote();
   }
 
-  // Most recent change recorded for a specific page (by its tab label).
-  function pageLastEdit(tabId) {
+  // All changes recorded for a specific page (newest first), by its tab label.
+  function pageEditsFor(tabId) {
     const label = (TABS.find((t) => t.id === tabId) || {}).label;
-    if (!label) return null;
-    return editsLog.find((e) => e.tab === label) || null;
+    if (!label) return [];
+    return editsLog.filter((e) => e.tab === label);
   }
-  // Inner HTML for the "who changed what, when" note on a page (empty if none).
-  function pageEditHtml(tabId) {
-    const e = pageLastEdit(tabId);
-    if (!e) return "";
+  // Inner HTML for the per-page change note: last change + expandable history.
+  function pageEditInner(tabId) {
+    const list = pageEditsFor(tabId);
+    if (!list.length) return "";
+    const e = list[0];
     const who = e.by || "someone";
     const what = e.what ? ` — <span class="pen-what">${esc(e.what)}</span>` : "";
-    return `<span class="pen-ico">✎</span> Last change by <b>${esc(who)}</b> · ${esc(fmtWhen(e.at))}${what}`;
+    const more = list.length > 1
+      ? `<button type="button" class="linkish pen-toggle">History (${list.length})</button>` : "";
+    const rows = list.slice(0, 20).map((x) =>
+      `<li><span class="peh-when">${esc(fmtWhen(x.at))}</span> · <b>${esc(x.by || "—")}</b>${x.what ? ` — ${esc(x.what)}` : ""}</li>`).join("");
+    return `<div class="pen-line"><span class="pen-ico">✎</span> Last change by <b>${esc(who)}</b> · ${esc(fmtWhen(e.at))}${what}${more}</div>` +
+      (list.length > 1 ? `<ul class="pen-history" hidden>${rows}</ul>` : "");
   }
   // The banner element markup, prepended to every rendered page.
   function pageEditNote(tabId) {
-    const h = pageEditHtml(tabId);
+    const h = pageEditInner(tabId);
     return `<div id="pageEditNote" class="page-edit-note"${h ? "" : " hidden"}>${h}</div>`;
+  }
+  function wirePageEditNote() {
+    const pt = document.querySelector("#pageEditNote .pen-toggle");
+    if (pt) pt.onclick = () => {
+      const h = document.querySelector("#pageEditNote .pen-history");
+      if (h) { h.hidden = !h.hidden; pt.textContent = h.hidden ? `History (${pageEditsFor(currentTab).length})` : "Hide history"; }
+    };
   }
   function refreshPageEditNote() {
     const pe = document.getElementById("pageEditNote");
     if (!pe) return;
-    const h = pageEditHtml(currentTab);
+    const h = pageEditInner(currentTab);
     pe.innerHTML = h;
     pe.hidden = !h;
+    wirePageEditNote();
   }
 
   function authErr(e) {

@@ -262,17 +262,28 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* Per-page "who changed what, when" note */
+/* Per-page "who changed what, when" note + history */
 .page-edit-note {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  display: block;
   margin: 0 0 14px; padding: 7px 12px; border-radius: 10px;
   background: var(--surface-2); border: 1px solid var(--border);
   color: var(--text-2); font-size: 12.5px; line-height: 1.4;
 }
 .page-edit-note[hidden] { display: none; }
 .page-edit-note b { color: var(--text); font-weight: 700; }
-.page-edit-note .pen-ico { color: var(--accent); font-weight: 700; }
-.page-edit-note .pen-what { color: var(--text); }
+.pen-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.pen-ico { color: var(--accent); font-weight: 700; }
+.pen-what { color: var(--text); }
+.pen-toggle { margin-left: auto; }
+.pen-history {
+  list-style: none; margin: 8px 0 2px; padding: 8px 0 0;
+  border-top: 1px dashed var(--border); display: grid; gap: 5px;
+  max-height: 220px; overflow: auto;
+}
+.pen-history[hidden] { display: none; }
+.pen-history li { font-size: 12px; color: var(--text-2); }
+.pen-history .peh-when { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pen-history b { color: var(--text); }
 
 /* User access detail (Admin → Existing users → View) */
 .ua-detail { padding: 6px 2px 10px; }
