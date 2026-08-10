@@ -22,6 +22,14 @@
   // Plain Admin edits every content page but cannot manage users.
   const isSuperAdmin = () => userSuper;
   const roleIsAdmin = () => userRole === "admin";
+  // Pages the current user may administer users for ("all" or an id array).
+  const myEditablePages = () => {
+    if (isSuperAdmin() || roleIsAdmin() || perms.editPages === "all") return "all";
+    return Array.isArray(perms.editPages) ? perms.editPages.slice() : [];
+  };
+  // A "page admin" is a view-role user with edit rights on ≥1 page. They get a
+  // scoped user manager: add/edit/revoke VIEW users for their pages only.
+  const isPageAdmin = () => { const e = myEditablePages(); return !roleIsAdmin() && (e === "all" || (Array.isArray(e) && e.length > 0)); };
   // A "view" user can be granted edit rights on specific pages (page admin).
   const canEditPage = (id) => {
     const ep = perms.editPages;
@@ -36,7 +44,11 @@
   const roAttr = () => (isAdmin() ? "" : "disabled");
   const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
   const canSeePage = (id) => {
-    if (id === "admin") return isSuperAdmin() && appMode === "admin"; // only super admins manage users
+    if (id === "admin") {
+      if (isSuperAdmin() && appMode === "admin") return true; // full user management
+      if (isPageAdmin()) return true;                          // scoped page-admin manager
+      return false;
+    }
     if (canEditPage(id)) return true; // page editors can always see what they edit
     const p = allowedPages();
     return p === "all" || p.includes(id);
@@ -3402,51 +3414,67 @@
   /* ---------------- Admin: user & permission management ---------------- */
   const PERMISSION_PAGES = TABS.filter((t) => t.id !== "admin");
   let editingUid = null; // set while editing an existing user's access
+  let editingUserData = null; // the user's existing perms (for scoped merges)
+
+  // Pages the current admin may grant to others (PERMISSION_PAGES subset).
+  function adminScopePages() {
+    const e = myEditablePages();
+    return e === "all" ? PERMISSION_PAGES : PERMISSION_PAGES.filter((t) => e.includes(t.id));
+  }
 
   function renderAdmin() {
-    editingUid = null;
-    if (!roleIsAdmin()) return `<div class="section-head"><h1>Admin</h1></div><div class="empty">Administrator access only.</div>`;
+    editingUid = null; editingUserData = null;
+    const superMode = isSuperAdmin();
+    if (!superMode && !isPageAdmin()) return `<div class="section-head"><h1>Admin</h1></div><div class="empty">Administrator access only.</div>`;
     setTimeout(initAdminUI, 0);
-    const accessRows = PERMISSION_PAGES.map((t) =>
-      `<label class="chk perm-access-row"><span style="flex:1">${esc(t.label)}</span><select class="perm-access select" data-page="${t.id}"><option value="edit">Edit</option><option value="view" selected>View</option><option value="none">No access</option></select></label>`).join("");
+    const scope = superMode ? PERMISSION_PAGES : adminScopePages();
+    // Page admins can only grant View / No-access (not Edit — no new page admins).
+    const accessRows = scope.map((t) =>
+      `<label class="chk perm-access-row"><span style="flex:1">${esc(t.label)}</span><select class="perm-access select" data-page="${t.id}">${superMode ? `<option value="edit">Edit</option>` : ""}<option value="view" selected>View</option><option value="none">No access</option></select></label>`).join("");
     const hqChecks = D.hqTargets.map((h) => {
       const n = h.title.split("—")[0].trim();
       return `<label class="chk"><input type="checkbox" class="perm-hq" value="${esc(n)}" checked> ${esc(n)}</label>`;
     }).join("");
+    const roleField = superMode
+      ? `<label class="ord-field"><span>Role</span>
+           <select id="auRole" class="select"><option value="view">View (custom access)</option><option value="admin">Admin (edit all pages)</option><option value="superadmin">Super Admin (everything + users)</option></select>
+         </label>`
+      : `<input type="hidden" id="auRole" value="view">`;
+    const scopeNote = superMode
+      ? `Per page: <b>View</b> = read-only, <b>Edit</b> = page admin (can change it, e.g. HR editing Team Roster), <b>No access</b> = hidden. These apply to the <b>View</b> role. <b>Admin</b> edits every page; <b>Super Admin</b> also manages users here.`
+      : `You can add <b>view-only</b> users for the page(s) you administer. Choose <b>View</b> to grant read access or <b>No access</b> to hide it.`;
     return `
       <div class="section-head">
-        <h1>Admin — Users &amp; Access</h1>
-        <p>Create accounts and control which pages and HQs each person can see. Landing/lending cost prices show only to admins or users you grant.</p>
+        <h1>${superMode ? "Admin — Users &amp; Access" : "Manage viewers for your pages"}</h1>
+        <p>${superMode ? "Create accounts and control which pages and HQs each person can see." : "Add and manage view-only users for the pages you administer. You can add them, edit their access and revoke them."}</p>
       </div>
       <div class="two-col">
         <div class="card">
-          <h2 style="margin-top:0">Add user</h2>
+          <h2 style="margin-top:0">Add ${superMode ? "user" : "viewer"}</h2>
           <form id="addUserForm" class="admin-form" autocomplete="off">
             <label class="ord-field"><span>Email</span><input id="auEmail" type="email" required placeholder="person@primelaze.com"></label>
-            <label class="ord-field"><span>Temp password</span><input id="auPass" type="text" required placeholder="min 6 chars"></label>
-            <label class="ord-field"><span>Role</span>
-              <select id="auRole" class="select"><option value="view">View (custom access)</option><option value="admin">Admin (edit all pages)</option><option value="superadmin">Super Admin (everything + users)</option></select>
-            </label>
-            <label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
-            <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label>
-            <div class="perm-group"><div class="perm-title">Page access <span>
+            <label class="ord-field"><span>${superMode ? "Temp password" : "Set password"}</span><input id="auPass" type="text" required placeholder="min 6 chars"></label>
+            ${roleField}
+            ${superMode ? `<label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
+            <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label>` : ""}
+            <div class="perm-group"><div class="perm-title">Page access ${superMode ? `<span>
               <button type="button" class="linkish" data-access="edit">all edit</button> ·
               <button type="button" class="linkish" data-access="view">all view</button> ·
-              <button type="button" class="linkish" data-access="none">none</button></span></div>
+              <button type="button" class="linkish" data-access="none">none</button></span>` : ""}</div>
               <div class="perm-grid">${accessRows}</div>
-              <div class="muted-note" style="margin-top:6px">Per page: <b>View</b> = read-only, <b>Edit</b> = page admin (can change it, e.g. HR editing Team Roster), <b>No access</b> = hidden. These apply to the <b>View</b> role. <b>Admin</b> edits every page (page grid ignored); <b>Super Admin</b> also manages users here.</div></div>
-            <div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="submit" class="dl-btn" id="auSubmit">Create user</button><button type="button" class="ghost-btn" id="auCancel" hidden>Cancel edit</button></div>
+              <div class="muted-note" style="margin-top:6px">${scopeNote}</div></div>
+            ${superMode ? `<div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>` : ""}
+            <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="submit" class="dl-btn" id="auSubmit">Create ${superMode ? "user" : "viewer"}</button><button type="button" class="ghost-btn" id="auCancel" hidden>Cancel edit</button></div>
             <div id="auMsg" class="lock-error" style="min-height:16px"></div>
           </form>
         </div>
         <div class="card">
-          <h2 style="margin-top:0">Existing users</h2>
-          <p class="muted-note" style="margin-top:0">Passwords are managed in the backend only — set or reset them in the Firebase console (Authentication → Users). This screen controls access &amp; roles.</p>
+          <h2 style="margin-top:0">${superMode ? "Existing users" : "Viewers you manage"}</h2>
+          <p class="muted-note" style="margin-top:0">Passwords are set here when adding a user; to reset one later use the Firebase console (Authentication → Users) — the backend. This screen controls access &amp; roles.</p>
           <div id="userList"><div class="empty">Loading…</div></div>
         </div>
       </div>
-      <div class="card" style="margin-top:20px">
+      ${superMode ? `<div class="card" style="margin-top:20px">
         <h2 style="margin-top:0">Activity log</h2>
         <p class="muted-note" style="margin-top:0">Most recent edits (who changed which page, and when). Last ${editsLog.length} shown.</p>
         ${editsLog.length ? `
@@ -3458,10 +3486,11 @@
           <tbody id="logRows">${editsLog.map((e) => `<tr data-by="${esc(e.by || "")}" data-tab="${esc(e.tab || "")}"><td>${esc(fmtWhen(e.at))}</td><td class="t-name">${esc(e.by || "—")}</td><td>${esc(e.tab || "—")}</td><td>${esc(e.what || "—")}</td></tr>`).join("")}</tbody>
         </table></div>`
           : `<div class="empty">No activity recorded yet.</div>`}
-      </div>`;
+      </div>` : ""}`;
   }
 
   function collectPerms() {
+    const gc = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
     const access = {};
     document.querySelectorAll(".perm-access").forEach((s) => { access[s.dataset.page] = s.value; });
     const pages = PERMISSION_PAGES.filter((t) => access[t.id] === "view" || access[t.id] === "edit").map((t) => t.id);
@@ -3470,20 +3499,48 @@
     const allPages = pages.length === PERMISSION_PAGES.length;
     const allHqs = hqs.length === D.hqTargets.length;
     const allEdit = editPages.length === PERMISSION_PAGES.length;
-    const roleVal = document.getElementById("auRole").value;
+    const roleEl = document.getElementById("auRole");
+    const roleVal = roleEl ? roleEl.value : "view";
+    // Page admins may only ever mint VIEW users; never elevate roles.
+    const role = (isSuperAdmin() && (roleVal === "admin" || roleVal === "superadmin")) ? roleVal : "view";
+    // For page admins the HQ grid is hidden — default view users to all HQs.
+    const hasHqGrid = document.querySelector(".perm-hq") != null;
     return {
-      role: (roleVal === "admin" || roleVal === "superadmin") ? roleVal : "view",
-      landing: document.getElementById("auLanding").checked,
-      managerInc: document.getElementById("auMgrInc").checked,
+      role,
+      landing: gc("auLanding"),
+      managerInc: gc("auMgrInc"),
       pages: allPages ? "all" : pages,
-      hqs: allHqs ? "all" : hqs,
-      editPages: allEdit ? "all" : editPages,
+      hqs: hasHqGrid ? (allHqs ? "all" : hqs) : "all",
+      editPages: role === "view" && !isSuperAdmin() ? [] : (allEdit ? "all" : editPages),
+    };
+  }
+
+  // Merge a page admin's edits (only their scoped pages) onto a viewer's
+  // existing perms, so pages they don't administer are left untouched. Edit
+  // grants, HQ, landing and manager-incentive flags are never changed here.
+  function mergeScopedViewerPerms(prev, next, scope) {
+    const ALL = PERMISSION_PAGES.map((t) => t.id);
+    const asList = (v) => (v === "all" ? ALL.slice() : (Array.isArray(v) ? v.slice() : []));
+    const inScope = scope === "all" ? ALL : scope;
+    const prevPages = asList(prev.pages);
+    const nextPages = asList(next.pages);
+    const kept = prevPages.filter((p) => !inScope.includes(p));      // outside my control
+    const granted = nextPages.filter((p) => inScope.includes(p));     // my decisions
+    const pages = Array.from(new Set(kept.concat(granted)));
+    return {
+      role: "view",
+      landing: !!prev.landing,
+      managerInc: !!prev.managerInc,
+      pages: pages.length === ALL.length ? "all" : pages,
+      hqs: prev.hqs || "all",
+      editPages: prev.editPages || [],
     };
   }
 
   // Load an existing user's access into the form for editing.
   function fillUserForm(u, uid) {
     editingUid = uid;
+    editingUserData = u;
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
     const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
     const emailEl = document.getElementById("auEmail");
@@ -3568,11 +3625,14 @@
       msg.style.color = ""; msg.textContent = ""; sub.disabled = true; sub.textContent = editing ? "Saving…" : "Creating…";
       try {
         if (editing) {
-          const perms2 = collectPerms();
+          let perms2 = collectPerms();
+          // A page admin's form only shows their own pages — merge so a user's
+          // access to pages OUTSIDE that scope (managed by others) is preserved.
+          if (!isSuperAdmin() && editingUserData) perms2 = mergeScopedViewerPerms(editingUserData, perms2, myEditablePages());
           const em = (document.getElementById("auEmail").value || "").trim().toLowerCase();
           if (em === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) { perms2.role = "admin"; perms2.editPages = "all"; perms2.pages = "all"; }
           await adminUpdateUser(editingUid, perms2);
-          editingUid = null;
+          editingUid = null; editingUserData = null;
           msg.style.color = "var(--good)"; msg.textContent = "Access updated ✓";
           go("admin");
           return;
@@ -3587,7 +3647,7 @@
         loadUserList();
       } catch (err) {
         msg.style.color = "var(--bad)"; msg.textContent = authErr(err);
-      } finally { sub.disabled = false; sub.textContent = editingUid ? "Save changes" : "Create user"; }
+      } finally { sub.disabled = false; sub.textContent = editingUid ? "Save changes" : (isSuperAdmin() ? "Create user" : "Create viewer"); }
     };
     loadUserList();
   }
@@ -3623,9 +3683,12 @@
     try {
       const snap = await db.collection("users").get();
       const rows = [];
+      const superMode = isSuperAdmin();
       snap.forEach((doc) => {
         const u = doc.data();
         const isAdm = u.role === "admin" || u.role === "superadmin";
+        // Page admins only manage plain VIEW users (never admins/supers/self).
+        if (!superMode && (isAdm || doc.id === (sessionUser && sessionUser.uid))) return;
         const editN = u.editPages === "all" ? "all" : (u.editPages || []).length;
         const scope = [
           isAdm ? "all pages" : (u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages")),

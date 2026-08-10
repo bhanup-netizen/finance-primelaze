@@ -57,11 +57,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // User permission docs — a user may read their own; admins read all;
-    // only super admins may create/update/delete accounts.
+    // User permission docs.
+    //  - Read: own doc; admins/super and page editors read the list (to manage).
+    //  - Super admins: full create/update/delete of any account.
+    //  - Page editors: may create/update/delete VIEW users only (they can add
+    //    viewers for their pages). The role=='view' guard blocks any attempt to
+    //    mint or elevate an admin/super via this path.
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      allow create, update, delete: if isSuperAdmin();
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin() || isPageEditor());
+      allow create, update: if isSuperAdmin()
+        || (isPageEditor() && request.resource.data.role == 'view');
+      allow delete: if isSuperAdmin()
+        || (isPageEditor() && resource.data.role == 'view');
     }
   }
 }
