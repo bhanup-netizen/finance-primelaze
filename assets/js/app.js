@@ -105,6 +105,7 @@
     { id: "order", label: "Inventory", group: "Operations", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Operations", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Operations", render: renderChallan },
+    { id: "payments", label: "Payments", group: "Records", render: renderPayments },
     { id: "admin", label: "⚙ Admin", group: "Records", render: renderAdmin },
   ];
 
@@ -1927,6 +1928,287 @@
       <div id="demoBody">${demoTable()}</div>`;
   }
 
+  /* ================= PAYMENT COMMITMENTS ================= */
+  // Outstanding customer payment commitments across Consumables / Machine /
+  // Esthemax. Finance uploads an Excel/CSV that APPENDS to the existing data
+  // (old data is always kept). Status is derived live against today's date.
+  const paymentAdds = [];            // finance-uploaded appended rows
+  let paySeq = 0;
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "" };
+  const PAY_STATUS = {
+    green: { label: "Received", cls: "pay-green" },
+    yellow: { label: "Partial", cls: "pay-yellow" },
+    red: { label: "Overdue", cls: "pay-red" },
+    blue: { label: "Upcoming", cls: "pay-blue" },
+    grey: { label: "No date", cls: "pay-grey" },
+  };
+  const PAY_ORDER = ["red", "yellow", "blue", "grey", "green"];
+  const canEditPayments = () => isAdmin(); // full/page admins can upload
+
+  const payToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+  const payNum = (v) => {
+    if (typeof v === "number") return isNaN(v) ? 0 : v;
+    const n = parseFloat(String(v == null ? "" : v).replace(/[^0-9.\-]/g, ""));
+    return isNaN(n) ? 0 : n;
+  };
+  function payEnrich(r) {
+    const committed = payNum(r.committedAmount);
+    const received = payNum(r.received);
+    const pending = Math.max(committed - received, 0);
+    let status = "grey", daysOverdue = 0;
+    if (committed > 0 && received >= committed) status = "green";
+    else if (received > 0 && received < committed) status = "yellow";
+    else if (!r.committedDate) status = "grey";
+    else {
+      const cd = new Date(r.committedDate);
+      const diff = Math.round((payToday() - cd) / 86400000);
+      if (diff > 0) { status = "red"; daysOverdue = diff; } else status = "blue";
+    }
+    return Object.assign({}, r, { committed, received, pending, status, daysOverdue });
+  }
+  const payAll = () => (D.payments || []).concat(paymentAdds).map(payEnrich);
+  const payUniq = (arr, key) => Array.from(new Set(arr.map((x) => x[key]).filter(Boolean))).sort();
+
+  function payFiltered(rows) {
+    return rows.filter((d) => {
+      if (payFilter.cat && d.category !== payFilter.cat) return false;
+      if (payFilter.hq && d.hq !== payFilter.hq) return false;
+      if (payFilter.sp && d.salesPerson !== payFilter.sp) return false;
+      if (payFilter.status && d.status !== payFilter.status) return false;
+      if (payFilter.q) {
+        const hay = `${d.customer} ${d.hq} ${d.salesPerson} ${d.category} ${d.remark}`.toLowerCase();
+        if (!hay.includes(payFilter.q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function payKpis(rows) {
+    const sum = (f) => rows.reduce((a, r) => a + payNum(r[f]), 0);
+    const committed = sum("committed"), received = sum("received"), pending = sum("pending");
+    const overdue = rows.filter((r) => r.status === "red");
+    const overdueAmt = overdue.reduce((a, r) => a + r.pending, 0);
+    const cards = [
+      { cls: "", label: "Committed", value: rupeeShort(committed), note: rows.length + " commitments" },
+      { cls: "k-good", label: "Received", value: rupeeShort(received), note: committed ? Math.round(received / committed * 100) + "% of committed" : "—" },
+      { cls: "k-warn", label: "Pending", value: rupeeShort(pending), note: "yet to collect" },
+      { cls: "k-bad", label: "Overdue", value: rupeeShort(overdueAmt), note: overdue.length + " past due" },
+    ];
+    return `<div class="grid kpi-grid">${cards.map((k) => `
+      <div class="kpi ${k.cls}"><div class="kpi-value">${k.value}</div>
+      <div class="kpi-label">${esc(k.label)}</div><div class="kpi-note">${esc(k.note)}</div></div>`).join("")}</div>`;
+  }
+
+  // Status chips (also act as filters) with count + pending amount each.
+  function payStatusChips(rows) {
+    const by = {};
+    PAY_ORDER.forEach((s) => (by[s] = { n: 0, amt: 0 }));
+    rows.forEach((r) => { by[r.status].n++; by[r.status].amt += r.pending; });
+    const chip = (s) => {
+      const m = PAY_STATUS[s], b = by[s];
+      const active = payFilter.status === s;
+      return `<button data-paystatus="${s}" class="pay-chip ${m.cls} ${active ? "active" : ""}">
+        <span class="pay-chip-dot"></span>${esc(m.label)}
+        <span class="pay-chip-n">${b.n}</span>
+        <span class="pay-chip-amt">${b.amt ? rupeeShort(b.amt) : "—"}</span></button>`;
+    };
+    return `<div class="pay-chips">
+      <button data-paystatus="" class="pay-chip ${payFilter.status ? "" : "active"}">All<span class="pay-chip-n">${rows.length}</span></button>
+      ${PAY_ORDER.map(chip).join("")}</div>`;
+  }
+
+  // Compact "pending by group" breakdown (category / HQ).
+  function payBreakdown(rows, key, title) {
+    const g = {};
+    rows.forEach((r) => {
+      const k = r[key] || "—";
+      (g[k] || (g[k] = { n: 0, committed: 0, received: 0, pending: 0 }));
+      g[k].n++; g[k].committed += r.committed; g[k].received += r.received; g[k].pending += r.pending;
+    });
+    const entries = Object.entries(g).sort((a, b) => b[1].pending - a[1].pending);
+    const max = Math.max(1, ...entries.map((e) => e[1].pending));
+    const head = `<th>${esc(title)}</th><th class="num">Records</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Pending share</th>`;
+    const body = entries.map(([k, v]) => `<tr>
+      <td class="t-name">${esc(k)}</td>
+      <td class="num">${v.n}</td>
+      <td class="num">${rupeeShort(v.committed)}</td>
+      <td class="num">${rupeeShort(v.received)}</td>
+      <td class="num">${rupeeShort(v.pending)}</td>
+      <td><span class="bar-track" style="min-width:90px"><span class="bar-fill" style="width:${Math.round(v.pending / max * 100)}%"></span></span></td></tr>`).join("");
+    return table(head, body);
+  }
+
+  function payTableRows(rows) {
+    const sorted = rows.slice().sort((a, b) => {
+      const ra = PAY_ORDER.indexOf(a.status), rb = PAY_ORDER.indexOf(b.status);
+      if (ra !== rb) return ra - rb;
+      return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
+    });
+    if (!sorted.length) return `<tr><td colspan="10" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
+    return sorted.map((r) => {
+      const m = PAY_STATUS[r.status];
+      return `<tr>
+        <td class="t-name">${esc(r.customer || "—")}</td>
+        <td>${esc(r.category || "—")}</td>
+        <td>${esc(r.hq || "—")}</td>
+        <td>${esc(r.salesPerson || "—")}</td>
+        <td>${r.committedDate ? esc(fmtDate(r.committedDate)) : "<span class='t-muted'>no date</span>"}</td>
+        <td class="num">${rupee(r.committed)}</td>
+        <td class="num">${rupee(r.received)}</td>
+        <td class="num">${r.pending ? rupee(r.pending) : "—"}</td>
+        <td><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></td>
+        <td class="t-muted">${esc(r.remark || "")}</td></tr>`;
+    }).join("");
+  }
+
+  function payRepaint() {
+    const rows = payFiltered(payAll());
+    const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+    setHtml("payKpis", payKpis(rows));
+    setHtml("payChips", payStatusChips(rows));
+    setHtml("payBody", payTableRows(rows));
+    const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rows.length + " records";
+    wirePayChips();
+  }
+  function wirePayChips() {
+    document.querySelectorAll("[data-paystatus]").forEach((b) => {
+      b.onclick = () => { payFilter.status = b.dataset.paystatus; payRepaint(); };
+    });
+  }
+
+  // ---- Excel / CSV import (append) + template ----
+  const PAY_HEADERS = ["Category", "HQ", "Sales Person", "Customer", "Committed Date", "Outstanding", "Committed Amount", "Received", "Remark", "Line Items"];
+  function payNormDate(v) {
+    if (!v) return "";
+    if (v instanceof Date && !isNaN(v)) {
+      const p = (n) => String(n).padStart(2, "0");
+      return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}`;
+    }
+    const s = String(v).trim();
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    m = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/.exec(s); // dd/mm/yyyy
+    if (m) { let y = m[3]; if (y.length === 2) y = "20" + y; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+    return "";
+  }
+  function payMapRow(o) {
+    const norm = {};
+    Object.keys(o).forEach((k) => { norm[k.toLowerCase().replace(/[^a-z]/g, "")] = o[k]; });
+    const g = (...keys) => { for (const k of keys) if (norm[k] != null && norm[k] !== "") return norm[k]; return ""; };
+    return {
+      id: "u" + (paySeq++),
+      category: String(g("category", "type") || "").trim(),
+      hq: String(g("hq", "region", "branch") || "").trim(),
+      salesPerson: String(g("salesperson", "sp", "rep") || "").trim(),
+      customer: String(g("customer", "client", "doctor", "clinic", "party") || "").trim(),
+      committedDate: payNormDate(g("committeddate", "commitmentdate", "date", "promiseddate")),
+      outstanding: payNum(g("outstanding", "balance", "outstandingamount")),
+      committedAmount: payNum(g("committedamount", "committed", "promisedamount", "amount")),
+      received: payNum(g("received", "amountreceived", "collected", "receivedamount")),
+      remark: String(g("remark", "remarks", "note", "notes", "comment") || "").trim(),
+      lineItems: payNum(g("lineitems", "items", "noofitems")),
+    };
+  }
+  const payKey = (r) => [r.category, r.customer, r.committedDate, r.committedAmount, r.outstanding].join("|").toLowerCase();
+  function payAppend(mapped) {
+    const seen = new Set(payAll().map(payKey));
+    let added = 0;
+    mapped.forEach((r) => { if (r.customer || r.committedAmount || r.outstanding) { const k = payKey(r); if (!seen.has(k)) { seen.add(k); paymentAdds.push(r); added++; } } });
+    saveEdits(`Payments · uploaded ${added} new row(s)`);
+    payRepaint();
+    window.alert(`Imported ${added} new commitment row(s).` + (mapped.length - added ? ` ${mapped.length - added} duplicate/blank row(s) skipped.` : ""));
+  }
+  function payParseCSV(text) {
+    const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim() !== "");
+    if (!lines.length) return [];
+    const split = (line) => { const out = []; let cur = "", q = false; for (let i = 0; i < line.length; i++) { const c = line[i]; if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; } else if (c === '"') q = true; else if (c === ",") { out.push(cur); cur = ""; } else cur += c; } out.push(cur); return out; };
+    const heads = split(lines[0]);
+    return lines.slice(1).map((l) => { const cells = split(l); const o = {}; heads.forEach((h, i) => (o[h] = cells[i] != null ? cells[i] : "")); return o; });
+  }
+  function payImport(file) {
+    const isCsv = /\.csv$/i.test(file.name) || !window.XLSX;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        let rows;
+        if (isCsv) rows = payParseCSV(String(e.target.result));
+        else {
+          const wb = window.XLSX.read(e.target.result, { type: "array", cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          rows = window.XLSX.utils.sheet_to_json(ws, { defval: "" });
+        }
+        payAppend(rows.map(payMapRow));
+      } catch (err) { window.alert("Could not read the file: " + (err.message || err)); }
+    };
+    if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+  }
+  function payDownloadTemplate() {
+    const sample = ["Consumables", "Telangana", "Vamsi", "Sample Clinic (delete this row)", "2026-09-15", 50000, 50000, 0, "By mid September", 2];
+    if (window.XLSX) {
+      const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample]);
+      ws["!cols"] = PAY_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Commitments");
+      window.XLSX.writeFile(wb, "payment_commitments_template.xlsx");
+    } else {
+      const csv = [PAY_HEADERS.join(","), sample.join(",")].join("\n");
+      const a = document.createElement("a");
+      a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      a.download = "payment_commitments_template.csv";
+      a.click();
+    }
+  }
+
+  function renderPayments() {
+    const admin = canEditPayments();
+    const rows0 = payAll();
+    setTimeout(() => {
+      const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onchange = fn; };
+      wire("payCat", (e) => { payFilter.cat = e.target.value; payRepaint(); });
+      wire("payHq", (e) => { payFilter.hq = e.target.value; payRepaint(); });
+      wire("paySp", (e) => { payFilter.sp = e.target.value; payRepaint(); });
+      const s = document.getElementById("paySearch");
+      if (s) s.oninput = (e) => { payFilter.q = e.target.value.toLowerCase(); payRepaint(); };
+      const tpl = document.getElementById("payTplBtn"); if (tpl) tpl.onclick = payDownloadTemplate;
+      const up = document.getElementById("payUpload");
+      if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) payImport(f); e.target.value = ""; };
+      const clr = document.getElementById("payClearFilters");
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "" }; renderTab("payments"); };
+      wirePayChips();
+    }, 0);
+    const opt = (v, cur) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`;
+    const sel = (id, cur, values, allLabel) => `<label class="ord-field"><span>${esc(allLabel)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => opt(v, cur)).join("")}</select></label>`;
+    return `
+      <div class="section-head">
+        <h1>Payment Commitments</h1>
+        <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Finance can upload an Excel/CSV to append new commitments — existing data is always kept." : "Read-only."}</p>
+      </div>
+      <div id="payKpis">${payKpis(rows0)}</div>
+      <div id="payChips">${payStatusChips(rows0)}</div>
+      <div class="controls" style="margin-top:14px">
+        <input id="paySearch" class="search" type="search" placeholder="Search customer, HQ, rep, remark…" value="${esc(payFilter.q)}">
+        ${sel("payCat", payFilter.cat, payUniq(rows0, "category"), "Category")}
+        ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
+        ${sel("paySp", payFilter.sp, payUniq(rows0, "salesPerson"), "Sales Person")}
+        <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
+        ${admin ? `<div class="hq-actions">
+          <button id="payTplBtn" class="ghost-btn" type="button">⬇ Excel template</button>
+          <label class="dl-btn" style="cursor:pointer">⬆ Upload &amp; append<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>
+        </div>` : ""}
+      </div>
+      <div class="two-col" style="margin:6px 0 4px">
+        <div class="card"><h2 style="margin-top:0">Pending by category</h2>${payBreakdown(rows0, "category", "Category")}</div>
+        <div class="card"><h2 style="margin-top:0">Pending by HQ</h2>${payBreakdown(rows0, "hq", "HQ")}</div>
+      </div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px">
+        <h2 style="margin:0">Detailed commitment report</h2><span class="tag" id="payDrillCount">${rows0.length} records</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Customer</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Status</th><th>Remark</th></tr></thead>
+        <tbody id="payBody">${payTableRows(payFiltered(rows0))}</tbody>
+      </table></div>`;
+  }
+
   /* ================= DELIVERY CHALLAN ================= */
   const DEFAULT_FROM = {
     name: "Leeford Healthcare Ltd (Primelaze)",
@@ -2893,6 +3175,11 @@
       if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
       if (Array.isArray(e.customDesignations)) { customDesignations.length = 0; e.customDesignations.forEach((d) => customDesignations.push(d)); }
+      if (Array.isArray(e.paymentAdds)) {
+        paymentAdds.length = 0; e.paymentAdds.forEach((r) => paymentAdds.push(r));
+        const ids = paymentAdds.map((r) => +String(r.id).replace(/^u/, "")).filter((n) => !isNaN(n));
+        paySeq = ids.length ? Math.max(...ids) + 1 : 0;
+      }
       if (Array.isArray(e.customPeople)) { customPeople.length = 0; e.customPeople.forEach((h) => customPeople.push(h)); }
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
@@ -2939,7 +3226,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }

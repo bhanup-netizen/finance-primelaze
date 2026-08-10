@@ -285,6 +285,50 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 .pen-history .peh-when { color: var(--text-3); font-variant-numeric: tabular-nums; }
 .pen-history b { color: var(--text); }
 
+/* Small count/label tag */
+.tag { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: 11.5px; font-weight: 700; }
+.section-title h2 { font-size: 16px; }
+
+/* Payment commitments — status colours, chips, badges */
+:root {
+  --pay-green: var(--good); --pay-green-soft: var(--good-soft);
+  --pay-yellow: var(--warn); --pay-yellow-soft: var(--warn-soft);
+  --pay-red: var(--bad); --pay-red-soft: var(--bad-soft);
+  --pay-blue: var(--info); --pay-blue-soft: var(--info-soft);
+  --pay-grey: var(--text-3); --pay-grey-soft: var(--surface-3);
+}
+.pay-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 2px; }
+.pay-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  font-family: inherit; font-size: 12.5px; font-weight: 600;
+}
+.pay-chip:hover { border-color: var(--border-strong); color: var(--text); }
+.pay-chip .pay-chip-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); }
+.pay-chip .pay-chip-n { font-weight: 800; }
+.pay-chip .pay-chip-amt { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pay-chip.active { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+.pay-chip.pay-green .pay-chip-dot { background: var(--pay-green); }
+.pay-chip.pay-yellow .pay-chip-dot { background: var(--pay-yellow); }
+.pay-chip.pay-red .pay-chip-dot { background: var(--pay-red); }
+.pay-chip.pay-blue .pay-chip-dot { background: var(--pay-blue); }
+.pay-chip.pay-grey .pay-chip-dot { background: var(--pay-grey); }
+.pay-chip.pay-red.active { border-color: var(--pay-red); background: var(--pay-red-soft); }
+.pay-chip.pay-yellow.active { border-color: var(--pay-yellow); background: var(--pay-yellow-soft); }
+.pay-chip.pay-green.active { border-color: var(--pay-green); background: var(--pay-green-soft); }
+.pay-chip.pay-blue.active { border-color: var(--pay-blue); background: var(--pay-blue-soft); }
+.pay-chip.pay-grey.active { border-color: var(--pay-grey); background: var(--pay-grey-soft); }
+.pay-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.pay-badge.pay-green { color: var(--pay-green); background: var(--pay-green-soft); }
+.pay-badge.pay-yellow { color: var(--pay-yellow); background: var(--pay-yellow-soft); }
+.pay-badge.pay-red { color: var(--pay-red); background: var(--pay-red-soft); }
+.pay-badge.pay-blue { color: var(--pay-blue); background: var(--pay-blue-soft); }
+.pay-badge.pay-grey { color: var(--pay-grey); background: var(--pay-grey-soft); }
+
 /* User access detail (Admin → Existing users → View) */
 .ua-detail { padding: 6px 2px 10px; }
 .ua-title { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-3); font-weight: 700; margin-bottom: 8px; }
@@ -322,6 +366,8 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 .kpi.k-teal::before { background: var(--accent-2); }
 .kpi.k-good::before { background: var(--good); }
 .kpi.k-warn::before { background: var(--warn); }
+.kpi.k-bad::before { background: var(--bad); }
+.kpi.k-info::before { background: var(--info); }
 .kpi .kpi-label { font-size: 12.5px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
 .kpi .kpi-value { font-size: 34px; font-weight: 800; letter-spacing: -1px; margin: 6px 0 2px; }
 .kpi .kpi-note { font-size: 12.5px; color: var(--text-2); }
