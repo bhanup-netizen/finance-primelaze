@@ -2066,6 +2066,8 @@
     const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
     setHtml("payKpis", payKpis(rows));
     setHtml("payChips", payStatusChips(rows));
+    setHtml("payBreakCat", payBreakdown(rows, "category", "Category"));
+    setHtml("payBreakHq", payBreakdown(rows, "hq", "HQ"));
     setHtml("payBody", payTableRows(rows));
     const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rows.length + " records";
     wirePayChips();
@@ -2169,6 +2171,15 @@
       wire("paySp", (e) => { payFilter.sp = e.target.value; payRepaint(); });
       const s = document.getElementById("paySearch");
       if (s) s.oninput = (e) => { payFilter.q = e.target.value.toLowerCase(); payRepaint(); };
+      // Explicit Apply — re-reads every control and applies (works even if a
+      // dropdown's change event didn't fire).
+      const applyBtn = document.getElementById("payApply");
+      if (applyBtn) applyBtn.onclick = () => {
+        const gv = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
+        payFilter.cat = gv("payCat"); payFilter.hq = gv("payHq"); payFilter.sp = gv("paySp");
+        payFilter.q = (gv("paySearch") || "").toLowerCase();
+        payRepaint();
+      };
       const tpl = document.getElementById("payTplBtn"); if (tpl) tpl.onclick = payDownloadTemplate;
       const up = document.getElementById("payUpload");
       if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) payImport(f); e.target.value = ""; };
@@ -2190,6 +2201,7 @@
         ${sel("payCat", payFilter.cat, payUniq(rows0, "category"), "Category")}
         ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
         ${sel("paySp", payFilter.sp, payUniq(rows0, "salesPerson"), "Sales Person")}
+        <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
           <button id="payTplBtn" class="ghost-btn" type="button">⬇ Download input template</button>
@@ -2197,8 +2209,8 @@
         </div>
       </div>
       <div class="two-col" style="margin:6px 0 4px">
-        <div class="card"><h2 style="margin-top:0">Pending by category</h2>${payBreakdown(rows0, "category", "Category")}</div>
-        <div class="card"><h2 style="margin-top:0">Pending by HQ</h2>${payBreakdown(rows0, "hq", "HQ")}</div>
+        <div class="card"><h2 style="margin-top:0">Pending by category</h2><div id="payBreakCat">${payBreakdown(payFiltered(rows0), "category", "Category")}</div></div>
+        <div class="card"><h2 style="margin-top:0">Pending by HQ</h2><div id="payBreakHq">${payBreakdown(payFiltered(rows0), "hq", "HQ")}</div></div>
       </div>
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px">
         <h2 style="margin:0">Detailed commitment report</h2><span class="tag" id="payDrillCount">${rows0.length} records</span>
