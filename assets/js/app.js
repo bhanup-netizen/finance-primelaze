@@ -2815,14 +2815,14 @@
           <thead><tr>
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
-                 <th class="num">Required</th><th class="num">Current</th><th class="num">To Buy</th>
-                 <th>ETA (arrival)</th>`
-              : `<th>Product</th><th class="num">Current stock</th><th>Status</th><th>Estimated arrival</th>`}
+                 <th class="num">Required</th><th class="num">Current</th>${isSuperAdmin() ? `<th class="num">To Buy</th>
+                 <th>ETA (arrival)</th>` : ""}`
+              : `<th>Product</th><th class="num">Current stock</th><th>Status</th>${isSuperAdmin() ? `<th>Estimated arrival</th>` : ""}`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall.</div>` : ""}`;
+      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan.${isSuperAdmin() ? ` To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Order quantity &amp; arrival are visible to super admins only.` : ""}</div>` : ""}`;
   }
 
   function orderPaint() {
@@ -2841,7 +2841,7 @@
     const kpis = [
       { cls: "k-good", label: "Can sell now", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
-    ].concat(admin ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
+    ].concat(isSuperAdmin() ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
     if (kEl) kEl.innerHTML = kpis;
@@ -2852,12 +2852,12 @@
         ? `<span class="badge b-good">Can sell</span>`
         : `<span class="badge b-warn">Reorder</span>`;
       if (!admin) {
-        // View: Product · Current stock · Status · Estimated arrival only.
+        // View: Product · Current stock · Status (arrival is super-admin only).
         return `<tr>
           <td class="t-name">${esc(r.it.name)}</td>
           <td class="num">${inr(r.current)}</td>
           <td>${status}</td>
-          <td>${orderState.eta[r.i] ? esc(orderState.eta[r.i]) : "—"}</td>
+          ${isSuperAdmin() ? `<td>${orderState.eta[r.i] ? esc(orderState.eta[r.i]) : "—"}</td>` : ""}
         </tr>`;
       }
       const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
@@ -2869,10 +2869,10 @@
         <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
-        <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
-        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>
+        ${isSuperAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
+        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>` : ""}
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? 9 : 4}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? (isSuperAdmin() ? 9 : 7) : 3}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
   }
@@ -2887,11 +2887,13 @@
       const statusCell = admin
         ? `<select class="inv-simple demo-select" data-item="${esc(name)}" data-f="status" style="max-width:160px"><option value="">—</option>${INV_STATUS.map((s) => `<option${d.status === s ? " selected" : ""}>${s}</option>`).join("")}</select>`
         : (d.status || "—");
+      // Arrival date ("when it arrived") is visible to super admins only.
       const etaCell = admin
         ? `<input class="inv-simple eta-input" data-item="${esc(name)}" data-f="eta" type="date" value="${esc(d.eta || "")}">`
         : (d.eta || "—");
-      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td>${statusCell}</td><td>${etaCell}</td></tr>`;
-    }).join("") || `<tr><td colspan="4" class="empty">No items.</td></tr>`;
+      const etaTd = isSuperAdmin() ? `<td>${etaCell}</td>` : "";
+      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td>${statusCell}</td>${etaTd}</tr>`;
+    }).join("") || `<tr><td colspan="${isSuperAdmin() ? 4 : 3}" class="empty">No items.</td></tr>`;
   }
 
   function wireSimpleInv(lineId) {
@@ -2933,10 +2935,10 @@
       </div>
       <div class="controls"><input id="ordSearch" class="search" type="search" placeholder="Search ${line.id === "celluma" ? "variant" : "machine"}…" value="${esc(orderState.q)}"></div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Item</th><th class="num">Current stock</th><th>Status</th><th>Estimated arrival</th></tr></thead>
+        <thead><tr><th>Item</th><th class="num">Current stock</th><th>Status</th>${isSuperAdmin() ? `<th>Estimated arrival</th>` : ""}</tr></thead>
         <tbody id="simpleInvBody">${simpleInvRows(items, data, orderState.q, admin)}</tbody>
       </table></div>
-      ${admin ? `<div class="muted-note">Enter current stock, status and expected arrival for each ${line.id === "celluma" ? "Celluma variant" : "machine"}. Saved for everyone.</div>` : ""}`;
+      ${admin ? `<div class="muted-note">Enter current stock and status for each ${line.id === "celluma" ? "Celluma variant" : "machine"}.${isSuperAdmin() ? " Expected arrival is visible to super admins only." : ""} Saved for everyone.</div>` : ""}`;
   }
 
   function orderBindStockInputs() {
