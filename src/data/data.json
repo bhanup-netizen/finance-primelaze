@@ -13,12 +13,12 @@
   "kpis": {
     "devices": 229,
     "celluma": 120,
-    "activeReps": 11,
-    "vacant": 5,
+    "activeReps": 9,
+    "vacant": 7,
     "devicesNote": "229 machines / yr",
     "cellumaNote": "120 units / yr (new rule)",
     "repsNote": "+ Ibrahim demo; Lubdha & D.Siva joined 2 Jun",
-    "vacantNote": "Delhi/Gujarat/Kerala/Hyderabad ASM + North-1 ZSM (Chandigarh)"
+    "vacantNote": "Delhi/Gujarat/Kerala/Hyderabad/Kolkata ASM + Chennai RSM + North-1 ZSM"
   },
   "zones": [
     {
@@ -80,7 +80,7 @@
           ]
         },
         {
-          "name": "Kolkata HQ — Ramandeep Kaur (ASM, reports to Ambika)",
+          "name": "Kolkata HQ — Vacant ASM (Ramandeep Kaur resigned)",
           "people": [
             {
               "num": 5,
@@ -90,7 +90,7 @@
               "reportsTo": "Ambika Anand",
               "devices": 16,
               "celluma": 10,
-              "notes": "Bihar moved to N2. Coverage: WB + Jharkhand + NE states."
+              "notes": "Resigned — left company; seat vacant, backfill pending. Coverage: WB + Jharkhand + NE states."
             }
           ]
         }
@@ -100,7 +100,7 @@
       "name": "SOUTH ZONE — Tamil Nadu • Karnataka • Kerala • Andhra Pradesh • Telangana • Orissa",
       "hqs": [
         {
-          "name": "Chennai HQ — Harani S (RSM) + Vacant ASM",
+          "name": "Chennai HQ — Vacant RSM (Harani S resigned) + Vacant ASM",
           "people": [
             {
               "num": 6,
@@ -110,7 +110,7 @@
               "reportsTo": "Arjun",
               "devices": 51,
               "celluma": 20,
-              "notes": "Solo TN coverage. Cellina 12 + Vossman 12 + Biaxis 8 + MP 8 + Blauman 4 + UTIMS 2 + Exofacial 3 + Polylase ND 1 + BiAxis Pico 1 = 51"
+              "notes": "Resigned — left company; seat vacant, backfill pending. Was solo TN coverage."
             },
             {
               "num": 7,
@@ -296,8 +296,9 @@
         "baseHQ": "Kolkata",
         "reportsTo": "Ambika Anand",
         "zone": "East + Northeast",
-        "notes": "East zone solo coverage",
-        "division": "Derma"
+        "notes": "Resigned — left company. Kolkata ASM seat vacant, backfill pending.",
+        "division": "Derma",
+        "status": "vacant"
       },
       {
         "num": 6,
@@ -306,8 +307,9 @@
         "baseHQ": "Chennai",
         "reportsTo": "Arjun",
         "zone": "South — Chennai",
-        "notes": "Tamil Nadu outside Chennai metro",
-        "division": "Derma"
+        "notes": "Resigned — left company. Chennai RSM seat vacant, backfill pending.",
+        "division": "Derma",
+        "status": "vacant"
       },
       {
         "num": 7,
@@ -441,8 +443,8 @@
       }
     ],
     "summary": {
-      "Active personnel": 12,
-      "Vacant positions": 5,
+      "Active personnel": 10,
+      "Vacant positions": 7,
       "Total roster": 19,
       "To join": 2
     }
@@ -1536,7 +1538,7 @@
     {
       "sheet": "Delhi HQ",
       "title": "Delhi HQ — North 2 (Delhi NCT + UP + Rajasthan + Haryana P2 + Bihar)",
-      "subtitle": "Currently held by: Ambika Anand (ZSM, reports to Arjun). Direct report: Ramandeep (Kolkata HQ). Note: Bihar moved from East to North 2. Haryana split — Ambika covers Bahadurgarh, Rewari, Faridabad, Gurgaon, Panipat only.",
+      "subtitle": "Currently held by: Ambika Anand (ZSM, reports to Arjun). Direct report: Kolkata HQ (vacant — Ramandeep resigned). Note: Bihar moved from East to North 2. Haryana split — Ambika covers Bahadurgarh, Rewari, Faridabad, Gurgaon, Panipat only.",
       "summary": [
         {
           "label": "FY25-26 Actual",
@@ -1756,7 +1758,7 @@
     {
       "sheet": "Kolkata HQ",
       "title": "Kolkata HQ — East Zone (WB + NE states + Jharkhand)",
-      "subtitle": "Held by: Ramandeep Kaur (ASM). Reports to Ambika Anand (Delhi HQ). Bihar moved from East to North 2 (Delhi zone). Ambika visits 5 days/month alternating Kolkata city / rest of East zone.",
+      "subtitle": "Vacant — Ramandeep Kaur (ASM) resigned; seat vacant, backfill pending. Reports to Ambika Anand (Delhi HQ). Bihar moved from East to North 2 (Delhi zone). Ambika visits 5 days/month alternating Kolkata city / rest of East zone.",
       "summary": [
         {
           "label": "FY25-26 Actual",
@@ -1959,7 +1961,7 @@
     {
       "sheet": "Chennai HQ",
       "title": "Chennai HQ — South Zone (Tamil Nadu)",
-      "subtitle": "Held by: Harani S (RSM). Vacant ASM hire pending. Coverage: Tamil Nadu (solo). Celluma allocated at HQ level (20 Celluma units/yr).",
+      "subtitle": "Vacant — Harani S (RSM) resigned; seat vacant, backfill pending. Vacant ASM hire also pending. Coverage: Tamil Nadu. Celluma allocated at HQ level (20 Celluma units/yr).",
       "summary": [
         {
           "label": "FY25-26 Actual",
