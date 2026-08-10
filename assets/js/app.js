@@ -1664,7 +1664,6 @@
   const DEMO_VIEWS = [
     { id: "current", label: "Current status" },
     { id: "status", label: "Machine details" },
-    { id: "movement", label: "Movement log" },
     { id: "packing", label: "Packing condition" },
   ];
   const FREE_TEXT_COLS = /remark|missing item|accessor|damage report|dimension|purpose$|^device$|^machine$|serial|flight case id/i;
