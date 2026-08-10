@@ -170,7 +170,7 @@
           ]
         },
         {
-          "name": "Hyderabad HQ — Vacant ASM + Ibrahim (SE demo) + Vacant ASM",
+          "name": "Hyderabad HQ — D. Siva (ASM) + Ibrahim (SE demo) + Vacant ASM",
           "people": [
             {
               "num": 11,
@@ -200,7 +200,7 @@
               "reportsTo": "Arjun",
               "devices": 0,
               "celluma": null,
-              "notes": "Joins 11 Jun as ASM Hyderabad (to-join). Celluma 6 (starts +3mo)."
+              "notes": "Joined as ASM Hyderabad (active). Celluma 6 (starts +3mo)."
             }
           ]
         }
@@ -378,8 +378,9 @@
         "baseHQ": "Hyderabad",
         "reportsTo": "Arjun",
         "zone": "South — Hyderabad",
-        "notes": "Demo support for Vamshi (AP)",
-        "division": "Derma"
+        "notes": "Joined as ASM Hyderabad (Andhra Pradesh / Telangana).",
+        "division": "Derma",
+        "status": "active"
       },
       {
         "num": 14,
@@ -2660,7 +2661,7 @@
     {
       "sheet": "Hyderabad HQ",
       "title": "Hyderabad HQ — South Zone (Telangana)",
-      "subtitle": "Team: Vacant ASM (role now vacant) + Ibrahim (SE demo support) + Vacant ASM 2. Device target TBD pending ASM hire. Celluma at HQ-level baseline.",
+      "subtitle": "Team: D. Siva (ASM, joined) + Ibrahim (SE demo support) + Vacant ASM (2nd slot). Device target TBD pending confirmation. Celluma at HQ-level baseline.",
       "summary": [
         {
           "label": "FY25-26 Actual",
@@ -2682,8 +2683,9 @@
       "plans": [],
       "quarterly": [],
       "highlights": [
-        "📊 Hyderabad HQ FY26-27: Device target TBD pending ASM hire. Celluma 2/mo baseline at HQ level.",
-        "🎯 Once ASM hires close, redistribute Celluma across reps proportionally."
+        "✅ D. Siva joined as ASM Hyderabad (Andhra Pradesh / Telangana).",
+        "📊 Hyderabad HQ FY26-27: Device target TBD, to be set for Siva. Celluma 2/mo baseline at HQ level.",
+        "🎯 Once the 2nd ASM hire closes, redistribute Celluma across reps proportionally."
       ]
     },
     {
