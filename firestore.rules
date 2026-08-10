@@ -13,11 +13,19 @@ service cloud.firestore {
     function isBootstrapAdmin() {
       return isSignedIn() && request.auth.token.email == 'bhanup@primelaze.com';
     }
+    function userRole() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : '';
+    }
+    // Admin = full content edit (role 'admin' or 'superadmin', or bootstrap).
     function isAdmin() {
-      return isBootstrapAdmin() ||
-        (isSignedIn() &&
-         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      return isBootstrapAdmin() || userRole() == 'admin' || userRole() == 'superadmin';
+    }
+    // Super Admin = also manages users. Bootstrap email is always super.
+    function isSuperAdmin() {
+      return isBootstrapAdmin() || userRole() == 'superadmin';
     }
     // A "view" user granted edit rights on one or more pages (page admin).
     function isPageEditor() {
@@ -49,10 +57,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // User permission docs — a user may read their own; admins read/write all.
+    // User permission docs — a user may read their own; admins read all;
+    // only super admins may create/update/delete accounts.
     match /users/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
   }
 }

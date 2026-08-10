@@ -12,11 +12,15 @@
   // Session / permissions (populated from Firebase Auth + Firestore after login).
   let appMode = "view";                 // editing on/off (admins can toggle)
   let currentTab = "overview";
-  let userRole = "view";                // "admin" | "view"
+  let userRole = "view";                // "admin" | "view" (super maps to admin here)
+  let userSuper = false;                // true = Super Admin (everything + user mgmt)
   let perms = { pages: "all", hqs: "all", landing: false, managerInc: false, editPages: [] };
   let sessionUser = null;               // firebase.User
   let auth = null, db = null;           // firebase handles
 
+  // Super Admin can view & edit everything AND manage users (Admin tab).
+  // Plain Admin edits every content page but cannot manage users.
+  const isSuperAdmin = () => userSuper;
   const roleIsAdmin = () => userRole === "admin";
   // A "view" user can be granted edit rights on specific pages (page admin).
   const canEditPage = (id) => {
@@ -32,7 +36,7 @@
   const roAttr = () => (isAdmin() ? "" : "disabled");
   const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
   const canSeePage = (id) => {
-    if (id === "admin") return roleIsAdmin() && appMode === "admin"; // full admins in edit mode
+    if (id === "admin") return isSuperAdmin() && appMode === "admin"; // only super admins manage users
     if (canEditPage(id)) return true; // page editors can always see what they edit
     const p = allowedPages();
     return p === "all" || p.includes(id);
@@ -2816,12 +2820,19 @@
     catch (e) { console.warn("users read failed", e); }
 
     if (!udoc && isBootstrap) {
-      udoc = { email, role: "admin", pages: "all", hqs: "all", landing: true, managerInc: true, editPages: "all", name: "Administrator" };
+      udoc = { email, role: "superadmin", pages: "all", hqs: "all", landing: true, managerInc: true, editPages: "all", name: "Administrator" };
       try { await db.collection("users").doc(user.uid).set(udoc); } catch (e) { console.warn("bootstrap write failed", e); }
+    } else if (udoc && isBootstrap && udoc.role !== "superadmin") {
+      // Keep the bootstrap admin labelled as Super Admin.
+      udoc.role = "superadmin";
+      try { await db.collection("users").doc(user.uid).set({ role: "superadmin" }, { merge: true }); } catch (e) {}
     }
     if (!udoc) throw new Error("no-access");
 
-    userRole = udoc.role === "admin" ? "admin" : "view";
+    // "superadmin" and "admin" both edit all content; only super manages users.
+    // The bootstrap admin is always super, regardless of the stored role.
+    userRole = (udoc.role === "admin" || udoc.role === "superadmin") ? "admin" : "view";
+    userSuper = udoc.role === "superadmin" || isBootstrap;
     perms = { pages: udoc.pages || [], hqs: udoc.hqs || [], landing: !!udoc.landing, managerInc: !!udoc.managerInc, editPages: udoc.editPages || [] };
     // Migration: the old "esthemax" tab was merged into "prices" (Pricing).
     // Preserve access for users who were granted only the old page.
@@ -3092,7 +3103,7 @@
             <label class="ord-field"><span>Email</span><input id="auEmail" type="email" required placeholder="person@primelaze.com"></label>
             <label class="ord-field"><span>Temp password</span><input id="auPass" type="text" required placeholder="min 6 chars"></label>
             <label class="ord-field"><span>Role</span>
-              <select id="auRole" class="select"><option value="view">View (read-only)</option><option value="admin">Admin (full edit)</option></select>
+              <select id="auRole" class="select"><option value="view">View (custom access)</option><option value="admin">Admin (edit all pages)</option><option value="superadmin">Super Admin (everything + users)</option></select>
             </label>
             <label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
             <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label>
@@ -3101,7 +3112,7 @@
               <button type="button" class="linkish" data-access="view">all view</button> ·
               <button type="button" class="linkish" data-access="none">none</button></span></div>
               <div class="perm-grid">${accessRows}</div>
-              <div class="muted-note" style="margin-top:6px">Per page: <b>View</b> = read-only, <b>Edit</b> = page admin (can change it, e.g. HR editing Team Roster), <b>No access</b> = hidden. Full “Admin” role edits everything.</div></div>
+              <div class="muted-note" style="margin-top:6px">Per page: <b>View</b> = read-only, <b>Edit</b> = page admin (can change it, e.g. HR editing Team Roster), <b>No access</b> = hidden. These apply to the <b>View</b> role. <b>Admin</b> edits every page (page grid ignored); <b>Super Admin</b> also manages users here.</div></div>
             <div class="perm-group"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>
             <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="submit" class="dl-btn" id="auSubmit">Create user</button><button type="button" class="ghost-btn" id="auCancel" hidden>Cancel edit</button></div>
             <div id="auMsg" class="lock-error" style="min-height:16px"></div>
@@ -3136,8 +3147,9 @@
     const allPages = pages.length === PERMISSION_PAGES.length;
     const allHqs = hqs.length === D.hqTargets.length;
     const allEdit = editPages.length === PERMISSION_PAGES.length;
+    const roleVal = document.getElementById("auRole").value;
     return {
-      role: document.getElementById("auRole").value === "admin" ? "admin" : "view",
+      role: (roleVal === "admin" || roleVal === "superadmin") ? roleVal : "view",
       landing: document.getElementById("auLanding").checked,
       managerInc: document.getElementById("auMgrInc").checked,
       pages: allPages ? "all" : pages,
@@ -3153,7 +3165,7 @@
     const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
     const emailEl = document.getElementById("auEmail");
     if (emailEl) { emailEl.value = u.email || ""; emailEl.readOnly = true; }
-    set("auRole", u.role === "admin" ? "admin" : "view");
+    set("auRole", (u.role === "admin" || u.role === "superadmin") ? u.role : "view");
     chk("auLanding", u.landing); chk("auMgrInc", u.managerInc);
     const pagesAll = u.pages === "all", editAll = u.editPages === "all";
     const pagesList = Array.isArray(u.pages) ? u.pages : [], editList = Array.isArray(u.editPages) ? u.editPages : [];
@@ -3257,6 +3269,31 @@
     loadUserList();
   }
 
+  // Full, readable access breakdown for one user (shown by the "View" toggle).
+  function userAccessDetail(u) {
+    const role = u.role || "view";
+    const isAdm = role === "admin" || role === "superadmin";
+    const editAll = u.editPages === "all", pagesAll = u.pages === "all";
+    const editList = Array.isArray(u.editPages) ? u.editPages : [];
+    const pagesList = Array.isArray(u.pages) ? u.pages : [];
+    const pageRows = PERMISSION_PAGES.map((t) => {
+      let lvl, cls;
+      if (isAdm || editAll || editList.includes(t.id)) { lvl = "Edit"; cls = "b-good"; }
+      else if (pagesAll || pagesList.includes(t.id)) { lvl = "View"; cls = "b-info"; }
+      else { lvl = "No access"; cls = "b-neutral"; }
+      return `<div class="ua-row"><span>${esc(t.label)}</span><span class="badge ${cls}">${lvl}</span></div>`;
+    }).join("");
+    const canAdmin = role === "superadmin";
+    const hqs = u.hqs === "all" ? "All HQs" : ((u.hqs || []).length ? (u.hqs || []).join(", ") : "None");
+    return `<div class="ua-detail">
+      <div class="ua-title">Page access</div>
+      <div class="ua-grid">${pageRows}</div>
+      <div class="ua-meta"><b>HQ access:</b> ${esc(hqs)}</div>
+      <div class="ua-meta"><b>Landing / cost prices:</b> ${u.landing ? "Yes" : "No"} &nbsp;·&nbsp; <b>Manager incentives:</b> ${u.managerInc ? "Yes" : "No"}</div>
+      <div class="ua-meta"><b>User management:</b> ${canAdmin ? "Yes (Super Admin)" : "No"}</div>
+    </div>`;
+  }
+
   async function loadUserList() {
     const box = document.getElementById("userList");
     if (!box) return;
@@ -3265,27 +3302,47 @@
       const rows = [];
       snap.forEach((doc) => {
         const u = doc.data();
+        const isAdm = u.role === "admin" || u.role === "superadmin";
         const editN = u.editPages === "all" ? "all" : (u.editPages || []).length;
         const scope = [
-          u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages"),
-          u.role === "admin" ? "edits all" : (editN === "all" || editN > 0 ? "edits " + editN : "view-only"),
+          isAdm ? "all pages" : (u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages")),
+          isAdm ? "edits all" : (editN === "all" || editN > 0 ? "edits " + editN : "view-only"),
           u.hqs === "all" ? "all HQs" : ((u.hqs || []).length + " HQs"),
           u.landing ? "landing✓" : "no-landing",
           u.managerInc ? "mgr-inc✓" : "no-mgr-inc",
         ].join(" · ");
+        const roleLabel = u.role === "superadmin" ? "super admin" : (u.role || "view");
         const permsJson = esc(JSON.stringify({ email: u.email || "", role: u.role || "view", landing: !!u.landing, managerInc: !!u.managerInc, pages: u.pages || [], hqs: u.hqs || [], editPages: u.editPages || [] }));
         rows.push(`<tr>
           <td class="t-name">${esc(u.email || "—")}</td>
-          <td><span class="badge ${u.role === "admin" ? "b-good" : "b-neutral"}">${esc(u.role || "view")}</span></td>
+          <td><span class="badge ${isAdm ? "b-good" : "b-neutral"}">${esc(roleLabel)}</span></td>
           <td class="t-muted">${esc(scope)}</td>
-          <td style="white-space:nowrap"><button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
-        </tr>`);
+          <td style="white-space:nowrap"><button class="ghost-btn u-view" data-uid="${doc.id}">View</button> <button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
+        </tr>
+        <tr class="ua-tr" data-uid="${doc.id}" hidden><td colspan="4">${userAccessDetail(u)}</td></tr>`);
       });
       box.innerHTML = rows.length
         ? table(["User", "Role", "Access", ""].map((h) => `<th>${h}</th>`).join(""), rows.join(""))
         : `<div class="empty">No users yet.</div>`;
+      box.querySelectorAll(".u-view").forEach((b) => {
+        b.onclick = () => {
+          const det = box.querySelector('.ua-tr[data-uid="' + b.dataset.uid + '"]');
+          if (det) { det.hidden = !det.hidden; b.textContent = det.hidden ? "View" : "Hide"; }
+        };
+      });
       box.querySelectorAll(".u-edit").forEach((b) => {
         b.onclick = () => { try { fillUserForm(JSON.parse(b.dataset.perms), b.dataset.uid); } catch (e) {} };
+      });
+      box.querySelectorAll(".u-pwd").forEach((b) => {
+        b.onclick = async () => {
+          const email = b.dataset.email;
+          if (!email) return;
+          if (!window.confirm("Send a password-reset email to " + email + "?\n\nThey'll receive a secure link to set a new password themselves.")) return;
+          b.disabled = true;
+          try { await auth.sendPasswordResetEmail(email); window.alert("Password-reset email sent to " + email + " — ask them to check inbox and spam."); }
+          catch (e) { window.alert("Could not send reset email: " + (e.message || e)); }
+          finally { b.disabled = false; }
+        };
       });
       box.querySelectorAll(".u-del").forEach((b) => {
         b.onclick = async () => {
