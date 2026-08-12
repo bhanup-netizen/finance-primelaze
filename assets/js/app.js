@@ -3921,11 +3921,21 @@
           u.landing ? "landing✓" : "no-landing",
           u.managerInc ? "mgr-inc✓" : "no-mgr-inc",
         ].join(" · ");
-        const roleLabel = u.role === "superadmin" ? "super admin" : (u.role || "view");
+        // A view user with edit rights on page(s) is a "page admin" — label it
+        // by the page(s) they administer (e.g. "Inventory admin", "Demo admin").
+        const editList = u.editPages === "all" ? "all" : (Array.isArray(u.editPages) ? u.editPages : []);
+        let roleLabel, roleCls;
+        if (u.role === "superadmin") { roleLabel = "super admin"; roleCls = "b-good"; }
+        else if (u.role === "admin") { roleLabel = "admin"; roleCls = "b-good"; }
+        else if (editList === "all") { roleLabel = "page admin (all)"; roleCls = "b-info"; }
+        else if (editList.length) {
+          const names = editList.map((id) => (PERMISSION_PAGES.find((t) => t.id === id) || {}).label || id);
+          roleLabel = names.join(" + ") + " admin"; roleCls = "b-info";
+        } else { roleLabel = "view"; roleCls = "b-neutral"; }
         const permsJson = esc(JSON.stringify({ email: u.email || "", role: u.role || "view", landing: !!u.landing, managerInc: !!u.managerInc, pages: u.pages || [], hqs: u.hqs || [], editPages: u.editPages || [] }));
         rows.push(`<tr>
           <td class="t-name">${esc(u.email || "—")}</td>
-          <td><span class="badge ${isAdm ? "b-good" : "b-neutral"}">${esc(roleLabel)}</span></td>
+          <td><span class="badge ${roleCls}">${esc(roleLabel)}</span></td>
           <td class="t-muted">${esc(scope)}</td>
           <td style="white-space:nowrap"><button class="ghost-btn u-view" data-uid="${doc.id}">View</button> <button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
         </tr>
