@@ -2681,6 +2681,146 @@
   const INV_STATUS = ["In stock", "Low stock", "Reorder", "Out of stock"];
   let inventoryLine = "esthemax";
 
+  // ---- Admin-managed inventory items (add / edit / delete), saved for everyone ----
+  const invAdds = { esthemax: [], devices: [], celluma: [] };     // custom items
+  const invRemovals = { esthemax: [], devices: [], celluma: [] }; // hidden base items (by name)
+  const esthOverrides = {};                                       // base Esthemax field edits, by name
+  let esthBaseItems = null;                                       // pristine Esthemax item list
+
+  function ensureEsthBase() {
+    if (!esthBaseItems && D && D.esthemaxOrder && Array.isArray(D.esthemaxOrder.items)) {
+      esthBaseItems = D.esthemaxOrder.items.slice();
+    }
+  }
+  // Rebuild D.esthemaxOrder.items = base (minus removed, plus overrides) + custom adds.
+  function rebuildEsthItems() {
+    if (!D || !D.esthemaxOrder) return;
+    ensureEsthBase();
+    const removed = invRemovals.esthemax || [];
+    let items = (esthBaseItems || []).filter((it) => !removed.includes(it.name))
+      .map((it) => { const o = esthOverrides[it.name]; return o ? Object.assign({}, it, o) : it; });
+    (invAdds.esthemax || []).forEach((ci) => items.push(ci));
+    D.esthemaxOrder.items = items;
+  }
+  // Keep index-keyed stock/eta aligned to item names across an item-list change.
+  function remapEsthStateByName(mutate) {
+    const byName = {};
+    (D.esthemaxOrder.items || []).forEach((it, i) => { byName[it.name] = { stock: orderState.stock[i], eta: orderState.eta[i] }; });
+    mutate();
+    const ns = {}, ne = {};
+    (D.esthemaxOrder.items || []).forEach((it, i) => {
+      const s = byName[it.name]; if (!s) return;
+      if (s.stock != null) ns[i] = s.stock;
+      if (s.eta) ne[i] = s.eta;
+    });
+    orderState.stock = ns; orderState.eta = ne;
+  }
+  // Base item-name list for a simple line (Celluma / Devices).
+  function invSimpleBase(lineId) {
+    return lineId === "celluma"
+      ? (D.costs && D.costs.celluma ? D.costs.celluma.map((c) => c.model).filter(Boolean) : [])
+      : deviceNames();
+  }
+  // Effective item-name list for a simple line (base − removed + adds).
+  function invSimpleItems(lineId) {
+    const removed = invRemovals[lineId] || [];
+    const out = invSimpleBase(lineId).filter((n) => !removed.includes(n));
+    const seen = new Set(out.map((n) => n.toLowerCase()));
+    (invAdds[lineId] || []).forEach((n) => { if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n); } });
+    return out;
+  }
+
+  function invAddSimple(lineId) {
+    const label = lineId === "celluma" ? "Celluma variant" : "machine / device";
+    const name = (window.prompt("Add new " + label + " — name:") || "").trim();
+    if (!name) return;
+    if (invSimpleItems(lineId).some((n) => n.toLowerCase() === name.toLowerCase())) { window.alert("That item already exists."); return; }
+    (invAdds[lineId] = invAdds[lineId] || []).push(name);
+    invRemovals[lineId] = (invRemovals[lineId] || []).filter((n) => n.toLowerCase() !== name.toLowerCase());
+    saveEdits("Added inventory item: " + name);
+    renderTab("order");
+  }
+  function invEditSimple(lineId, oldName) {
+    const nn = (window.prompt("Rename item:", oldName) || "").trim();
+    if (!nn || nn === oldName) return;
+    if (invSimpleItems(lineId).some((n) => n.toLowerCase() === nn.toLowerCase())) { window.alert("An item with that name already exists."); return; }
+    const data = orderState.lineData[lineId] = orderState.lineData[lineId] || {};
+    if (data[oldName] != null) { data[nn] = data[oldName]; delete data[oldName]; }
+    if ((invAdds[lineId] || []).includes(oldName)) {
+      invAdds[lineId] = invAdds[lineId].map((n) => (n === oldName ? nn : n));
+    } else {
+      (invRemovals[lineId] = invRemovals[lineId] || []).push(oldName);
+      (invAdds[lineId] = invAdds[lineId] || []).push(nn);
+    }
+    saveEdits("Renamed inventory item: " + oldName + " → " + nn);
+    renderTab("order");
+  }
+  function invDeleteSimple(lineId, name) {
+    if (!window.confirm('Delete "' + name + '" from inventory? This removes it for everyone.')) return;
+    const data = orderState.lineData[lineId]; if (data) delete data[name];
+    if ((invAdds[lineId] || []).includes(name)) invAdds[lineId] = invAdds[lineId].filter((n) => n !== name);
+    else (invRemovals[lineId] = invRemovals[lineId] || []).push(name);
+    saveEdits("Deleted inventory item: " + name);
+    renderTab("order");
+  }
+
+  // Prompt for an Esthemax item's fields (existing = prefill for edit).
+  function esthPromptItem(existing) {
+    const g = (msg, def) => window.prompt(msg, def == null ? "" : String(def));
+    const name = (g("Item name:", existing ? existing.name : "") || "").trim();
+    if (!name) return null;
+    const category = (g("Category (JAR / RETAIL / Accessory / SAMPLE):", existing ? existing.category : "JAR") || "").trim() || "Accessory";
+    const num = (msg, def) => { const v = parseFloat(g(msg, def)); return isNaN(v) ? 0 : Math.max(0, v); };
+    const requiredStock = num("Required stock:", existing ? existing.requiredStock : 0);
+    const currentStock = num("Current stock:", existing ? existing.currentStock : 0);
+    const unitUSD = num("Unit price USD (optional — for reorder cost):", existing ? existing.unitUSD : 0);
+    const transport = num("Transport per unit ₹ (optional):", existing ? existing.transport : 0);
+    return { name, category, requiredStock, currentStock, unitUSD, transport,
+      monthly: existing && Array.isArray(existing.monthly) ? existing.monthly : [],
+      sixMoAvg: existing && existing.sixMoAvg != null ? existing.sixMoAvg : null };
+  }
+  function esthAddItem() {
+    const it = esthPromptItem(null); if (!it) return;
+    ensureEsthBase();
+    const exists = (esthBaseItems || []).concat(invAdds.esthemax || []).some((x) => x.name.toLowerCase() === it.name.toLowerCase());
+    if (exists) { window.alert("That item already exists."); return; }
+    remapEsthStateByName(() => {
+      (invAdds.esthemax = invAdds.esthemax || []).push(it);
+      invRemovals.esthemax = (invRemovals.esthemax || []).filter((n) => n.toLowerCase() !== it.name.toLowerCase());
+      rebuildEsthItems();
+    });
+    saveEdits("Added Esthemax item: " + it.name);
+    renderTab("order");
+  }
+  function esthEditItem(name) {
+    const cur = D.esthemaxOrder.items.find((x) => x.name === name); if (!cur) return;
+    const it = esthPromptItem(cur); if (!it) return;
+    remapEsthStateByName(() => {
+      if ((invAdds.esthemax || []).some((x) => x.name === name)) {
+        invAdds.esthemax = invAdds.esthemax.map((x) => (x.name === name ? it : x));
+      } else if (it.name !== name) {
+        (invRemovals.esthemax = invRemovals.esthemax || []).push(name);
+        (invAdds.esthemax = invAdds.esthemax || []).push(it);
+      } else {
+        esthOverrides[name] = { category: it.category, requiredStock: it.requiredStock, currentStock: it.currentStock, unitUSD: it.unitUSD, transport: it.transport };
+      }
+      rebuildEsthItems();
+    });
+    saveEdits("Edited Esthemax item: " + name);
+    renderTab("order");
+  }
+  function esthDeleteItem(name) {
+    if (!window.confirm('Delete Esthemax item "' + name + '"? This removes it for everyone.')) return;
+    remapEsthStateByName(() => {
+      if ((invAdds.esthemax || []).some((x) => x.name === name)) invAdds.esthemax = invAdds.esthemax.filter((x) => x.name !== name);
+      else (invRemovals.esthemax = invRemovals.esthemax || []).push(name);
+      delete esthOverrides[name];
+      rebuildEsthItems();
+    });
+    saveEdits("Deleted Esthemax item: " + name);
+    renderTab("order");
+  }
+
   function orderInit() {
     const p = D.esthemaxOrder.params;
     if (orderState.usdInr == null) orderState.usdInr = p.usdInr;
@@ -2757,6 +2897,8 @@
         orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.eta = {};
         saveEdits(); renderTab("order");
       };
+      const addBtn = document.getElementById("ordAddBtn");
+      if (addBtn) addBtn.onclick = () => esthAddItem();
       orderPaint();
     }, 0);
 
@@ -2808,6 +2950,7 @@
       <div class="controls">
         <input id="ordSearch" class="search" type="search" placeholder="Search item…" value="${esc(orderState.q)}" />
         <div class="seg">${catSeg}</div>
+        ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
       </div>
 
       <div class="table-wrap">
@@ -2816,7 +2959,7 @@
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
                  <th class="num">Required</th><th class="num">Current</th>${isSuperAdmin() ? `<th class="num">To Buy</th>
-                 <th>ETA (arrival)</th>` : ""}`
+                 <th>ETA (arrival)</th>` : ""}<th></th>`
               : `<th>Product</th><th class="num">Current stock</th><th>Status</th>${isSuperAdmin() ? `<th>Estimated arrival</th>` : ""}`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
@@ -2871,10 +3014,17 @@
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
         ${isSuperAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
         <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>` : ""}
+        <td style="white-space:nowrap"><button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? (isSuperAdmin() ? 9 : 7) : 3}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? (isSuperAdmin() ? 10 : 8) : 3}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
-    if (bEl) { bEl.innerHTML = body; orderBindStockInputs(); }
+    if (bEl) {
+      bEl.innerHTML = body; orderBindStockInputs();
+      if (admin) {
+        bEl.querySelectorAll(".esth-edit").forEach((b) => (b.onclick = () => esthEditItem(b.dataset.item)));
+        bEl.querySelectorAll(".esth-del").forEach((b) => (b.onclick = () => esthDeleteItem(b.dataset.item)));
+      }
+    }
   }
 
   // Simple stock log for Devices / Celluma (no reorder maths, no money).
@@ -2892,8 +3042,9 @@
         ? `<input class="inv-simple eta-input" data-item="${esc(name)}" data-f="eta" type="date" value="${esc(d.eta || "")}">`
         : (d.eta || "—");
       const etaTd = isSuperAdmin() ? `<td>${etaCell}</td>` : "";
-      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td>${statusCell}</td>${etaTd}</tr>`;
-    }).join("") || `<tr><td colspan="${isSuperAdmin() ? 4 : 3}" class="empty">No items.</td></tr>`;
+      const actionTd = admin ? `<td style="white-space:nowrap"><button class="ghost-btn inv-edit" data-item="${esc(name)}">Edit</button> <button class="ghost-btn danger inv-del" data-item="${esc(name)}">Delete</button></td>` : "";
+      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td>${statusCell}</td>${etaTd}${actionTd}</tr>`;
+    }).join("") || `<tr><td colspan="${3 + (isSuperAdmin() ? 1 : 0) + (admin ? 1 : 0)}" class="empty">No items.</td></tr>`;
   }
 
   function wireSimpleInv(lineId) {
@@ -2906,13 +3057,15 @@
         saveEdits(`${el.dataset.item} · ${el.dataset.f} → ${el.value || "—"}`);
       };
     });
+    const addBtn = document.getElementById("invAddBtn");
+    if (addBtn) addBtn.onclick = () => invAddSimple(lineId);
+    document.querySelectorAll(".inv-edit").forEach((b) => (b.onclick = () => invEditSimple(lineId, b.dataset.item)));
+    document.querySelectorAll(".inv-del").forEach((b) => (b.onclick = () => invDeleteSimple(lineId, b.dataset.item)));
   }
 
   function renderSimpleInventory(line) {
     const admin = isAdmin();
-    const items = line.id === "celluma"
-      ? (D.costs.celluma || []).map((c) => c.model).filter(Boolean)
-      : deviceNames();
+    const items = invSimpleItems(line.id);
     const data = orderState.lineData[line.id] = orderState.lineData[line.id] || {};
     const lineOpts = INVENTORY_LINES.map((l) => `<option value="${l.id}"${l.id === inventoryLine ? " selected" : ""}>${esc(l.label)}</option>`).join("");
 
@@ -2933,12 +3086,12 @@
       <div class="controls">
         <label class="inv-line"><span>Inventory line</span><select id="invLine" class="select">${lineOpts}</select></label>
       </div>
-      <div class="controls"><input id="ordSearch" class="search" type="search" placeholder="Search ${line.id === "celluma" ? "variant" : "machine"}…" value="${esc(orderState.q)}"></div>
+      <div class="controls"><input id="ordSearch" class="search" type="search" placeholder="Search ${line.id === "celluma" ? "variant" : "machine"}…" value="${esc(orderState.q)}">${admin ? `<button id="invAddBtn" class="dl-btn" type="button">＋ Add ${line.id === "celluma" ? "variant" : "device"}</button>` : ""}</div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Item</th><th class="num">Current stock</th><th>Status</th>${isSuperAdmin() ? `<th>Estimated arrival</th>` : ""}</tr></thead>
+        <thead><tr><th>Item</th><th class="num">Current stock</th><th>Status</th>${isSuperAdmin() ? `<th>Estimated arrival</th>` : ""}${admin ? `<th></th>` : ""}</tr></thead>
         <tbody id="simpleInvBody">${simpleInvRows(items, data, orderState.q, admin)}</tbody>
       </table></div>
-      ${admin ? `<div class="muted-note">Enter current stock and status for each ${line.id === "celluma" ? "Celluma variant" : "machine"}.${isSuperAdmin() ? " Expected arrival is visible to super admins only." : ""} Saved for everyone.</div>` : ""}`;
+      ${admin ? `<div class="muted-note">Enter current stock and status for each ${line.id === "celluma" ? "Celluma variant" : "machine"}. Use <b>＋ Add</b>, or <b>Edit</b> / <b>Delete</b> per row, to manage the list.${isSuperAdmin() ? " Expected arrival is visible to super admins only." : ""} Saved for everyone.</div>` : ""}`;
   }
 
   function orderBindStockInputs() {
@@ -3178,6 +3331,13 @@
       const s = await db.collection("edits").doc("overrides").get();
       if (!s.exists) return;
       const e = s.data() || {};
+      // Rebuild admin-managed inventory items BEFORE stock/eta (which key by name→index).
+      ["esthemax", "devices", "celluma"].forEach((k) => {
+        if (e.invAdds && Array.isArray(e.invAdds[k])) invAdds[k] = e.invAdds[k];
+        if (e.invRemovals && Array.isArray(e.invRemovals[k])) invRemovals[k] = e.invRemovals[k];
+      });
+      if (e.esthOverrides && typeof e.esthOverrides === "object") Object.keys(e.esthOverrides).forEach((k) => { esthOverrides[k] = e.esthOverrides[k]; });
+      rebuildEsthItems();
       if (e.stock || e.eta) {
         D.esthemaxOrder.items.forEach((it, i) => {
           if (e.stock && e.stock[it.name] != null) orderState.stock[i] = e.stock[it.name];
@@ -3251,7 +3411,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
       } catch (e) { console.warn("edits save failed", e); }
     }, 800);
   }
