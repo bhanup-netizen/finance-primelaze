@@ -3631,7 +3631,9 @@
         </div>
         <div class="card">
           <h2 style="margin-top:0">${superMode ? "Existing users" : "Viewers you manage"}</h2>
-          <p class="muted-note" style="margin-top:0">Set a password when adding a user. To change it later, click <b>Reset pwd</b> — the user gets an email to choose a new one. (To set an exact password directly, use the Firebase console → Authentication → Users.)</p>
+          <p class="muted-note" style="margin-top:0">${superMode
+            ? `Set a password when adding a user. To change it later, click <b>Reset pwd</b> — the user gets an email to choose a new one. (To set an exact password directly, use the Firebase console → Authentication → Users.)`
+            : `<b>Every viewer</b> in the system is listed below — including people other admins added. Set your page to <b>View</b> to grant access or <b>No access</b> to remove it. Their access to other pages (set by other admins) stays untouched. Use <b>Reset pwd</b> to email them a new-password link.`}</p>
           <div id="userList"><div class="empty">Loading…</div></div>
         </div>
       </div>
@@ -3838,6 +3840,68 @@
     </div>`;
   }
 
+  // A page admin grants/removes VIEW access to one of THEIR pages for a viewer,
+  // leaving every other page (granted by other admins) untouched.
+  async function pageAdminSetAccess(uid, permsJson, pageId, level, sel) {
+    let prev; try { prev = JSON.parse(permsJson); } catch (e) { return; }
+    const ALL = PERMISSION_PAGES.map((t) => t.id);
+    let pages = prev.pages === "all" ? ALL.slice() : (Array.isArray(prev.pages) ? prev.pages.slice() : []);
+    if (level === "view") { if (!pages.includes(pageId)) pages.push(pageId); }
+    else { pages = pages.filter((p) => p !== pageId); }
+    const newPerms = {
+      role: "view",
+      landing: !!prev.landing,
+      managerInc: !!prev.managerInc,
+      pages: pages.length === ALL.length ? "all" : pages,
+      hqs: prev.hqs || "all",
+      editPages: prev.editPages || [],
+    };
+    if (sel) sel.disabled = true;
+    try { await adminUpdateUser(uid, newPerms); await loadUserList(); }
+    catch (e) { window.alert("Could not update access: " + (e.message || e)); if (sel) sel.disabled = false; }
+  }
+
+  // Page-admin viewer manager: lists ALL viewers (created by any admin) and lets
+  // this admin toggle view access to their own page(s) only.
+  function renderPageAdminUserList(box, snap) {
+    const scopeAll = myEditablePages();
+    const scopePages = scopeAll === "all" ? PERMISSION_PAGES : PERMISSION_PAGES.filter((t) => scopeAll.includes(t.id));
+    const scopeIds = scopePages.map((t) => t.id);
+    const selfUid = sessionUser && sessionUser.uid;
+    const rows = [];
+    snap.forEach((doc) => {
+      const u = doc.data();
+      if (u.role === "admin" || u.role === "superadmin") return; // only view users
+      if (doc.id === selfUid) return;
+      const hasPage = (pid) => u.pages === "all" || (Array.isArray(u.pages) && u.pages.includes(pid)) || u.editPages === "all" || (Array.isArray(u.editPages) && u.editPages.includes(pid));
+      const permsJson = esc(JSON.stringify({ email: u.email || "", role: "view", landing: !!u.landing, managerInc: !!u.managerInc, pages: u.pages || [], hqs: u.hqs || [], editPages: u.editPages || [] }));
+      const cells = scopePages.map((t) => {
+        const has = hasPage(t.id);
+        return `<td><select class="pa-access select" data-uid="${doc.id}" data-page="${t.id}" data-perms="${permsJson}" style="max-width:150px"><option value="view"${has ? " selected" : ""}>View</option><option value="none"${!has ? " selected" : ""}>No access</option></select></td>`;
+      }).join("");
+      const otherPages = PERMISSION_PAGES.filter((t) => !scopeIds.includes(t.id) && hasPage(t.id)).map((t) => t.label);
+      const otherCell = `<td class="t-muted">${otherPages.length ? esc(otherPages.join(", ")) : "—"}</td>`;
+      const pwdCell = `<td style="white-space:nowrap"><button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button></td>`;
+      rows.push(`<tr><td class="t-name">${esc(u.email || "—")}</td>${cells}${otherCell}${pwdCell}</tr>`);
+    });
+    box.innerHTML = rows.length
+      ? table(["Viewer", ...scopePages.map((t) => t.label), "Other access", ""].map((h) => `<th>${esc(h)}</th>`).join(""), rows.join(""))
+      : `<div class="empty">No viewers yet. Use “Add viewer” on the left to create one, then grant page access here.</div>`;
+    box.querySelectorAll(".pa-access").forEach((sel) => {
+      sel.onchange = () => pageAdminSetAccess(sel.dataset.uid, sel.dataset.perms, sel.dataset.page, sel.value, sel);
+    });
+    box.querySelectorAll(".u-pwd").forEach((b) => {
+      b.onclick = async () => {
+        const email = b.dataset.email; if (!email) return;
+        if (!window.confirm("Send a password-reset email to " + email + "?\n\nThey'll get a link to set a new password themselves.")) return;
+        const orig = b.textContent; b.disabled = true; b.textContent = "Sending…";
+        try { await auth.sendPasswordResetEmail(email); window.alert("Reset link sent to " + email + " ✓"); }
+        catch (e) { window.alert("Could not send reset email: " + (e.message || e)); }
+        finally { b.disabled = false; b.textContent = orig; }
+      };
+    });
+  }
+
   async function loadUserList() {
     const box = document.getElementById("userList");
     if (!box) return;
@@ -3845,11 +3909,10 @@
       const snap = await db.collection("users").get();
       const rows = [];
       const superMode = isSuperAdmin();
+      if (!superMode) { renderPageAdminUserList(box, snap); return; }
       snap.forEach((doc) => {
         const u = doc.data();
         const isAdm = u.role === "admin" || u.role === "superadmin";
-        // Page admins only manage plain VIEW users (never admins/supers/self).
-        if (!superMode && (isAdm || doc.id === (sessionUser && sessionUser.uid))) return;
         const editN = u.editPages === "all" ? "all" : (u.editPages || []).length;
         const scope = [
           isAdm ? "all pages" : (u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages")),
