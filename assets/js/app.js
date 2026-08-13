@@ -2013,7 +2013,7 @@
   // (old data is always kept). Status is derived live against today's date.
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
-  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "" };
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" };
   let payClearBefore = ""; // admin: hide commitments committed before this date
   let payHideAll = false;  // admin: "clear all" — hide every commitment
   const PAY_STATUS = {
@@ -2045,7 +2045,15 @@
       const diff = Math.round((payToday() - cd) / 86400000);
       if (diff > 0) { status = "red"; daysOverdue = diff; } else status = "blue";
     }
-    return Object.assign({}, r, { committed, received, pending, status, daysOverdue });
+    // Due days: use the sheet value if given, else compute from committed date.
+    let dueDays;
+    if (r.dueDays !== "" && r.dueDays != null && !isNaN(parseFloat(r.dueDays))) dueDays = Math.round(parseFloat(r.dueDays));
+    else if (r.committedDate) dueDays = Math.round((payToday() - new Date(r.committedDate)) / 86400000);
+    else dueDays = 0;
+    // Machine install status → "Installed" / "Pending" / "".
+    const ms = String(r.machineStatus || "");
+    const machineStatus = /install/i.test(ms) ? "Installed" : /pend/i.test(ms) ? "Pending" : "";
+    return Object.assign({}, r, { committed, received, pending, status, daysOverdue, dueDays, machineStatus });
   }
   const payAll = () => payHideAll ? [] : (D.payments || []).concat(paymentAdds).map(payEnrich)
     // "Clear data (by date)": hide dated commitments before the admin's cutoff.
@@ -2065,6 +2073,20 @@
         if (!cd) return false;
         if (payFilter.from && cd < payFilter.from) return false;
         if (payFilter.to && cd > payFilter.to) return false;
+      }
+      // 30-day due filter: Consumables & Esthemax by due days; Machines by
+      // install status (Pending = below 30 group, Installed = above 30 group).
+      if (payFilter.due) {
+        const cat = String(d.category || "").toLowerCase();
+        const isCE = cat.includes("consumable") || cat.includes("esthemax");
+        const isMachine = cat.includes("machine");
+        const dd = typeof d.dueDays === "number" ? d.dueDays : 0;
+        const ms = (d.machineStatus || "").toLowerCase();
+        if (payFilter.due === "below30") {
+          if (!((isCE && dd < 30) || (isMachine && ms === "pending"))) return false;
+        } else if (payFilter.due === "above30") {
+          if (!((isCE && dd >= 30) || (isMachine && ms === "installed"))) return false;
+        }
       }
       if (payFilter.q) {
         const hay = `${d.customer} ${d.hq} ${d.salesPerson} ${d.category} ${d.remark}`.toLowerCase();
@@ -2135,18 +2157,23 @@
       if (ra !== rb) return ra - rb;
       return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
     });
-    if (!sorted.length) return `<tr><td colspan="10" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
+    if (!sorted.length) return `<tr><td colspan="14" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
     return sorted.map((r) => {
       const m = PAY_STATUS[r.status];
+      const mst = r.machineStatus ? `<span class="pay-badge ${r.machineStatus === "Installed" ? "pay-green" : "pay-yellow"}">${esc(r.machineStatus)}</span>` : "<span class='t-muted'>—</span>";
       return `<tr>
         <td class="t-name">${esc(r.customer || "—")}</td>
+        <td>${r.invoiceNo ? esc(r.invoiceNo) : "<span class='t-muted'>—</span>"}</td>
+        <td>${r.invoiceDate ? esc(fmtDate(r.invoiceDate)) : "<span class='t-muted'>—</span>"}</td>
         <td>${esc(r.category || "—")}</td>
         <td>${esc(r.hq || "—")}</td>
         <td>${esc(r.salesPerson || "—")}</td>
         <td>${r.committedDate ? esc(fmtDate(r.committedDate)) : "<span class='t-muted'>no date</span>"}</td>
+        <td class="num">${typeof r.dueDays === "number" ? r.dueDays : "—"}</td>
         <td class="num">${rupee(r.committed)}</td>
         <td class="num">${rupee(r.received)}</td>
         <td class="num">${r.pending ? rupee(r.pending) : "—"}</td>
+        <td>${mst}</td>
         <td><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></td>
         <td class="t-muted">${esc(r.remark || "")}</td></tr>`;
     }).join("");
@@ -2158,11 +2185,11 @@
     const rec = rows.reduce((a, r) => a + r.received, 0);
     const pen = rows.reduce((a, r) => a + r.pending, 0);
     return `<tr class="pay-totals">
-      <td colspan="5" class="num"><b>Total — ${rows.length} commitment${rows.length === 1 ? "" : "s"}</b></td>
+      <td colspan="8" class="num"><b>Total — ${rows.length} commitment${rows.length === 1 ? "" : "s"}</b></td>
       <td class="num"><b>${rupee(c)}</b></td>
       <td class="num"><b>${rupee(rec)}</b></td>
       <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td>
-      <td colspan="2"></td></tr>`;
+      <td colspan="3"></td></tr>`;
   }
 
   function payRepaint() {
@@ -2185,7 +2212,7 @@
   }
 
   // ---- Excel / CSV import (append) + template ----
-  const PAY_HEADERS = ["Category", "HQ", "Sales Person", "Customer", "Committed Date", "Outstanding", "Committed Amount", "Received", "Remark", "Line Items"];
+  const PAY_HEADERS = ["Category", "HQ", "Sales Person", "Customer", "Committed Date", "Invoice No.", "Invoice Date", "Due Days", "Machine Status", "Outstanding", "Committed Amount", "Received", "Remark", "Line Items"];
   function payNormDate(v) {
     if (!v) return "";
     if (v instanceof Date && !isNaN(v)) {
@@ -2210,6 +2237,10 @@
       salesPerson: String(g("salesperson", "sp", "rep") || "").trim(),
       customer: String(g("customer", "client", "doctor", "clinic", "party") || "").trim(),
       committedDate: payNormDate(g("committeddate", "commitmentdate", "date", "promiseddate")),
+      invoiceNo: String(g("invoiceno", "invoice", "invno", "billno", "invoicenumber") || "").trim(),
+      invoiceDate: payNormDate(g("invoicedate", "billdate", "invdate")),
+      dueDays: g("duedays", "creditdays", "days", "outstandingdays"),
+      machineStatus: String(g("machinestatus", "installstatus", "installationstatus", "machineinstalledorpending", "installedpending") || "").trim(),
       outstanding: payNum(g("outstanding", "balance", "outstandingamount")),
       committedAmount: payNum(g("committedamount", "committed", "promisedamount", "amount")),
       received: payNum(g("received", "amountreceived", "collected", "receivedamount")),
@@ -2217,7 +2248,7 @@
       lineItems: payNum(g("lineitems", "items", "noofitems")),
     };
   }
-  const payKey = (r) => [r.category, r.customer, r.committedDate, r.committedAmount, r.outstanding].join("|").toLowerCase();
+  const payKey = (r) => [r.category, r.customer, r.committedDate, r.committedAmount, r.outstanding, r.invoiceNo || ""].join("|").toLowerCase();
   function payAppend(mapped) {
     const seen = new Set(payAll().map(payKey));
     let added = 0;
@@ -2251,15 +2282,16 @@
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
   function payDownloadTemplate() {
-    const sample = ["Consumables", "Telangana", "Vamsi", "Sample Clinic (delete this row)", "2026-09-15", 50000, 50000, 0, "By mid September", 2];
+    const sample = ["Consumables", "Telangana", "Vamsi", "Sample Clinic (delete this row)", "2026-09-15", "INV-001", "2026-08-15", 25, "", 50000, 50000, 0, "By mid September", 2];
+    const sample2 = ["Machine", "Karnataka", "Sushma S", "Sample Hospital (delete this row)", "2026-07-10", "INV-002", "2026-07-10", 45, "Pending", 4000000, 4000000, 0, "Awaiting installation", 1];
     if (window.XLSX) {
-      const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample]);
+      const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample, sample2]);
       ws["!cols"] = PAY_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
       const wb = window.XLSX.utils.book_new();
       window.XLSX.utils.book_append_sheet(wb, ws, "Commitments");
       window.XLSX.writeFile(wb, "payment_commitments_template.xlsx");
     } else {
-      const csv = [PAY_HEADERS.join(","), sample.join(",")].join("\n");
+      const csv = [PAY_HEADERS.join(","), sample.join(","), sample2.join(",")].join("\n");
       const a = document.createElement("a");
       a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
       a.download = "payment_commitments_template.csv";
@@ -2276,6 +2308,7 @@
       wire("payHq", (e) => { payFilter.hq = e.target.value; payRepaint(); });
       wire("paySp", (e) => { payFilter.sp = e.target.value; payRepaint(); });
       wire("payStatusSel", (e) => { payFilter.status = e.target.value; payRepaint(); });
+      wire("payDueSel", (e) => { payFilter.due = e.target.value; payRepaint(); });
       wire("payFrom", (e) => { payFilter.from = e.target.value; payRepaint(); });
       wire("payTo", (e) => { payFilter.to = e.target.value; payRepaint(); });
       const s = document.getElementById("paySearch");
@@ -2286,7 +2319,7 @@
       if (applyBtn) applyBtn.onclick = () => {
         const gv = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
         payFilter.cat = gv("payCat"); payFilter.hq = gv("payHq"); payFilter.sp = gv("paySp");
-        payFilter.status = gv("payStatusSel");
+        payFilter.status = gv("payStatusSel"); payFilter.due = gv("payDueSel");
         payFilter.from = gv("payFrom"); payFilter.to = gv("payTo");
         payFilter.q = (gv("paySearch") || "").toLowerCase();
         payRepaint();
@@ -2295,7 +2328,7 @@
       const up = document.getElementById("payUpload");
       if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) payImport(f); e.target.value = ""; };
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "" }; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" }; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
@@ -2339,6 +2372,7 @@
         ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
         ${sel("paySp", payFilter.sp, payUniq(rows0, "salesPerson"), "Sales Person")}
         <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Due period</span><select id="payDueSel" class="select"><option value="">All</option><option value="below30"${payFilter.due === "below30" ? " selected" : ""}>Below 30 days / Pending machines</option><option value="above30"${payFilter.due === "above30" ? " selected" : ""}>Above 30 days / Installed machines</option></select></label>
         <label class="ord-field"><span>Committed from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}"></label>
         <label class="ord-field"><span>Committed to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}"></label>
         <button id="payApply" class="dl-btn" type="button">Apply</button>
@@ -2359,7 +2393,7 @@
         <h2 style="margin:0">Detailed commitment report</h2><span class="tag" id="payDrillCount">${rows0.length} records</span>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Customer</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Status</th><th>Remark</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th></tr></thead>
         <tbody id="payBody">${payTableRows(payFiltered(rows0))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(payFiltered(rows0))}</tfoot>
       </table></div>`;
