@@ -117,7 +117,7 @@
     { id: "order", label: "Inventory", group: "Operations", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Operations", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Operations", render: renderChallan },
-    { id: "payments", label: "Payments", group: "Records", render: renderPayments },
+    { id: "payments", label: "Outstanding Payment", group: "Records", render: renderPayments },
     { id: "admin", label: "⚙ Admin", group: "Records", render: renderAdmin },
   ];
 
@@ -2202,7 +2202,7 @@
     const sel = (id, cur, values, allLabel) => `<label class="ord-field"><span>${esc(allLabel)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => opt(v, cur)).join("")}</select></label>`;
     return `
       <div class="section-head">
-        <h1>Payment Commitments</h1>
+        <h1>Outstanding Payments</h1>
         <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Finance can upload an Excel/CSV to append new commitments — existing data is always kept." : "Read-only."}</p>
       </div>
       <div id="payKpis">${payKpis(rows0)}</div>
