@@ -3781,7 +3781,7 @@
           <h2 style="margin-top:0">${superMode ? "Existing users" : "Viewers you manage"}</h2>
           <p class="muted-note" style="margin-top:0">${superMode
             ? `Set a password when adding a user. To change it later, click <b>Reset pwd</b> — the user gets an email to choose a new one. (To set an exact password directly, use the Firebase console → Authentication → Users.)`
-            : `<b>Every viewer</b> in the system is listed below — including people other admins added. Set your page to <b>View</b> to grant access or <b>No access</b> to remove it. Their access to other pages (set by other admins) stays untouched. Use <b>Reset pwd</b> to email them a new-password link.`}</p>
+            : `<b>Every viewer</b> in the system is listed below — including people other admins added. Set your page to <b>View</b> to grant access or <b>No access</b> to remove it. Their access to other pages (set by other admins) stays untouched. Use <b>Reset pwd</b> to email a new-password link, or <b>Remove</b> to permanently delete a contact who has left.`}</p>
           <div id="userList"><div class="empty">Loading…</div></div>
         </div>
       </div>
@@ -4074,7 +4074,7 @@
       }).join("");
       const otherPages = PERMISSION_PAGES.filter((t) => !scopeIds.includes(t.id) && hasPage(t.id)).map((t) => t.label);
       const otherCell = `<td class="t-muted">${otherPages.length ? esc(otherPages.join(", ")) : "—"}</td>`;
-      const pwdCell = `<td style="white-space:nowrap"><button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button></td>`;
+      const pwdCell = `<td style="white-space:nowrap"><button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger pa-remove" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Remove</button></td>`;
       rows.push(`<tr><td class="t-name">${esc(u.email || "—")}</td>${cells}${otherCell}${pwdCell}</tr>`);
     });
     box.innerHTML = rows.length
@@ -4091,6 +4091,17 @@
         try { await auth.sendPasswordResetEmail(email); window.alert("Reset link sent to " + email + " ✓"); }
         catch (e) { window.alert("Could not send reset email: " + (e.message || e)); }
         finally { b.disabled = false; b.textContent = orig; }
+      };
+    });
+    // Permanently remove a contact (e.g. an employee who has left).
+    box.querySelectorAll(".pa-remove").forEach((b) => {
+      b.onclick = async () => {
+        const email = b.dataset.email || "";
+        if (email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) { window.alert("This account can't be removed here."); return; }
+        if (!window.confirm('Permanently remove "' + email + '" from the dashboard?\n\nThis deletes their access to ALL pages — use it when the person has left. They will no longer be able to sign in.')) return;
+        b.disabled = true;
+        try { await db.collection("users").doc(b.dataset.uid).delete(); loadUserList(); }
+        catch (e) { window.alert("Could not remove: " + (e.message || e)); b.disabled = false; }
       };
     });
   }
