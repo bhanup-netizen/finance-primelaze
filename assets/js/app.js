@@ -2174,6 +2174,7 @@
     setHtml("payBody", payTableRows(rows));
     setHtml("payTotals", payTotalsRow(rows));
     const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rows.length + " records";
+    const ss = document.getElementById("payStatusSel"); if (ss) ss.value = payFilter.status; // keep in sync with chips
     wirePayChips();
   }
   function wirePayChips() {
@@ -2273,6 +2274,7 @@
       wire("payCat", (e) => { payFilter.cat = e.target.value; payRepaint(); });
       wire("payHq", (e) => { payFilter.hq = e.target.value; payRepaint(); });
       wire("paySp", (e) => { payFilter.sp = e.target.value; payRepaint(); });
+      wire("payStatusSel", (e) => { payFilter.status = e.target.value; payRepaint(); });
       wire("payFrom", (e) => { payFilter.from = e.target.value; payRepaint(); });
       wire("payTo", (e) => { payFilter.to = e.target.value; payRepaint(); });
       const s = document.getElementById("paySearch");
@@ -2283,6 +2285,7 @@
       if (applyBtn) applyBtn.onclick = () => {
         const gv = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
         payFilter.cat = gv("payCat"); payFilter.hq = gv("payHq"); payFilter.sp = gv("paySp");
+        payFilter.status = gv("payStatusSel");
         payFilter.from = gv("payFrom"); payFilter.to = gv("payTo");
         payFilter.q = (gv("paySearch") || "").toLowerCase();
         payRepaint();
@@ -2323,6 +2326,7 @@
         ${sel("payCat", payFilter.cat, payUniq(rows0, "category"), "Category")}
         ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
         ${sel("paySp", payFilter.sp, payUniq(rows0, "salesPerson"), "Sales Person")}
+        <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Committed from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}"></label>
         <label class="ord-field"><span>Committed to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}"></label>
         <button id="payApply" class="dl-btn" type="button">Apply</button>
