@@ -3364,6 +3364,19 @@
     if (pill) { pill.textContent = (sessionUser && sessionUser.email ? sessionUser.email : "") + (roleIsAdmin() ? " · admin" : " · view"); pill.hidden = false; }
     const lo = document.getElementById("logoutBtn");
     if (lo) { lo.hidden = false; lo.onclick = () => auth && auth.signOut(); }
+    const pw = document.getElementById("pwdBtn");
+    if (pw) {
+      pw.hidden = false;
+      pw.onclick = async () => {
+        const email = sessionUser && sessionUser.email;
+        if (!email) return;
+        if (!window.confirm("Change your password?\n\nWe'll email a reset link to " + email + ". Open it to set a new password. (Check Spam/Junk if you don't see it.)")) return;
+        pw.disabled = true;
+        try { await auth.sendPasswordResetEmail(email); window.alert("Password reset link sent to " + email + " ✓\n\nCheck your inbox (and Spam), open the link, and set your new password."); }
+        catch (e) { window.alert("Could not send the reset email: " + (e.message || e)); }
+        finally { pw.disabled = false; }
+      };
+    }
     mountTabs();
     initMode();
     go(location.hash.slice(1) || firstVisibleTab());
@@ -3634,7 +3647,7 @@
   function showLogin() {
     const s = $("#lockScreen"); if (s) s.style.display = "flex";
     const app = $("#app"); if (app) app.hidden = true;
-    ["userPill", "modeToggle", "logoutBtn"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; });
+    ["userPill", "modeToggle", "pwdBtn", "logoutBtn"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; });
     const b = $("#lockBtn"); if (b) { b.disabled = false; b.textContent = "Sign in"; }
   }
 
