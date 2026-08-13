@@ -2013,7 +2013,7 @@
   // (old data is always kept). Status is derived live against today's date.
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
-  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "" };
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "" };
   const PAY_STATUS = {
     green: { label: "Received", cls: "pay-green" },
     yellow: { label: "Partial", cls: "pay-yellow" },
@@ -2048,12 +2048,20 @@
   const payAll = () => (D.payments || []).concat(paymentAdds).map(payEnrich);
   const payUniq = (arr, key) => Array.from(new Set(arr.map((x) => x[key]).filter(Boolean))).sort();
 
+  const payCd = (r) => (r.committedDate ? String(r.committedDate).slice(0, 10) : "");
   function payFiltered(rows) {
     return rows.filter((d) => {
       if (payFilter.cat && d.category !== payFilter.cat) return false;
       if (payFilter.hq && d.hq !== payFilter.hq) return false;
       if (payFilter.sp && d.salesPerson !== payFilter.sp) return false;
       if (payFilter.status && d.status !== payFilter.status) return false;
+      // Commitment-date range (dated rows only when a range is set).
+      if (payFilter.from || payFilter.to) {
+        const cd = payCd(d);
+        if (!cd) return false;
+        if (payFilter.from && cd < payFilter.from) return false;
+        if (payFilter.to && cd > payFilter.to) return false;
+      }
       if (payFilter.q) {
         const hay = `${d.customer} ${d.hq} ${d.salesPerson} ${d.category} ${d.remark}`.toLowerCase();
         if (!hay.includes(payFilter.q)) return false;
@@ -2140,6 +2148,19 @@
     }).join("");
   }
 
+  // Totals footer for the detailed report — Total Commitment / Received / Pending.
+  function payTotalsRow(rows) {
+    const c = rows.reduce((a, r) => a + r.committed, 0);
+    const rec = rows.reduce((a, r) => a + r.received, 0);
+    const pen = rows.reduce((a, r) => a + r.pending, 0);
+    return `<tr class="pay-totals">
+      <td colspan="5" class="num"><b>Total — ${rows.length} commitment${rows.length === 1 ? "" : "s"}</b></td>
+      <td class="num"><b>${rupee(c)}</b></td>
+      <td class="num"><b>${rupee(rec)}</b></td>
+      <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td>
+      <td colspan="2"></td></tr>`;
+  }
+
   function payRepaint() {
     const rows = payFiltered(payAll());
     const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
@@ -2148,6 +2169,7 @@
     setHtml("payBreakCat", payBreakdown(rows, "category", "Category"));
     setHtml("payBreakHq", payBreakdown(rows, "hq", "HQ"));
     setHtml("payBody", payTableRows(rows));
+    setHtml("payTotals", payTotalsRow(rows));
     const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rows.length + " records";
     wirePayChips();
   }
@@ -2248,6 +2270,8 @@
       wire("payCat", (e) => { payFilter.cat = e.target.value; payRepaint(); });
       wire("payHq", (e) => { payFilter.hq = e.target.value; payRepaint(); });
       wire("paySp", (e) => { payFilter.sp = e.target.value; payRepaint(); });
+      wire("payFrom", (e) => { payFilter.from = e.target.value; payRepaint(); });
+      wire("payTo", (e) => { payFilter.to = e.target.value; payRepaint(); });
       const s = document.getElementById("paySearch");
       if (s) s.oninput = (e) => { payFilter.q = e.target.value.toLowerCase(); payRepaint(); };
       // Explicit Apply — re-reads every control and applies (works even if a
@@ -2256,6 +2280,7 @@
       if (applyBtn) applyBtn.onclick = () => {
         const gv = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
         payFilter.cat = gv("payCat"); payFilter.hq = gv("payHq"); payFilter.sp = gv("paySp");
+        payFilter.from = gv("payFrom"); payFilter.to = gv("payTo");
         payFilter.q = (gv("paySearch") || "").toLowerCase();
         payRepaint();
       };
@@ -2263,7 +2288,7 @@
       const up = document.getElementById("payUpload");
       if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) payImport(f); e.target.value = ""; };
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "" }; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "" }; renderTab("payments"); };
       wirePayChips();
     }, 0);
     const opt = (v, cur) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`;
@@ -2280,11 +2305,13 @@
         ${sel("payCat", payFilter.cat, payUniq(rows0, "category"), "Category")}
         ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
         ${sel("paySp", payFilter.sp, payUniq(rows0, "salesPerson"), "Sales Person")}
+        <label class="ord-field"><span>Committed from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}"></label>
+        <label class="ord-field"><span>Committed to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}"></label>
         <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
           <button id="payTplBtn" class="ghost-btn" type="button">⬇ Download input template</button>
-          ${admin ? `<label class="dl-btn" style="cursor:pointer">⬆ Upload &amp; append<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<label class="dl-btn" style="cursor:pointer" title="Import an Excel/CSV to append new commitments">⬆ Import (Excel/CSV)<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
         </div>
       </div>
       <div class="two-col" style="margin:6px 0 4px">
@@ -2297,6 +2324,7 @@
       <div class="table-wrap"><table>
         <thead><tr><th>Customer</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Status</th><th>Remark</th></tr></thead>
         <tbody id="payBody">${payTableRows(payFiltered(rows0))}</tbody>
+        <tfoot id="payTotals">${payTotalsRow(payFiltered(rows0))}</tfoot>
       </table></div>`;
   }
 
