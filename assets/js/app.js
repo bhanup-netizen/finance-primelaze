@@ -2014,6 +2014,7 @@
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
   let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "" };
+  let payClearBefore = ""; // admin: hide commitments committed before this date
   const PAY_STATUS = {
     green: { label: "Received", cls: "pay-green" },
     yellow: { label: "Partial", cls: "pay-yellow" },
@@ -2045,7 +2046,9 @@
     }
     return Object.assign({}, r, { committed, received, pending, status, daysOverdue });
   }
-  const payAll = () => (D.payments || []).concat(paymentAdds).map(payEnrich);
+  const payAll = () => (D.payments || []).concat(paymentAdds).map(payEnrich)
+    // "Clear old data": hide dated commitments before the admin's cutoff.
+    .filter((r) => !payClearBefore || !r.committedDate || String(r.committedDate).slice(0, 10) >= payClearBefore);
   const payUniq = (arr, key) => Array.from(new Set(arr.map((x) => x[key]).filter(Boolean))).sort();
 
   const payCd = (r) => (r.committedDate ? String(r.committedDate).slice(0, 10) : "");
@@ -2289,6 +2292,21 @@
       if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) payImport(f); e.target.value = ""; };
       const clr = document.getElementById("payClearFilters");
       if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "" }; renderTab("payments"); };
+      const clearOld = document.getElementById("payClearOld");
+      if (clearOld) clearOld.onclick = () => {
+        const ans = window.prompt("Clear old data — permanently hide (for everyone) all commitments committed BEFORE this date.\n\nEnter a date as YYYY-MM-DD, or leave blank to show all again:", payClearBefore || "");
+        if (ans === null) return;
+        const v = ans.trim();
+        if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) { window.alert("Please enter the date as YYYY-MM-DD (e.g. 2026-04-01)."); return; }
+        if (v && !window.confirm("Hide all commitments committed before " + v + " from everyone? Imported rows before this date are removed; you can restore the view later with “Show all”.")) return;
+        payClearBefore = v;
+        // Also drop imported rows before the cutoff so they don't re-appear on re-import checks.
+        if (v) { for (let i = paymentAdds.length - 1; i >= 0; i--) { const cd = paymentAdds[i].committedDate ? String(paymentAdds[i].committedDate).slice(0, 10) : ""; if (cd && cd < v) paymentAdds.splice(i, 1); } }
+        saveEdits(v ? "Cleared payment data before " + v : "Restored all payment data");
+        renderTab("payments");
+      };
+      const showAll = document.getElementById("payShowAll");
+      if (showAll) showAll.onclick = () => { payClearBefore = ""; saveEdits("Restored all payment data"); renderTab("payments"); };
       wirePayChips();
     }, 0);
     const opt = (v, cur) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`;
@@ -2312,8 +2330,10 @@
         <div class="hq-actions">
           <button id="payTplBtn" class="ghost-btn" type="button">⬇ Download input template</button>
           ${admin ? `<label class="dl-btn" style="cursor:pointer" title="Import an Excel/CSV to append new commitments">⬆ Import (Excel/CSV)<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<button id="payClearOld" class="ghost-btn danger" type="button" title="Hide all commitments committed before a chosen date">🗑 Clear old data</button>` : ""}
         </div>
       </div>
+      ${payClearBefore ? `<div class="muted-note" style="margin:2px 0 8px">Old data hidden — showing commitments committed on/after <b>${esc(payClearBefore)}</b>.${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>` : ""}
       <div class="two-col" style="margin:6px 0 4px">
         <div class="card"><h2 style="margin-top:0">Pending by category</h2><div id="payBreakCat">${payBreakdown(payFiltered(rows0), "category", "Category")}</div></div>
         <div class="card"><h2 style="margin-top:0">Pending by HQ</h2><div id="payBreakHq">${payBreakdown(payFiltered(rows0), "hq", "HQ")}</div></div>
@@ -3481,6 +3501,7 @@
       if (e.moqJar != null) orderState.moqJar = e.moqJar;
       if (e.moqRetail != null) orderState.moqRetail = e.moqRetail;
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "" };
+      if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
       updateLastUpdatedUI();
@@ -3507,7 +3528,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
