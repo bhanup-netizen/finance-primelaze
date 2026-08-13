@@ -287,7 +287,14 @@
     { id: "medium", label: "Medium", cls: "b-warn", rank: 1 },
     { id: "low", label: "Low", cls: "b-neutral", rank: 2 },
   ];
-  const vacancyEdits = {}; // `${vkey}` -> { priority, remark, fillBy }
+  // Hiring pipeline status for a vacancy; "hired" moves the row to Team Roster.
+  const VAC_STATUS = [
+    { id: "notstarted", label: "Not yet started", cls: "b-neutral" },
+    { id: "inprogress", label: "In progress", cls: "b-info" },
+    { id: "offered", label: "Offered", cls: "b-warn" },
+    { id: "hired", label: "Hired", cls: "b-good" },
+  ];
+  const vacancyEdits = {}; // `${vkey}` -> { priority, remark, fillBy, vstatus }
   const vkey = (p) => (p._aid != null ? "a:" + p._aid : "n:" + p.num);
   const vget = (p, field) => {
     const v = vacancyEdits[vkey(p)];
@@ -645,21 +652,22 @@
   let vacancySort = "priority"; // "priority" | "fillBy"
   function renderVacancies() {
     const list = vacantPeople();
-    const prMeta = (id) => PRIORITY_OPTIONS.find((o) => o.id === id) || PRIORITY_OPTIONS[1];
-    // default priority Medium when not yet set
-    const effPr = (p) => vget(p, "priority") || "medium";
+    // Priority is now a unique rank number (1 = top). Blank sorts last.
+    const prNum = (p) => { const n = parseInt(vget(p, "priority"), 10); return isNaN(n) ? 9999 : n; };
+    const vstat = (p) => vget(p, "vstatus") || "notstarted";
+    const vsMeta = (id) => VAC_STATUS.find((o) => o.id === id) || VAC_STATUS[0];
 
     const sorted = list.slice().sort((a, b) => {
       if (vacancySort === "fillBy") {
         const fa = vget(a, "fillBy") || "9999-12-31", fb = vget(b, "fillBy") || "9999-12-31";
         return fa < fb ? -1 : fa > fb ? 1 : 0;
       }
-      return prMeta(effPr(a)).rank - prMeta(effPr(b)).rank;
+      return prNum(a) - prNum(b);
     });
 
     const ed = isAdmin();
     const open = list.filter((p) => !vget(p, "fillBy")).length;
-    const high = list.filter((p) => effPr(p) === "high").length;
+    const inPipe = list.filter((p) => vstat(p) === "inprogress" || vstat(p) === "offered").length;
 
     // Roster-backed editable cells (write through to Team Roster).
     const ridAttr = (p) => (p._aid != null ? `data-aid="${p._aid}"` : `data-num="${p.num}"`);
@@ -674,16 +682,23 @@
       return `<td><select class="vac-rsel" ${ridAttr(p)} data-field="${field}">${html}</select></td>`;
     };
 
+    const N = list.length;
     const rows = sorted.map((p, i) => {
-      const name = rval(p, "name"), pr = effPr(p);
+      const name = rval(p, "name"), pr = vget(p, "priority") || "";
+      const vs = vstat(p);
       const nameCell = ed
         ? `<td class="t-name vac-rname" contenteditable="true" ${ridAttr(p)} data-field="name">${esc(name)}</td>`
         : `<td class="t-name">${esc(name)}</td>`;
       const prCell = ed
-        ? `<td><select class="vac-in" data-k="${vkey(p)}" data-field="priority">${
-            PRIORITY_OPTIONS.map((o) => `<option value="${o.id}"${o.id === pr ? " selected" : ""}>${o.label}</option>`).join("")
+        ? `<td><select class="vac-in" data-k="${vkey(p)}" data-field="priority"><option value="">—</option>${
+            Array.from({ length: N }, (_, n) => { const v = String(n + 1); return `<option value="${v}"${pr === v ? " selected" : ""}>${v}</option>`; }).join("")
           }</select></td>`
-        : `<td><span class="badge ${prMeta(pr).cls}">${prMeta(pr).label}</span></td>`;
+        : `<td>${pr ? `<span class="badge b-info">Priority ${esc(pr)}</span>` : "<span class='t-muted'>—</span>"}</td>`;
+      const statusCell = ed
+        ? `<td><select class="vac-in" data-k="${vkey(p)}" data-field="vstatus">${
+            VAC_STATUS.map((o) => `<option value="${o.id}"${o.id === vs ? " selected" : ""}>${o.label}</option>`).join("")
+          }</select></td>`
+        : `<td><span class="badge ${vsMeta(vs).cls}">${esc(vsMeta(vs).label)}</span></td>`;
       const fillCell = ed
         ? `<td><input class="vac-in" type="date" data-k="${vkey(p)}" data-field="fillBy" value="${esc(vget(p, "fillBy"))}" /></td>`
         : `<td>${vget(p, "fillBy") ? esc(vget(p, "fillBy")) : "<span class='t-muted'>—</span>"}</td>`;
@@ -700,12 +715,13 @@
         ${rSel(p, "baseHQ", rosterOptions("baseHQ", customHQs), true)}
         ${rSel(p, "zone", rosterOptions("zone"))}
         ${prCell}
+        ${statusCell}
         ${fillCell}
         ${remarkCell}
       </tr>`;
-    }).join("") || `<tr><td colspan="8" class="empty">No vacant positions — every seat is filled. 🎉</td></tr>`;
+    }).join("") || `<tr><td colspan="9" class="empty">No vacant positions — every seat is filled. 🎉</td></tr>`;
 
-    const head = ["#", "Position / Name", "Designation", "Base HQ", "Zone", "Priority", "Target fill by", "Remark"]
+    const head = ["#", "Position / Name", "Designation", "Base HQ", "Zone", "Priority", "Hiring status", "Target fill by", "Remark"]
       .map((h, i) => `<th class="${i === 0 ? "num" : ""}">${h}</th>`).join("");
 
     setTimeout(() => {
@@ -722,11 +738,11 @@
     return `
       <div class="section-head">
         <h1>Vacancies</h1>
-        <p>Open positions across the team${ed ? " — every field is editable: refine the role details, set a priority, a target date to fill, and a remark. Detail edits sync with the Team Roster. Changes save for everyone." : ". An administrator prioritises and schedules these."}</p>
+        <p>Open positions across the team${ed ? " — every field is editable: refine the role details, set a unique <b>priority</b> (1 = top; no two can share a number), a <b>hiring status</b>, a target fill date and a remark. Set status to <b>Hired</b> to move the position into the Team Roster as an active member. Changes save for everyone." : ". An administrator prioritises and schedules these."}</p>
       </div>
       <div class="card" style="margin-bottom:20px"><div class="stat-row">
         <div class="stat"><b>${list.length}</b><span>Vacant positions</span></div>
-        <div class="stat"><b>${high}</b><span>High priority</span></div>
+        <div class="stat"><b>${inPipe}</b><span>In progress / offered</span></div>
         <div class="stat"><b>${open}</b><span>No target date yet</span></div>
       </div></div>
       <div class="controls">
@@ -743,8 +759,10 @@
     if (!isAdmin()) return;
     document.querySelectorAll(".vac-in").forEach((el) => {
       const commit = () => {
-        const k = el.dataset.k;
-        (vacancyEdits[k] || (vacancyEdits[k] = {}))[el.dataset.field] = el.value;
+        const k = el.dataset.k, field = el.dataset.field;
+        if (field === "priority") { setVacancyPriority(k, el.value); return; }
+        if (field === "vstatus") { setVacancyStatus(k, el.value); return; }
+        (vacancyEdits[k] || (vacancyEdits[k] = {}))[field] = el.value;
         saveEdits();
       };
       el.onchange = commit;
@@ -793,6 +811,52 @@
       saveEdits();
       go("team");
     };
+  }
+
+  // Set a vacancy's priority, keeping numbers unique: if another vacancy already
+  // holds this number, it takes over the one we're vacating (a swap).
+  function setVacancyPriority(k, val) {
+    const vkeys = new Set(vacantPeople().map(vkey));
+    const prev = (vacancyEdits[k] && vacancyEdits[k].priority) || "";
+    if (val) {
+      Object.keys(vacancyEdits).forEach((ok) => {
+        if (ok !== k && vkeys.has(ok) && vacancyEdits[ok] && String(vacancyEdits[ok].priority) === String(val)) {
+          vacancyEdits[ok].priority = prev; // swap: give it our old slot (may be blank)
+        }
+      });
+    }
+    (vacancyEdits[k] || (vacancyEdits[k] = {})).priority = val;
+    saveEdits("Vacancy priority → " + (val || "—"));
+    go("team");
+  }
+
+  // Set a vacancy's hiring status. "Hired" moves the position into the Team
+  // Roster as an active member (it then leaves the Vacancies list).
+  function setVacancyStatus(k, val) {
+    const p = vacantPeople().find((x) => vkey(x) === k);
+    if (val === "hired") {
+      const nm = p ? rval(p, "name") : "";
+      if (!window.confirm('Mark "' + (nm || "this position") + '" as Hired and move it to the Team Roster as an Active member?')) { go("team"); return; }
+      const setRoster = (field, v) => {
+        if (!p) return;
+        if (p._aid != null) { const rp = rosterAdds.find((x) => x._aid === p._aid); if (rp) rp[field] = v; }
+        else rosterEdits[p.num + "#" + field] = v;
+      };
+      // If the row still has a placeholder name, capture the hired person's name.
+      let finalName = nm;
+      if (p && (!nm || /vacant|new position/i.test(nm))) {
+        const entered = (window.prompt("Name of the hired person:", "") || "").trim();
+        if (entered) { finalName = entered; setRoster("name", entered); }
+      }
+      (vacancyEdits[k] || (vacancyEdits[k] = {})).vstatus = "hired";
+      setRoster("status", "active");
+      saveEdits("Hired — moved " + (finalName || "position") + " to Team Roster");
+      go("team");
+      return;
+    }
+    (vacancyEdits[k] || (vacancyEdits[k] = {})).vstatus = val;
+    saveEdits("Vacancy status → " + val);
+    go("team");
   }
 
   /* ================= HQ TARGETS ================= */
