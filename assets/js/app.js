@@ -246,6 +246,9 @@
       ? { label: "Add new designation / role:", list: customDesignations }
       : { label: "Add new HQ (city):", list: customHQs };
   const DIVISIONS = ["Derma", "Salon/Spa"];
+  // Display names (internal values kept for stored data compatibility).
+  const DIV_LABELS = { "Derma": "Primelaze", "Salon/Spa": "Casovil" };
+  const divLabel = (v) => DIV_LABELS[v] || v || "";
   const isRemoved = (p) => p._aid == null && rosterRemovals.includes(p.num);
   function removePerson(p) {
     let nm = "";
@@ -406,12 +409,13 @@
         return `<td class="${cls || ""}"${ed ? ' contenteditable="true"' : ""} ${idAttr(p)} data-field="${field}">${esc(val)}</td>`;
       };
       // Editable dropdown cell sourced from existing distinct values.
-      const selCell = (p, field, opts, addNew) => {
+      const selCell = (p, field, opts, addNew, labelFn) => {
+        const lf = labelFn || ((x) => x);
         const cur = rval(p, field) || "";
         const options = opts.slice();
         if (cur && !options.includes(cur)) options.unshift(cur);
         let html = `<option value=""${cur === "" ? " selected" : ""}>—</option>`;
-        html += options.map((o) => `<option value="${esc(o)}"${o === cur ? " selected" : ""}>${esc(o)}</option>`).join("");
+        html += options.map((o) => `<option value="${esc(o)}"${o === cur ? " selected" : ""}>${esc(lf(o))}</option>`).join("");
         if (addNew) html += `<option value="__add__">＋ Add new…</option>`;
         return `<td><select class="roster-sel" ${idAttr(p)} data-field="${field}">${html}</select></td>`;
       };
@@ -422,7 +426,7 @@
         if (teamFilter !== "all" && teamFilter !== st) return false;
         if (teamDivision !== "all" && division !== teamDivision) return false;
         if (teamSearch) {
-          const hay = `${name} ${rval(p, "designation")} ${rval(p, "baseHQ")} ${rval(p, "zone")} ${rval(p, "reportsTo")} ${division} ${p.notes || ""}`.toLowerCase();
+          const hay = `${name} ${rval(p, "designation")} ${rval(p, "baseHQ")} ${rval(p, "zone")} ${rval(p, "reportsTo")} ${division} ${divLabel(division)} ${p.notes || ""}`.toLowerCase();
           if (!hay.includes(teamSearch.toLowerCase())) return false;
         }
         return true;
@@ -438,9 +442,9 @@
               STATUS_OPTIONS.map((o) => `<option value="${o.id}"${o.id === st ? " selected" : ""}>${o.label}</option>`).join("")
             }</select></td>`
           : `<td>${badge}</td>`;
-        const divBadge = `<span class="badge ${division === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(division)}</span>`;
+        const divBadge = `<span class="badge ${division === "Salon/Spa" ? "b-teal" : "b-accent"}">${esc(divLabel(division))}</span>`;
         const divCell = ed
-          ? selCell(p, "division", DIVISIONS)
+          ? selCell(p, "division", DIVISIONS, false, divLabel)
           : `<td>${divBadge}</td>`;
         const firstCell = ed
           ? `<td class="num t-muted"><button class="linkish roster-rm" ${idAttr(p)} title="Remove">✕</button></td>`
@@ -523,8 +527,8 @@
         <div class="controls" style="margin:12px 0 0">
           <div class="seg">
             <button data-orgdiv="all" class="${orgDiv === "all" ? "active" : ""}">All</button>
-            <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">Derma</button>
-            <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">Salon/Spa</button>
+            <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
+            <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
           </div>
           ${isAdmin() ? `<div class="hq-actions"><button id="orgTopBtn" class="ghost-btn" type="button">✎ Rename top</button><button id="orgAddBtn" class="dl-btn" type="button">＋ Add position</button></div>` : ""}
         </div>
@@ -541,8 +545,8 @@
         </div>
         <div class="seg">
           <button data-tdiv="all" class="${teamDivision === "all" ? "active" : ""}">All div.</button>
-          <button data-tdiv="Derma" class="${teamDivision === "Derma" ? "active" : ""}">Derma</button>
-          <button data-tdiv="Salon/Spa" class="${teamDivision === "Salon/Spa" ? "active" : ""}">Salon/Spa</button>
+          <button data-tdiv="Derma" class="${teamDivision === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
+          <button data-tdiv="Salon/Spa" class="${teamDivision === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
         </div>
         ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button">＋ Add person</button></div>` : ""}
       </div>
@@ -2930,7 +2934,7 @@
     return `
       <div class="section-head">
         <h1>Inventory — Esthemax</h1>
-        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon months. Items with stock ≥ required are marked <b>Can sell</b>; others <b>Reorder</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
+        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} Primelaze + ${esc(p.salonMonths)} Casovil months. Items with stock ≥ required are marked <b>Can sell</b>; others <b>Reorder</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
       </div>
       ${lineSelector}
 
@@ -2940,7 +2944,7 @@
           <label class="ord-field"><span>Customs rate (%)</span><input id="ordCustoms" type="number" step="1" value="${+(orderState.customs * 100).toFixed(2)}"></label>
           <label class="ord-field"><span>JAR min order</span><input id="ordMoqJar" type="number" step="1" min="1" value="${orderState.moqJar}"></label>
           <label class="ord-field"><span>Retail min order</span><input id="ordMoqRetail" type="number" step="1" min="1" value="${orderState.moqRetail}"></label>
-          <div class="ord-field"><span>Coverage</span><b>${esc(p.dermaMonths)} derma + ${esc(p.salonMonths)} salon mo</b></div>
+          <div class="ord-field"><span>Coverage</span><b>${esc(p.dermaMonths)} Primelaze + ${esc(p.salonMonths)} Casovil mo</b></div>
           <button id="ordReset" class="ghost-btn" type="button">Reset</button>
         </div>
       </div>` : ""}
@@ -3412,9 +3416,22 @@
       try {
         await db.collection("edits").doc("overrides").set(
           { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
-      } catch (e) { console.warn("edits save failed", e); }
+        // Save succeeded — clear any prior error state.
+        if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
+      } catch (e) {
+        console.warn("edits save failed", e);
+        // Make the failure VISIBLE — a silent failure looks "saved" but is lost.
+        const el = document.getElementById("lastUpdated");
+        if (el) { el.style.color = "var(--bad)"; el.textContent = "⚠ NOT saved — your last change did not store. Check your access/connection."; }
+        const dot = document.getElementById("luDot"); if (dot) dot.hidden = false;
+        if (!saveErrorShown) {
+          saveErrorShown = true;
+          window.alert("⚠ Your change was NOT saved to the database.\n\nIt shows on your screen but has not stored — so it will disappear on reload. Most likely your account doesn’t have permission to save this page yet, or there’s a network problem.\n\nPlease tell a super admin before making more changes.");
+        }
+      }
     }, 800);
   }
+  let saveErrorShown = false;
 
   // ---- Last-updated / activity log ----
   let editsUpdatedAt = 0, editsUpdatedBy = "";
