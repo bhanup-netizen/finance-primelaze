@@ -2238,13 +2238,14 @@
   }
 
   function payRepaint() {
-    const rows = payFiltered(payAll());       // top-bar filters (KPIs, chips, breakdowns)
-    const rep = applyColFilters(rows);        // + per-column filters (report table only)
+    // Every summary reflects BOTH the top-bar filters and the per-column
+    // filters, so totals (Committed/Received/Pending) always match the report.
+    const rep = applyColFilters(payFiltered(payAll()));
     const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
-    setHtml("payKpis", payKpis(rows));
-    setHtml("payChips", payStatusChips(rows));
-    setHtml("payBreakCat", payBreakdown(rows, "category", "Category"));
-    setHtml("payBreakHq", payBreakdown(rows, "hq", "HQ"));
+    setHtml("payKpis", payKpis(rep));
+    setHtml("payChips", payStatusChips(rep));
+    setHtml("payBreakCat", payBreakdown(rep, "category", "Category"));
+    setHtml("payBreakHq", payBreakdown(rep, "hq", "HQ"));
     setHtml("payBody", payTableRows(rep));
     setHtml("payTotals", payTotalsRow(rep));
     const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rep.length + " records";
@@ -2434,7 +2435,7 @@
       };
       const showAll = document.getElementById("payShowAll");
       if (showAll) showAll.onclick = () => { payClearBefore = ""; payHideAll = false; saveEdits("Restored all payment data"); renderTab("payments"); };
-      wirePayChips();
+      payRepaint(); // sync KPIs/report/totals to current filters on first paint
     }, 0);
     const opt = (v, cur) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`;
     const sel = (id, cur, values, allLabel) => `<label class="ord-field"><span>${esc(allLabel)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => opt(v, cur)).join("")}</select></label>`;
