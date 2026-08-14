@@ -2034,8 +2034,11 @@
     return isNaN(n) ? 0 : n;
   };
   function payEnrich(r) {
-    const committed = payNum(r.committedAmount);
+    // Total due = the larger of Committed Amount / Outstanding (handles sheets
+    // that fill only one of them), and never less than what's already received.
     const received = payNum(r.received);
+    const totalDue = Math.max(payNum(r.committedAmount), payNum(r.outstanding));
+    const committed = Math.max(totalDue, received);
     const pending = Math.max(committed - received, 0);
     let status = "grey", daysOverdue = 0;
     if (committed > 0 && received >= committed) status = "green";
