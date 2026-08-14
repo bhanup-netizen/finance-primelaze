@@ -2261,6 +2261,8 @@
   // replace=true → the file becomes the imported set (recommended for master
   // sheets); replace=false → append only rows not already present.
   function payAppend(mapped, replace) {
+    // Importing new data should always be visible — clear any "clear data" hide.
+    payHideAll = false; payClearBefore = "";
     const valid = mapped.filter((r) => r.customer || r.committedAmount || r.outstanding || r.received || r.salesValue);
     if (replace) {
       paymentAdds.length = 0;
