@@ -2220,7 +2220,9 @@
     if (!v) return "";
     if (v instanceof Date && !isNaN(v)) {
       const p = (n) => String(n).padStart(2, "0");
-      return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}`;
+      // Excel dates come through as UTC midnight — use UTC parts so the day
+      // doesn't shift by one in some timezones.
+      return `${v.getUTCFullYear()}-${p(v.getUTCMonth() + 1)}-${p(v.getUTCDate())}`;
     }
     const s = String(v).trim();
     let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
@@ -2252,14 +2254,28 @@
       lineItems: payNum(g("lineitems", "items", "noofitems")),
     };
   }
-  const payKey = (r) => [r.category, r.customer, r.committedDate, r.committedAmount, r.outstanding, r.invoiceNo || ""].join("|").toLowerCase();
-  function payAppend(mapped) {
+  // Broad key: only rows identical across ALL these fields count as duplicates,
+  // so legit multiple rows per customer/invoice (partial receipts, line items)
+  // are NOT dropped.
+  const payKey = (r) => [r.category, r.customer, r.committedDate, r.invoiceNo || "", r.committedAmount, r.received, r.outstanding, r.salesValue || "", r.remark || ""].join("|").toLowerCase();
+  // replace=true → the file becomes the imported set (recommended for master
+  // sheets); replace=false → append only rows not already present.
+  function payAppend(mapped, replace) {
+    const valid = mapped.filter((r) => r.customer || r.committedAmount || r.outstanding || r.received || r.salesValue);
+    if (replace) {
+      paymentAdds.length = 0;
+      valid.forEach((r) => paymentAdds.push(r));
+      saveEdits(`Payments · imported ${valid.length} row(s) (replaced previous imports)`);
+      payRepaint();
+      window.alert(`Imported ${valid.length} row(s), replacing any previously-imported data.` + (mapped.length - valid.length ? ` ${mapped.length - valid.length} blank row(s) skipped.` : ""));
+      return;
+    }
     const seen = new Set(payAll().map(payKey));
     let added = 0;
-    mapped.forEach((r) => { if (r.customer || r.committedAmount || r.outstanding) { const k = payKey(r); if (!seen.has(k)) { seen.add(k); paymentAdds.push(r); added++; } } });
-    saveEdits(`Payments · uploaded ${added} new row(s)`);
+    valid.forEach((r) => { const k = payKey(r); if (!seen.has(k)) { seen.add(k); paymentAdds.push(r); added++; } });
+    saveEdits(`Payments · appended ${added} new row(s)`);
     payRepaint();
-    window.alert(`Imported ${added} new commitment row(s).` + (mapped.length - added ? ` ${mapped.length - added} duplicate/blank row(s) skipped.` : ""));
+    window.alert(`Imported ${added} new commitment row(s).` + (valid.length - added ? ` ${valid.length - added} already present (skipped).` : ""));
   }
   function payParseCSV(text) {
     const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim() !== "");
@@ -2268,7 +2284,7 @@
     const heads = split(lines[0]);
     return lines.slice(1).map((l) => { const cells = split(l); const o = {}; heads.forEach((h, i) => (o[h] = cells[i] != null ? cells[i] : "")); return o; });
   }
-  function payImport(file) {
+  function payImport(file, replace) {
     const isCsv = /\.csv$/i.test(file.name) || !window.XLSX;
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -2280,7 +2296,7 @@
           const ws = wb.Sheets[wb.SheetNames[0]];
           rows = window.XLSX.utils.sheet_to_json(ws, { defval: "" });
         }
-        payAppend(rows.map(payMapRow));
+        payAppend(rows.map(payMapRow), replace);
       } catch (err) { window.alert("Could not read the file: " + (err.message || err)); }
     };
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
@@ -2330,7 +2346,14 @@
       };
       const tpl = document.getElementById("payTplBtn"); if (tpl) tpl.onclick = payDownloadTemplate;
       const up = document.getElementById("payUpload");
-      if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) payImport(f); e.target.value = ""; };
+      if (up) up.onchange = (e) => {
+        const f = e.target.files[0];
+        if (f) {
+          const replace = window.confirm('Import "' + f.name + '"\n\nOK = REPLACE all previously-imported rows with this file (recommended when uploading your master sheet).\n\nCancel = APPEND — add only rows that aren\'t already there.');
+          payImport(f, replace);
+        }
+        e.target.value = "";
+      };
       const clr = document.getElementById("payClearFilters");
       if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" }; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
