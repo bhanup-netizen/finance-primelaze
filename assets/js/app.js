@@ -2151,6 +2151,14 @@
     return table(head, body);
   }
 
+  // Earliest → latest committed date in the current (filtered) view.
+  function payDateRangeNote(rows) {
+    const dated = rows.map((r) => payCd(r)).filter(Boolean).sort();
+    const noDate = rows.length - dated.length;
+    if (!dated.length) return `No committed dates in view${noDate ? ` · ${noDate} with no date` : ""}`;
+    return `Committed dates: <b>${esc(fmtDate(dated[0]))}</b> → <b>${esc(fmtDate(dated[dated.length - 1]))}</b>${noDate ? ` · ${noDate} with no date` : ""}`;
+  }
+
   function payTableRows(rows) {
     const sorted = rows.slice().sort((a, b) => {
       const ra = PAY_ORDER.indexOf(a.status), rb = PAY_ORDER.indexOf(b.status);
@@ -2205,6 +2213,7 @@
     setHtml("payBody", payTableRows(rows));
     setHtml("payTotals", payTotalsRow(rows));
     const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rows.length + " records";
+    const dr = document.getElementById("payDateRange"); if (dr) dr.innerHTML = payDateRangeNote(rows);
     const ss = document.getElementById("payStatusSel"); if (ss) ss.value = payFilter.status; // keep in sync with chips
     wirePayChips();
   }
@@ -2418,8 +2427,9 @@
         <div class="card"><h2 style="margin-top:0">Pending by category</h2><div id="payBreakCat">${payBreakdown(payFiltered(rows0), "category", "Category")}</div></div>
         <div class="card"><h2 style="margin-top:0">Pending by HQ</h2><div id="payBreakHq">${payBreakdown(payFiltered(rows0), "hq", "HQ")}</div></div>
       </div>
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px">
-        <h2 style="margin:0">Detailed commitment report</h2><span class="tag" id="payDrillCount">${rows0.length} records</span>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
+        <h2 style="margin:0">Detailed commitment report</h2>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap"><table>
         <thead><tr><th>Customer</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th></tr></thead>
