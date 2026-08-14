@@ -324,6 +324,8 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
   font-size: 11px; font-weight: 700; white-space: nowrap;
 }
 .pay-totals td { border-top: 2px solid var(--border); background: var(--surface-2, rgba(127,127,127,.06)); }
+.pay-cf-row th { padding: 4px 6px; background: rgba(127,127,127,.06); }
+.pay-cf { font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: inherit; }
 .pay-badge.pay-green { color: var(--pay-green); background: var(--pay-green-soft); }
 .pay-badge.pay-yellow { color: var(--pay-yellow); background: var(--pay-yellow-soft); }
 .pay-badge.pay-red { color: var(--pay-red); background: var(--pay-red-soft); }

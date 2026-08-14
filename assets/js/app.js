@@ -2014,6 +2014,7 @@
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
   let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" };
+  let payColFilters = {}; // Excel-style per-column filters on the detailed report
   let payClearBefore = ""; // admin: hide commitments committed before this date
   let payHideAll = false;  // admin: "clear all" — hide every commitment
   const PAY_STATUS = {
@@ -2159,6 +2160,39 @@
     return `Committed dates: <b>${esc(fmtDate(dated[0]))}</b> → <b>${esc(fmtDate(dated[dated.length - 1]))}</b>${noDate ? ` · ${noDate} with no date` : ""}`;
   }
 
+  // Text shown in each report column, used by the per-column filters.
+  function payCellText(r, ci) {
+    switch (ci) {
+      case 0: return r.customer || "";
+      case 1: return r.invoiceNo || "";
+      case 2: return r.invoiceDate ? fmtDate(r.invoiceDate) : "";
+      case 3: return r.category || "";
+      case 4: return r.hq || "";
+      case 5: return r.salesPerson || "";
+      case 6: return r.committedDate ? fmtDate(r.committedDate) : "no date";
+      case 7: return typeof r.dueDays === "number" ? String(r.dueDays) : "";
+      case 8: return r.salesValue ? String(r.salesValue) : "";
+      case 9: return String(r.committed || "");
+      case 10: return String(r.received || "");
+      case 11: return String(r.pending || "");
+      case 12: return r.machineStatus || "";
+      case 13: return (PAY_STATUS[r.status] || {}).label || "";
+      case 14: return r.remark || "";
+      default: return "";
+    }
+  }
+  function applyColFilters(rows) {
+    const active = Object.entries(payColFilters).filter(([, v]) => v !== "" && v != null);
+    if (!active.length) return rows;
+    return rows.filter((r) => active.every(([ci, val]) => payCellText(r, +ci).toLowerCase().includes(String(val).toLowerCase())));
+  }
+  // The Excel-style filter row (one control per column) under the report header.
+  function payColFilterRow(rows0) {
+    const sel = (i, opts) => `<th><select class="pay-cf select" data-ci="${i}" style="width:100%;min-width:90px;font-weight:400"><option value="">All</option>${opts.map((o) => `<option${String(payColFilters[i] || "") === String(o) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></th>`;
+    const txt = (i, ph) => `<th><input class="pay-cf" type="search" data-ci="${i}" value="${esc(payColFilters[i] || "")}" placeholder="${esc(ph)}" style="width:100%;min-width:70px;font-weight:400"></th>`;
+    return `<tr class="pay-cf-row">${txt(0, "Customer")}${txt(1, "Invoice")}${txt(2, "Date")}${sel(3, payUniq(rows0, "category"))}${sel(4, payUniq(rows0, "hq"))}${sel(5, payUniq(rows0, "salesPerson"))}${txt(6, "Date")}${txt(7, "Days")}${txt(8, "₹")}${txt(9, "₹")}${txt(10, "₹")}${txt(11, "₹")}${sel(12, ["Installed", "Pending"])}${sel(13, PAY_ORDER.map((s) => PAY_STATUS[s].label))}${txt(14, "Remark")}`;
+  }
+
   function payTableRows(rows) {
     const sorted = rows.slice().sort((a, b) => {
       const ra = PAY_ORDER.indexOf(a.status), rb = PAY_ORDER.indexOf(b.status);
@@ -2204,16 +2238,17 @@
   }
 
   function payRepaint() {
-    const rows = payFiltered(payAll());
+    const rows = payFiltered(payAll());       // top-bar filters (KPIs, chips, breakdowns)
+    const rep = applyColFilters(rows);        // + per-column filters (report table only)
     const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
     setHtml("payKpis", payKpis(rows));
     setHtml("payChips", payStatusChips(rows));
     setHtml("payBreakCat", payBreakdown(rows, "category", "Category"));
     setHtml("payBreakHq", payBreakdown(rows, "hq", "HQ"));
-    setHtml("payBody", payTableRows(rows));
-    setHtml("payTotals", payTotalsRow(rows));
-    const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rows.length + " records";
-    const dr = document.getElementById("payDateRange"); if (dr) dr.innerHTML = payDateRangeNote(rows);
+    setHtml("payBody", payTableRows(rep));
+    setHtml("payTotals", payTotalsRow(rep));
+    const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rep.length + " records";
+    const dr = document.getElementById("payDateRange"); if (dr) dr.innerHTML = payDateRangeNote(rep);
     const ss = document.getElementById("payStatusSel"); if (ss) ss.value = payFilter.status; // keep in sync with chips
     wirePayChips();
     enhanceTables(); // re-add the "Filter this table…" box to the re-rendered breakdown tables
@@ -2366,8 +2401,13 @@
         }
         e.target.value = "";
       };
+      // Excel-style per-column filters on the detailed report.
+      document.querySelectorAll(".pay-cf").forEach((el) => {
+        const handler = () => { payColFilters[el.dataset.ci] = el.value; payRepaint(); };
+        if (el.tagName === "SELECT") el.onchange = handler; else el.oninput = handler;
+      });
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" }; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" }; payColFilters = {}; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
@@ -2402,7 +2442,7 @@
       <div class="section-head">
         <h1>Outstanding Payments</h1>
         <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Finance can upload an Excel/CSV to append new commitments — existing data is always kept." : "Read-only."}</p>
-        <p class="t-muted" style="margin-top:4px;font-size:13px">📅 This data covers — ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> total records.</p>
+        <div class="callout" style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:14px">📅 <span><b>Period of this data:</b> ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records</span></div>
       </div>
       <div id="payKpis">${payKpis(rows0)}</div>
       <div id="payChips">${payStatusChips(rows0)}</div>
@@ -2433,10 +2473,10 @@
         <h2 style="margin:0">Detailed commitment report</h2>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Customer</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th></tr></thead>
-        <tbody id="payBody">${payTableRows(payFiltered(rows0))}</tbody>
-        <tfoot id="payTotals">${payTotalsRow(payFiltered(rows0))}</tfoot>
+      <div class="table-wrap" data-colfilter="1"><table>
+        <thead><tr><th>Customer</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th></tr>${payColFilterRow(rows0)}</thead>
+        <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
+        <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
   }
 
@@ -3360,24 +3400,27 @@
       if (!tbody) return;
       wrap.dataset.enh = "1";
 
-      // filter box above the table
-      const tools = document.createElement("div");
-      tools.className = "tbl-tools";
-      const inp = document.createElement("input");
-      inp.type = "search"; inp.className = "tbl-filter"; inp.placeholder = "Filter this table…";
-      inp.oninput = () => {
-        const q = inp.value.toLowerCase();
-        tbody.querySelectorAll("tr").forEach((tr) => {
-          if (tr.classList.contains("total-row")) return;
-          tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none";
-        });
-      };
-      tools.appendChild(inp);
-      wrap.parentNode.insertBefore(tools, wrap);
+      // filter box above the table — skipped for tables with per-column filters.
+      if (wrap.dataset.colfilter !== "1") {
+        const tools = document.createElement("div");
+        tools.className = "tbl-tools";
+        const inp = document.createElement("input");
+        inp.type = "search"; inp.className = "tbl-filter"; inp.placeholder = "Filter this table…";
+        inp.oninput = () => {
+          const q = inp.value.toLowerCase();
+          tbody.querySelectorAll("tr").forEach((tr) => {
+            if (tr.classList.contains("total-row")) return;
+            tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none";
+          });
+        };
+        tools.appendChild(inp);
+        wrap.parentNode.insertBefore(tools, wrap);
+      }
 
-      // sortable headers
-      const ths = Array.from(table.querySelectorAll("thead th"));
+      // sortable headers (first header row only; skip filter-control cells)
+      const ths = Array.from(table.querySelectorAll("thead tr:first-child th"));
       ths.forEach((th, ci) => {
+        if (th.querySelector("input, select")) return;
         th.classList.add("sortable");
         th.addEventListener("click", () => {
           const dir = th.dataset.dir === "asc" ? "desc" : "asc";
