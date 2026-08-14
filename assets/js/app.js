@@ -2216,6 +2216,7 @@
     const dr = document.getElementById("payDateRange"); if (dr) dr.innerHTML = payDateRangeNote(rows);
     const ss = document.getElementById("payStatusSel"); if (ss) ss.value = payFilter.status; // keep in sync with chips
     wirePayChips();
+    enhanceTables(); // re-add the "Filter this table…" box to the re-rendered breakdown tables
   }
   function wirePayChips() {
     document.querySelectorAll("[data-paystatus]").forEach((b) => {
@@ -2401,6 +2402,7 @@
       <div class="section-head">
         <h1>Outstanding Payments</h1>
         <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Finance can upload an Excel/CSV to append new commitments — existing data is always kept." : "Read-only."}</p>
+        <p class="t-muted" style="margin-top:4px;font-size:13px">📅 This data covers — ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> total records.</p>
       </div>
       <div id="payKpis">${payKpis(rows0)}</div>
       <div id="payChips">${payStatusChips(rows0)}</div>
