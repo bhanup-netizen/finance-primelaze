@@ -2017,6 +2017,7 @@
   let payColFilters = {}; // Excel-style per-column filters on the detailed report
   let payClearBefore = ""; // admin: hide commitments committed before this date
   let payHideAll = false;  // admin: "clear all" — hide every commitment
+  let payHideBase = false; // after a Replace import: show only imported rows (hide the 232 built-in)
   const PAY_STATUS = {
     green: { label: "Received", cls: "pay-green" },
     yellow: { label: "Partial", cls: "pay-yellow" },
@@ -2065,9 +2066,13 @@
     const machineStatus = /install/i.test(ms) ? "Installed" : /pend/i.test(ms) ? "Pending" : "";
     return Object.assign({}, r, { committed, received, pending, status, daysOverdue, dueDays, machineStatus });
   }
-  const payAll = () => payHideAll ? [] : (D.payments || []).concat(paymentAdds).map(payEnrich)
-    // "Clear data (by date)": hide dated commitments before the admin's cutoff.
-    .filter((r) => !payClearBefore || !r.committedDate || String(r.committedDate).slice(0, 10) >= payClearBefore);
+  const payAll = () => {
+    if (payHideAll) return [];
+    const base = payHideBase ? [] : (D.payments || []);
+    return base.concat(paymentAdds).map(payEnrich)
+      // "Clear data (by date)": hide dated commitments before the admin's cutoff.
+      .filter((r) => !payClearBefore || !r.committedDate || String(r.committedDate).slice(0, 10) >= payClearBefore);
+  };
   const payUniq = (arr, key) => Array.from(new Set(arr.map((x) => x[key]).filter(Boolean))).sort();
 
   const payCd = (r) => (r.committedDate ? String(r.committedDate).slice(0, 10) : "");
@@ -2322,6 +2327,7 @@
     if (replace) {
       paymentAdds.length = 0;
       valid.forEach((r) => paymentAdds.push(r));
+      payHideBase = true; // show ONLY this file — hide the 232 built-in rows
       saveEdits(`Payments · imported ${valid.length} row(s) (replaced previous imports)`);
       payRepaint();
       window.alert(`Imported ${valid.length} row(s), replacing any previously-imported data.` + (mapped.length - valid.length ? ` ${mapped.length - valid.length} blank row(s) skipped.` : ""));
@@ -2444,6 +2450,8 @@
       };
       const showAll = document.getElementById("payShowAll");
       if (showAll) showAll.onclick = () => { payClearBefore = ""; payHideAll = false; saveEdits("Restored all payment data"); renderTab("payments"); };
+      const showBase = document.getElementById("payShowBase");
+      if (showBase) showBase.onclick = () => { payHideBase = false; saveEdits("Showing built-in data too"); renderTab("payments"); };
       payRepaint(); // sync KPIs/report/totals to current filters on first paint
     }, 0);
     const opt = (v, cur) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`;
@@ -2475,6 +2483,7 @@
       </div>
       ${payHideAll ? `<div class="muted-note" style="margin:2px 0 8px">⚠ All commitment data is cleared (hidden).${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>`
         : payClearBefore ? `<div class="muted-note" style="margin:2px 0 8px">Old data hidden — showing commitments committed on/after <b>${esc(payClearBefore)}</b>.${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>` : ""}
+      ${(!payHideAll && payHideBase) ? `<div class="muted-note" style="margin:2px 0 8px">Showing <b>imported data only</b> — the built-in sample rows are hidden.${admin ? ` <button id="payShowBase" class="linkish" type="button">Show built-in data too</button>` : ""}</div>` : ""}
       <div class="two-col" style="margin:6px 0 4px">
         <div class="card"><h2 style="margin-top:0">Pending by category</h2><div id="payBreakCat">${payBreakdown(payFiltered(rows0), "category", "Category")}</div></div>
         <div class="card"><h2 style="margin-top:0">Pending by HQ</h2><div id="payBreakHq">${payBreakdown(payFiltered(rows0), "hq", "HQ")}</div></div>
@@ -3661,6 +3670,7 @@
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "" };
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
+      if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
       editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
       updateLastUpdatedUI();
@@ -3687,7 +3697,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
