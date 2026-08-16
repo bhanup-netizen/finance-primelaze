@@ -2034,15 +2034,21 @@
     return isNaN(n) ? 0 : n;
   };
   function payEnrich(r) {
-    // Total due = the larger of Committed Amount / Outstanding (handles sheets
-    // that fill only one of them), and never less than what's already received.
     const received = payNum(r.received);
-    const totalDue = Math.max(payNum(r.committedAmount), payNum(r.outstanding));
-    const committed = Math.max(totalDue, received);
-    const pending = Math.max(committed - received, 0);
+    const out = payNum(r.outstanding);
+    const ca = payNum(r.committedAmount);
+    // Pending (balance still to collect). Finance sheets put the NET balance in
+    // the Outstanding column (it differs from Committed Amount, which is often
+    // blank); base data puts the GROSS commitment in both, so there we net off
+    // what's received. This makes Pending match the sheet's Outstanding total.
+    let pending;
+    if (out > 0 && (ca === 0 || out !== ca)) pending = out;                 // net balance given
+    else pending = Math.max(Math.max(ca, out) - received, 0);              // gross − received
+    const committed = pending + received;                                  // total billed/committed
     let status = "grey", daysOverdue = 0;
-    if (committed > 0 && received >= committed) status = "green";
-    else if (received > 0 && received < committed) status = "yellow";
+    if (committed <= 0) status = "grey";
+    else if (pending <= 0) status = "green";       // fully collected
+    else if (received > 0) status = "yellow";      // partial
     else if (!r.committedDate) status = "grey";
     else {
       const cd = new Date(r.committedDate);
