@@ -2412,8 +2412,9 @@
       if (up) up.onchange = (e) => {
         const f = e.target.files[0];
         if (f) {
-          const replace = window.confirm('Import "' + f.name + '"\n\nOK = REPLACE all previously-imported rows with this file (recommended when uploading your master sheet).\n\nCancel = APPEND — add only rows that aren\'t already there.');
-          payImport(f, replace);
+          // Always REPLACE — re-importing refreshes the data instead of stacking
+          // duplicates. Upload your full current sheet each time.
+          if (window.confirm('Import "' + f.name + '"?\n\nThis REPLACES the current payment data with this file. Re-importing will not duplicate rows — always upload your full current sheet.')) payImport(f, true);
         }
         e.target.value = "";
       };
@@ -2459,7 +2460,7 @@
     return `
       <div class="section-head">
         <h1>Outstanding Payments</h1>
-        <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Finance can upload an Excel/CSV to append new commitments — existing data is always kept." : "Read-only."}</p>
+        <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Import replaces the data with your uploaded sheet, so re-importing never creates duplicates — always upload your full current sheet." : "Read-only."}</p>
         <div class="callout" style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:14px">📅 <span><b>Period of this data:</b> ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records</span></div>
       </div>
       <div id="payKpis">${payKpis(rows0)}</div>
@@ -2477,7 +2478,7 @@
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
           <button id="payTplBtn" class="ghost-btn" type="button">⬇ Download input template</button>
-          ${admin ? `<label class="dl-btn" style="cursor:pointer" title="Import an Excel/CSV to append new commitments">⬆ Import (Excel/CSV)<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<label class="dl-btn" style="cursor:pointer" title="Import an Excel/CSV — replaces the current data with your sheet (no duplicates)">⬆ Import (Excel/CSV)<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
           ${admin ? `<button id="payClearOld" class="ghost-btn danger" type="button" title="Clear commitment data — by date or all">🗑 Clear data</button>` : ""}
         </div>
       </div>
