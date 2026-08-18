@@ -913,6 +913,66 @@
     return a.includes(name) || a.includes(h.sheet);
   }
 
+  // "PLM" = Primelaze's own direct sales.
+  const spLabel = (s) => (/^plm$/i.test(String(s || "").trim()) ? "Primelaze (PLM)" : s);
+  function payAllSalespeople() {
+    const set = new Set();
+    payAll().forEach((r) => { const n = (r.salesPerson || "").trim(); if (n) set.add(n); });
+    return Array.from(set);
+  }
+  // Best-effort match of the logged-in user to a salesperson name (by email/name).
+  function myPaySalesperson() {
+    const email = ((sessionUser && sessionUser.email) || "").toLowerCase();
+    const nmeRaw = (email.split("@")[0] || "").replace(/[^a-z0-9]/g, "");
+    if (!nmeRaw) return null;
+    const names = payAllSalespeople();
+    const nz = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+    return names.find((n) => nz(n) === nmeRaw)
+      || names.find((n) => nz(n) && (nmeRaw.includes(nz(n)) || nz(n).includes(nmeRaw)))
+      || null;
+  }
+  // Aggregate imported payment data → region → salesperson → {salesValue, received, outstanding}.
+  function paySalesByRegion(scopeName) {
+    const byRegion = {};
+    payAll().forEach((r) => {
+      const sp = (r.salesPerson || "—").trim() || "—";
+      if (scopeName && sp !== scopeName) return;
+      const region = (r.hq || "—").trim() || "—";
+      const reg = byRegion[region] || (byRegion[region] = {});
+      const o = reg[sp] || (reg[sp] = { sv: 0, received: 0, pending: 0, n: 0 });
+      o.sv += payNum(r.salesValue); o.received += r.received; o.pending += r.pending; o.n++;
+    });
+    return byRegion;
+  }
+  // Section shown on the HQ page: sales & outstanding by salesperson, by region.
+  function hqSalesByPersonSection() {
+    if (!payAll().length) return "";
+    const scopeName = (!isSuperAdmin() && !roleIsAdmin()) ? myPaySalesperson() : null;
+    const data = paySalesByRegion(scopeName);
+    const regions = Object.keys(data).sort();
+    if (!regions.length) return `<div class="card" style="margin-top:24px"><h2 style="margin-top:0">💳 Sales &amp; Outstanding by Salesperson</h2><p class="muted-note">No sales data${scopeName ? ` for ${esc(spLabel(scopeName))}` : ""} yet — import the payment sheet on the Outstanding Payment page.</p></div>`;
+    const cards = regions.map((region) => {
+      const people = Object.entries(data[region]).sort((a, b) => b[1].sv - a[1].sv);
+      let tsv = 0, tr = 0, tp = 0, tn = 0;
+      const body = people.map(([sp, o]) => { tsv += o.sv; tr += o.received; tp += o.pending; tn += o.n; return `<tr>
+        <td class="t-name">${esc(spLabel(sp))}</td>
+        <td class="num">${o.n}</td>
+        <td class="num">${rupeeShort(o.sv)}</td>
+        <td class="num">${rupeeShort(o.received)}</td>
+        <td class="num">${o.pending ? rupeeShort(o.pending) : "—"}</td></tr>`; }).join("");
+      return `<div class="card" style="margin-bottom:14px">
+        <h3 style="margin:0 0 8px">${esc(region)}</h3>
+        <div class="table-wrap"><table><thead><tr><th>Salesperson</th><th class="num">Records</th><th class="num">Sales value</th><th class="num">Received</th><th class="num">Outstanding</th></tr></thead>
+        <tbody>${body}<tr class="pay-totals"><td class="num"><b>Total</b></td><td class="num">${tn}</td><td class="num"><b>${rupeeShort(tsv)}</b></td><td class="num"><b>${rupeeShort(tr)}</b></td><td class="num"><b>${tp ? rupeeShort(tp) : "—"}</b></td></tr></tbody></table></div>
+      </div>`;
+    }).join("");
+    return `<div style="margin-top:24px">
+      <div class="section-title" style="margin:0 0 6px"><h2 style="margin:0">💳 Sales &amp; Outstanding by Salesperson${scopeName ? ` — ${esc(spLabel(scopeName))} (your data)` : ""}</h2></div>
+      <p class="muted-note" style="margin-top:0">From the imported Outstanding-Payment data, grouped by region. ${scopeName ? "You’re seeing only your own sales." : "PLM = Primelaze’s own direct sales."}</p>
+      ${cards}
+    </div>`;
+  }
+
   function renderTargets() {
     const list = D.hqTargets.filter(hqAllowed);
     if (!list.some((h) => D.hqTargets.indexOf(h) === hqIndex)) hqIndex = D.hqTargets.indexOf(list[0]);
@@ -937,7 +997,8 @@
         <select id="hqSelect" class="select">${opts}</select>
         <div class="hq-actions"><button id="hqDownload" class="dl-btn" type="button">⤓ Download PDF</button></div>
       </div>
-      <div id="hqDetail">${hqDetail(D.hqTargets[hqIndex])}</div>`;
+      <div id="hqDetail">${hqDetail(D.hqTargets[hqIndex])}</div>
+      ${hqSalesByPersonSection()}`;
   }
 
   function mountHqDetail(h) {
