@@ -2015,6 +2015,7 @@
   let paySeq = 0;
   let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" };
   let payColFilters = {}; // Excel-style per-column filters on the detailed report
+  let paySnapshots = [];  // [{at, by, total, rows, cust:{name:outstanding}}] — one per import, for collection tracking
   let payClearBefore = ""; // admin: hide commitments committed before this date
   let payHideAll = false;  // admin: "clear all" — hide every commitment
   let payHideBase = false; // after a Replace import: show only imported rows (hide the 232 built-in)
@@ -2253,6 +2254,66 @@
       <td colspan="3"></td></tr>`;
   }
 
+  // Record the just-imported data as a dated snapshot: total outstanding + a
+  // per-customer breakdown, so later imports can show how much was collected.
+  function payCaptureSnapshot() {
+    const rows = paymentAdds.map(payEnrich);
+    const cust = {};
+    let total = 0;
+    rows.forEach((r) => { const c = (r.customer || "—").trim(); cust[c] = (cust[c] || 0) + r.pending; total += r.pending; });
+    paySnapshots.push({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", total: Math.round(total), rows: rows.length, cust });
+    if (paySnapshots.length > 12) paySnapshots = paySnapshots.slice(-12); // keep last 12
+  }
+  // Compare the latest two snapshots → who paid, how much, since when.
+  function payCollections() {
+    if (paySnapshots.length < 2) return null;
+    const cur = paySnapshots[paySnapshots.length - 1];
+    const prev = paySnapshots[paySnapshots.length - 2];
+    const rows = [];
+    const names = new Set(Object.keys(prev.cust).concat(Object.keys(cur.cust)));
+    names.forEach((c) => {
+      const before = prev.cust[c] || 0, after = cur.cust[c] || 0;
+      const collected = before - after;
+      if (collected > 0.5) rows.push({ customer: c, before, after, collected });
+    });
+    rows.sort((a, b) => b.collected - a.collected);
+    return { prev, cur, rows, totalCollected: rows.reduce((a, r) => a + r.collected, 0) };
+  }
+
+  // The "Collections & outstanding trend" card: what was paid since the last
+  // import, per customer, plus the total-outstanding history across imports.
+  function payCollectionsCard() {
+    const col = payCollections();
+    const trend = paySnapshots.slice().reverse(); // newest first
+    let summary;
+    if (!col) {
+      summary = `<p class="muted-note">This shows how much outstanding was <b>collected</b> and <b>when</b>. Import your sheet now, then again after payments come in — the drop per customer will appear here. Snapshots so far: <b>${paySnapshots.length}</b>.</p>`;
+    } else {
+      const body = col.rows.slice(0, 100).map((r) => `<tr>
+        <td class="t-name">${esc(r.customer)}</td>
+        <td class="num">${rupeeShort(r.before)}</td>
+        <td class="num">${rupeeShort(r.after)}</td>
+        <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td></tr>`).join("")
+        || `<tr><td colspan="4" class="empty">No outstanding decreased since the previous import.</td></tr>`;
+      summary = `<p>Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s).</p>
+        <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+    const trendRows = trend.map((s, i) => {
+      const older = trend[i + 1];
+      const change = older ? (older.total - s.total) : null; // +ve = collected since older
+      const chCell = change == null ? "—"
+        : change > 0.5 ? `<span style="color:var(--good)">↓ ${rupeeShort(change)}</span>`
+        : change < -0.5 ? `<span style="color:var(--bad)">↑ ${rupeeShort(-change)}</span>` : "—";
+      return `<tr><td>${esc(fmtWhen(s.at))}</td><td class="t-muted">${esc(s.by || "")}</td><td class="num">${s.rows}</td><td class="num">${rupeeShort(s.total)}</td><td class="num">${chCell}</td></tr>`;
+    }).join("");
+    return `<div class="card" style="margin-top:16px">
+      <h2 style="margin-top:0">💰 Collections &amp; outstanding trend</h2>
+      ${summary}
+      ${trend.length ? `<h3 style="margin:16px 0 6px">Total outstanding at each update</h3>
+      <div class="table-wrap"><table><thead><tr><th>Update (import)</th><th>By</th><th class="num">Rows</th><th class="num">Total outstanding</th><th class="num">Collected since prev</th></tr></thead><tbody>${trendRows}</tbody></table></div>` : ""}
+    </div>`;
+  }
+
   function payRepaint() {
     // Every summary reflects BOTH the top-bar filters and the per-column
     // filters, so totals (Committed/Received/Pending) always match the report.
@@ -2331,6 +2392,7 @@
       paymentAdds.length = 0;
       valid.forEach((r) => paymentAdds.push(r));
       payHideBase = true; // show ONLY this file — hide the 232 built-in rows
+      payCaptureSnapshot(); // record this import as a dated snapshot (for collections)
       saveEdits(`Payments · imported ${valid.length} row(s) (replaced previous imports)`);
       payRepaint();
       window.alert(`Imported ${valid.length} row(s), replacing any previously-imported data.` + (mapped.length - valid.length ? ` ${mapped.length - valid.length} blank row(s) skipped.` : ""));
@@ -2492,6 +2554,7 @@
         <div class="card"><h2 style="margin-top:0">Pending by category</h2><div id="payBreakCat">${payBreakdown(payFiltered(rows0), "category", "Category")}</div></div>
         <div class="card"><h2 style="margin-top:0">Pending by HQ</h2><div id="payBreakHq">${payBreakdown(payFiltered(rows0), "hq", "HQ")}</div></div>
       </div>
+      ${payCollectionsCard()}
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
         <h2 style="margin:0">Detailed commitment report</h2>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
@@ -3675,6 +3738,7 @@
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
+      if (Array.isArray(e.paySnapshots)) paySnapshots = e.paySnapshots;
       editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
       updateLastUpdatedUI();
@@ -3701,7 +3765,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
