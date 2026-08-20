@@ -366,7 +366,8 @@
     const icons = (x) => `<div class="org-icons"><button class="org-editbtn" data-id="${cardId(x)}" title="Edit">✎</button><button class="org-add" data-name="${esc(x.name)}" title="Add a report under ${esc(x.name)}">＋</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Remove">✕</button></div>`;
     const compact = (x, cls) => {
       const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
-      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}</div>${ed ? icons(x) : ""}</div>`;
+      const zone = x.zone && x.zone !== "—" ? `<span class="org-zone">${esc(x.zone)}</span>` : "";
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}${zone}</div>${ed ? icons(x) : ""}</div>`;
     };
     const editForm = (x, cls) => {
       const repOpts = [CTO, NSM].concat(names.filter((n) => n !== x.name)).map((n) => opt(n, n, x.rep)).join("");
