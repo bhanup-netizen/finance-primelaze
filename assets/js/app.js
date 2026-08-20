@@ -466,7 +466,10 @@
       b.onclick = () => {
         const parent = b.dataset.name || "Arjun";
         const aid = "r" + (rosterAddSeq++);
-        rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: parent, zone: "", status: "active" });
+        // Inherit the division currently on screen so the new card stays visible
+        // under the active tab (Primelaze/Casovil) instead of vanishing.
+        const div = (orgDiv === "Derma" || orgDiv === "Salon/Spa") ? orgDiv : "Derma";
+        rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: div, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
         saveEdits("Added a report under " + parent);
         orgEditId = "aid:" + aid; // open the new card so it's ready to fill in
         mountOrgChart();
@@ -689,8 +692,10 @@
     const add = document.getElementById("rosterAddBtn");
     if (add) add.onclick = () => {
       const aid = "r" + (rosterAddSeq++);
-      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "Arjun", zone: "", status: "active" });
+      const div = (orgDiv === "Derma" || orgDiv === "Salon/Spa") ? orgDiv : "Derma";
+      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: div, baseHQ: "", reportsTo: "Arjun", zone: "", status: "active" });
       saveEdits("Added a person");
+      orgEditId = "aid:" + aid;
       mountOrgChart();
     };
   }
