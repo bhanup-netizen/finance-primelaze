@@ -353,7 +353,7 @@
       zone: rval(p, "zone") || "",
       div: rval(p, "division") || "Derma",
       st: estatus(p),
-    })).filter((x) => x.name);
+    })).filter((x) => x.name && x.st !== "vacant"); // vacant seats live on the Vacancies tab, not the chart
     const byName = {}; all.forEach((x) => { byName[x.name] = x; });
     const childrenOf = (mgr) => all.filter((x) => x.rep === mgr && x.name !== mgr)
       .sort((a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name));
@@ -616,7 +616,7 @@
           ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a person reporting to the NSM">＋ Add person</button></div>` : ""}
         </div>
         <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
-        ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">On each card: <b>✎</b> edit that person (incl. the top CTO &amp; NSM), <b>＋</b> add a report under them, <b>✕</b> delete. <b>＋ Add person</b> (top) adds under the NSM. Set <b>Status</b> to <b>Vacant</b>/<b>To join</b> and it also shows on the Vacancies tab.</div>` : ""}
+        ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">On each card: <b>✎</b> edit that person (incl. the top CTO &amp; NSM), <b>＋</b> add a report under them, <b>✕</b> delete. <b>＋ Add person</b> (top) adds under the NSM. This chart shows filled &amp; incoming people only — <b>Vacant</b> seats live on the <b>Vacancies</b> tab (set a card's Status to Vacant to move it there; Hire it and it comes back to the chart).</div>` : ""}
       </div>`;
   }
 
