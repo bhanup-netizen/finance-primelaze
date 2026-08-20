@@ -512,15 +512,6 @@
         const box = document.getElementById("orgScroll");
         if (box) box.innerHTML = renderOrgChart(orgDiv);
       };
-      const orgAdd = document.getElementById("orgAddBtn");
-      if (orgAdd) orgAdd.onclick = () => {
-        const aid = "r" + (rosterAddSeq++);
-        rosterAdds.push({ _aid: aid, name: "New position", designation: "", division: "Derma", baseHQ: "", reportsTo: "Arjun", zone: "", status: "tojoin" });
-        saveEdits("Added a position");
-        teamTab = "roster"; teamFilter = "all"; teamDivision = "all"; teamSearch = "";
-        go("team");
-        flashRow(aid);
-      };
     }, 0);
 
     return teamSubnav() + `
@@ -537,10 +528,10 @@
             <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
             <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
           </div>
-          ${isAdmin() ? `<div class="hq-actions"><button id="orgTopBtn" class="ghost-btn" type="button">✎ Rename top</button><button id="orgAddBtn" class="dl-btn" type="button">＋ Add position</button></div>` : ""}
+          ${isAdmin() ? `<div class="hq-actions"><button id="orgTopBtn" class="ghost-btn" type="button">✎ Rename top</button></div>` : ""}
         </div>
         <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
-        ${isAdmin() ? `<div class="muted-note" style="margin-top:8px">Add a position, then set its name, designation and who it reports to (CTO, Arjun, or any manager) in the roster row that appears below.</div>` : ""}
+        ${isAdmin() ? `<div class="muted-note" style="margin-top:8px">This chart is built from the roster below. To add someone, use <b>＋ Add person</b> under the table and set who they report to — the chart updates automatically.</div>` : ""}
       </details>
       <div class="controls">
         <input id="teamSearch" class="search" type="search" value="${esc(teamSearch)}" placeholder="Search name, HQ, zone, division…" />
@@ -555,8 +546,9 @@
           <button data-tdiv="Derma" class="${teamDivision === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
           <button data-tdiv="Salon/Spa" class="${teamDivision === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
         </div>
-        ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button">＋ Add person</button></div>` : ""}
+        ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a team member. Set their Status (Active / To join / Vacant) in the new row.">＋ Add person</button></div>` : ""}
       </div>
+      ${isAdmin() ? `<div class="muted-note" style="margin:0 0 8px">One button for everyone — <b>＋ Add person</b>. In the new row, set <b>Status</b> to <b>Active</b> (current staff), <b>To join</b> (new joinee), or <b>Vacant</b> (open seat). Vacant/To-join rows also show on the Vacancies tab.</div>` : ""}
       <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody id="teamBody">${view()}</tbody></table></div>`;
   }
 
