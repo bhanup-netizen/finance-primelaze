@@ -4214,7 +4214,7 @@
             const cred = await sec.auth().signInWithEmailAndPassword(email, pass);
             uid = cred.user.uid;
           } catch (e2) {
-            throw new Error("This email already has an account. Enter that account's current password to re-grant access (or send a password reset first).");
+            throw new Error("This email already has a login but no access record. Fix: delete it in Firebase Console → Authentication → Users, then Add user again with a fresh password. (Or, if you know this account's current password, enter that here to re-link it.)");
           }
         } else throw err;
       }
