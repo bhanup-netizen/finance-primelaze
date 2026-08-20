@@ -16,7 +16,7 @@
   let userSuper = false;                // true = Super Admin (everything + user mgmt)
   let perms = { pages: "all", hqs: "all", landing: false, managerInc: false, editPages: [] };
   let sessionUser = null;               // firebase.User
-  let auth = null, db = null;           // firebase handles
+  let auth = null, db = null, storage = null; // firebase handles
 
   // Super Admin can view & edit everything AND manage users (Admin tab).
   // Plain Admin edits every content page but cannot manage users.
@@ -242,6 +242,9 @@
   const customHQs = [];   // admin-added base-HQ cities
   const customDesignations = []; // admin-added designations/roles
   const rosterRemovals = []; // nums of original roster people deleted by admin
+  // Uploaded KRA docs per position, keyed by card id ("aid:xx" / "num:xx").
+  // Value: { name, url, path, size, at, by }. File bytes live in Firebase Storage.
+  const kraFiles = {};
   // Prompt + target list for the "＋ Add new…" option, keyed by roster field.
   const customListFor = (field) =>
     field === "designation"
@@ -364,10 +367,27 @@
     const oid = (x) => (x._aid != null ? `data-aid="${esc(x._aid)}"` : `data-num="${x.num}"`);
     const opt = (v, l, cur) => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(l)}</option>`;
     const icons = (x) => `<div class="org-icons"><button class="org-editbtn" data-id="${cardId(x)}" title="Edit">✎</button><button class="org-add" data-name="${esc(x.name)}" title="Add a report under ${esc(x.name)}">＋</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Remove">✕</button></div>`;
+    // Read-only KRA chip for a compact card (download link when a file exists).
+    const kraChip = (x) => {
+      const k = kraFiles[cardId(x)];
+      if (!k || !k.url) return "";
+      return `<a class="org-kra" href="${esc(k.url)}" target="_blank" rel="noopener" title="Open KRA: ${esc(k.name || "document")}">📄 KRA</a>`;
+    };
     const compact = (x, cls) => {
       const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
       const zone = x.zone && x.zone !== "—" ? `<span class="org-zone">${esc(x.zone)}</span>` : "";
-      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}${zone}</div>${ed ? icons(x) : ""}</div>`;
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}${zone}${kraChip(x)}</div>${ed ? icons(x) : ""}</div>`;
+    };
+    // KRA upload/replace/remove block inside the edit form.
+    const kraEdit = (x) => {
+      const k = kraFiles[cardId(x)];
+      const cur = k && k.url
+        ? `<div class="org-kra-cur"><a href="${esc(k.url)}" target="_blank" rel="noopener">📄 ${esc(k.name || "KRA document")}</a><button class="org-kra-del" ${oid(x)} type="button" title="Remove KRA">✕</button></div>`
+        : "";
+      const label = k && k.url ? "Replace KRA file" : "Upload KRA file";
+      return `<div class="org-kra-edit">${cur}
+        <label class="org-kra-up">${esc(label)}<input type="file" class="org-kra-file" ${oid(x)} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"></label>
+        <span class="org-kra-msg" ${oid(x)}></span></div>`;
     };
     const editForm = (x, cls) => {
       const repOpts = [CTO, NSM].concat(names.filter((n) => n !== x.name)).map((n) => opt(n, n, x.rep)).join("");
@@ -380,6 +400,7 @@
         <input class="org-in" data-field="baseHQ" value="${esc(x.hq)}" placeholder="Base HQ" title="Base HQ">
         <input class="org-in" data-field="zone" value="${esc(x.zone)}" placeholder="Zone" title="Zone">
         <label class="org-rep">Reports to <select class="org-in org-sel" data-field="reportsTo">${repOpts}</select></label>
+        ${kraEdit(x)}
         <div class="org-actions"><button class="org-done" title="Done">✓ Done</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Delete">✕ Delete</button></div>
       </div>`;
     };
@@ -491,6 +512,58 @@
         mountOrgChart();
       };
     });
+    // KRA file upload
+    document.querySelectorAll("#orgScroll .org-kra-file").forEach((inp) => {
+      inp.onchange = () => {
+        const file = inp.files && inp.files[0];
+        if (file) uploadKra(kraKeyFromEl(inp), file, inp);
+      };
+    });
+    // KRA remove
+    document.querySelectorAll("#orgScroll .org-kra-del").forEach((b) => {
+      b.onclick = () => {
+        if (!window.confirm("Remove the uploaded KRA file?")) return;
+        removeKra(kraKeyFromEl(b));
+      };
+    });
+  }
+
+  // Derive the KRA storage key ("aid:xx" / "num:xx") from a card element.
+  function kraKeyFromEl(el) {
+    const aid = el.getAttribute("data-aid"), num = el.getAttribute("data-num");
+    return aid !== null ? "aid:" + aid : "num:" + num;
+  }
+  async function uploadKra(key, file, inp) {
+    const msg = document.querySelector(`#orgScroll .org-kra-msg[data-aid="${key.startsWith("aid:") ? key.slice(4) : ""}"], #orgScroll .org-kra-msg[data-num="${key.startsWith("num:") ? key.slice(4) : ""}"]`);
+    const setMsg = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? "var(--bad)" : "var(--text-3)"; } };
+    if (!storage) { setMsg("⚠ File storage is not enabled yet — ask the admin to turn on Firebase Storage.", true); return; }
+    if (!(roleIsAdmin() || hasAnyEditGrant())) { setMsg("⚠ You don't have edit access.", true); return; }
+    if (file.size > 15 * 1024 * 1024) { setMsg("⚠ File too large (max 15 MB).", true); return; }
+    setMsg("Uploading…");
+    try {
+      const safe = String(file.name).replace(/[^\w.\-]+/g, "_").slice(-80);
+      const path = "kra/" + key.replace(/[:]/g, "_") + "/" + Date.now() + "-" + safe;
+      const ref = storage.ref().child(path);
+      await ref.put(file, { contentType: file.type || "application/octet-stream" });
+      const url = await ref.getDownloadURL();
+      // Clean up any previous file for this position (best effort).
+      const prev = kraFiles[key];
+      kraFiles[key] = { name: file.name, url, path, size: file.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+      if (prev && prev.path && prev.path !== path) { try { await storage.ref().child(prev.path).delete(); } catch (e) {} }
+      saveEdits("KRA uploaded");
+      mountOrgChart();
+    } catch (e) {
+      console.warn("KRA upload failed", e);
+      setMsg("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it.", true);
+      if (inp) inp.value = "";
+    }
+  }
+  async function removeKra(key) {
+    const rec = kraFiles[key];
+    delete kraFiles[key];
+    saveEdits("KRA removed");
+    mountOrgChart();
+    if (rec && rec.path && storage) { try { await storage.ref().child(rec.path).delete(); } catch (e) {} }
   }
 
   function wireTeamSubnav() {
@@ -3752,6 +3825,7 @@
       if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
       auth = firebase.auth();
       db = firebase.firestore();
+      try { storage = firebase.storage ? firebase.storage() : null; } catch (e) { storage = null; }
       return true;
     } catch (e) { console.error("Firebase init failed", e); return false; }
   }
@@ -3836,6 +3910,7 @@
         rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
+      if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
       if (Array.isArray(e.customDesignations)) { customDesignations.length = 0; e.customDesignations.forEach((d) => customDesignations.push(d)); }
       if (Array.isArray(e.paymentAdds)) {
@@ -3894,7 +3969,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {

@@ -1,0 +1,21 @@
+rules_version = '2';
+// Primelaze dashboard — Firebase Storage security rules.
+// Paste these in Firebase Console → Storage → Rules → Publish.
+// (First enable Storage: Firebase Console → Build → Storage → Get started.)
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // KRA documents for roster positions.
+    //  - Read: any signed-in user (viewers can open a position's KRA).
+    //  - Write: any signed-in user, capped at 15 MB per file. The dashboard
+    //    only exposes the upload control to admins / page editors, and the
+    //    Firestore edits doc (which records the file) is itself write-guarded,
+    //    so this is acceptable for an internal team tool.
+    match /kra/{position}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 15 * 1024 * 1024;
+      allow delete: if request.auth != null;
+    }
+  }
+}
