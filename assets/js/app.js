@@ -385,8 +385,11 @@
     };
     const cardHtml = (x, cls) => (ed && orgEditId === cardId(x)) ? editForm(x, cls) : compact(x, cls);
     const node = (x, seen) => {
-      if (seen.has(x.name)) return "";
-      seen.add(x.name);
+      // Dedup by unique card id (not name): two people can share a name
+      // (e.g. several "New person" rows) and each must render + be deletable.
+      const uid = cardId(x);
+      if (skipNames.has(x.name) || seen.has(uid)) return "";
+      seen.add(uid);
       const kids = childrenOf(x.name);
       const cls = x.st === "vacant" ? "org-vacant" : x.st === "tojoin" ? "org-tojoin" : (x.div === "Salon/Spa" ? "org-spa" : "");
       return `<li class="org-node">
@@ -407,7 +410,10 @@
       return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(name)}</span><span class="org-desig">${esc(sub)}</span></div>${ed ? `<div class="org-icons"><button class="org-editbtn" data-id="${key}" title="Edit">✎</button>${addBtn}</div>` : ""}</div>`;
     };
 
-    const seen = new Set([NSM, CTO, "Arjun", "CTO"]);
+    // Special node names never render as ordinary cards; card-id set tracks
+    // what's already been drawn so same-named people don't collapse into one.
+    const skipNames = new Set([NSM, CTO, "Arjun", "CTO"]);
+    const seen = new Set();
     const arjunKids = all.filter((x) => x.name !== NSM && !isCto(x.rep) && (x.rep === NSM || x.rep === "Arjun" || !byName[x.rep])).sort(rank);
     const ctoPeers = all.filter((x) => x.name !== NSM && isCto(x.rep)).sort(rank);
 
