@@ -368,26 +368,27 @@
     const opt = (v, l, cur) => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(l)}</option>`;
     const icons = (x) => `<div class="org-icons"><button class="org-editbtn" data-id="${cardId(x)}" title="Edit">✎</button><button class="org-add" data-name="${esc(x.name)}" title="Add a report under ${esc(x.name)}">＋</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Remove">✕</button></div>`;
     // Read-only KRA chip for a compact card (download link when a file exists).
-    const kraChip = (x) => {
-      const k = kraFiles[cardId(x)];
+    const kraChip = (key) => {
+      const k = kraFiles[key];
       if (!k || !k.url) return "";
       return `<a class="org-kra" href="${esc(k.url)}" target="_blank" rel="noopener" title="Open KRA: ${esc(k.name || "document")}">📄 KRA</a>`;
     };
     const compact = (x, cls) => {
       const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
       const zone = x.zone && x.zone !== "—" ? `<span class="org-zone">${esc(x.zone)}</span>` : "";
-      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}${zone}${kraChip(x)}</div>${ed ? icons(x) : ""}</div>`;
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}${zone}${kraChip(cardId(x))}</div>${ed ? icons(x) : ""}</div>`;
     };
-    // KRA upload/replace/remove block inside the edit form.
-    const kraEdit = (x) => {
-      const k = kraFiles[cardId(x)];
+    // KRA upload/replace/remove block inside the edit form (keyed by card id
+    // for regular people, "sp:nsm" / "sp:cto" for the special top nodes).
+    const kraEdit = (key) => {
+      const k = kraFiles[key];
       const cur = k && k.url
-        ? `<div class="org-kra-cur"><a href="${esc(k.url)}" target="_blank" rel="noopener">📄 ${esc(k.name || "KRA document")}</a><button class="org-kra-del" ${oid(x)} type="button" title="Remove KRA">✕</button></div>`
+        ? `<div class="org-kra-cur"><a href="${esc(k.url)}" target="_blank" rel="noopener">📄 ${esc(k.name || "KRA document")}</a><button class="org-kra-del" data-krakey="${esc(key)}" type="button" title="Remove KRA">✕</button></div>`
         : "";
       const label = k && k.url ? "Replace KRA file" : "Upload KRA file";
       return `<div class="org-kra-edit">${cur}
-        <label class="org-kra-up">${esc(label)}<input type="file" class="org-kra-file" ${oid(x)} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"></label>
-        <span class="org-kra-msg" ${oid(x)}></span></div>`;
+        <label class="org-kra-up">${esc(label)}<input type="file" class="org-kra-file" data-krakey="${esc(key)}" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt"></label>
+        <span class="org-kra-msg" data-krakey="${esc(key)}"></span></div>`;
     };
     const editForm = (x, cls) => {
       const repOpts = [CTO, NSM].concat(names.filter((n) => n !== x.name)).map((n) => opt(n, n, x.rep)).join("");
@@ -400,7 +401,7 @@
         <input class="org-in" data-field="baseHQ" value="${esc(x.hq)}" placeholder="Base HQ" title="Base HQ">
         <input class="org-in" data-field="zone" value="${esc(x.zone)}" placeholder="Zone" title="Zone">
         <label class="org-rep">Reports to <select class="org-in org-sel" data-field="reportsTo">${repOpts}</select></label>
-        ${kraEdit(x)}
+        ${kraEdit(cardId(x))}
         <div class="org-actions"><button class="org-done" title="Done">✓ Done</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Delete">✕ Delete</button></div>
       </div>`;
     };
@@ -421,14 +422,16 @@
 
     // Special top nodes (NSM = Arjun, CTO) — each editable via its own pencil.
     const specialCard = (key, cls, name, sub, subField) => {
+      const kkey = "sp:" + key;
       if (ed && orgEditId === key) {
         return `<div class="org-card ${cls} org-edit" data-special="${key}">
           <input class="org-in org-in-name" data-field="name" value="${esc(name)}" placeholder="Name">
           <input class="org-in" data-field="${subField}" value="${esc(sub)}" placeholder="Designation / title">
+          ${kraEdit(kkey)}
           <div class="org-actions"><button class="org-done" title="Done">✓ Done</button></div></div>`;
       }
       const addBtn = key === "nsm" ? `<button class="org-add" data-name="${esc(name)}" title="Add a report under ${esc(name)}">＋</button>` : "";
-      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(name)}</span><span class="org-desig">${esc(sub)}</span></div>${ed ? `<div class="org-icons"><button class="org-editbtn" data-id="${key}" title="Edit">✎</button>${addBtn}</div>` : ""}</div>`;
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(name)}</span><span class="org-desig">${esc(sub)}</span>${kraChip(kkey)}</div>${ed ? `<div class="org-icons"><button class="org-editbtn" data-id="${key}" title="Edit">✎</button>${addBtn}</div>` : ""}</div>`;
     };
 
     // Special node names never render as ordinary cards; card-id set tracks
@@ -528,13 +531,13 @@
     });
   }
 
-  // Derive the KRA storage key ("aid:xx" / "num:xx") from a card element.
+  // Derive the KRA storage key from a card element. Regular cards carry
+  // data-krakey ("aid:xx" / "num:xx"); special top nodes use "sp:nsm" / "sp:cto".
   function kraKeyFromEl(el) {
-    const aid = el.getAttribute("data-aid"), num = el.getAttribute("data-num");
-    return aid !== null ? "aid:" + aid : "num:" + num;
+    return el.getAttribute("data-krakey") || "";
   }
   async function uploadKra(key, file, inp) {
-    const msg = document.querySelector(`#orgScroll .org-kra-msg[data-aid="${key.startsWith("aid:") ? key.slice(4) : ""}"], #orgScroll .org-kra-msg[data-num="${key.startsWith("num:") ? key.slice(4) : ""}"]`);
+    const msg = document.querySelector(`#orgScroll .org-kra-msg[data-krakey="${key}"]`);
     const setMsg = (t, bad) => { if (msg) { msg.textContent = t; msg.style.color = bad ? "var(--bad)" : "var(--text-3)"; } };
     if (!storage) { setMsg("⚠ File storage is not enabled yet — ask the admin to turn on Firebase Storage.", true); return; }
     if (!(roleIsAdmin() || hasAnyEditGrant())) { setMsg("⚠ You don't have edit access.", true); return; }
