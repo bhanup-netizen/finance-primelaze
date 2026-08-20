@@ -341,10 +341,12 @@
     const all = roster()
       .filter((p) => divFilter === "all" || (rval(p, "division") || "Derma") === divFilter)
       .map((p) => ({
+      _aid: p._aid, num: p.num,
       name: (rval(p, "name") || "").trim(),
       desig: rval(p, "designation") || "",
       rep: (rval(p, "reportsTo") || "").trim(),
       hq: rval(p, "baseHQ") || "",
+      zone: rval(p, "zone") || "",
       div: rval(p, "division") || "Derma",
       st: estatus(p),
     })).filter((x) => x.name);
@@ -353,17 +355,35 @@
       .sort((a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name));
     const rank = (a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name);
 
+    const ed = isAdmin();
+    const names = all.map((x) => x.name);
+    const oid = (x) => (x._aid != null ? `data-aid="${esc(x._aid)}"` : `data-num="${x.num}"`);
+    const opt = (v, l, cur) => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(l)}</option>`;
+    const cardHtml = (x, cls) => {
+      if (!ed) {
+        const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
+        return `<div class="org-card ${cls}"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}</div>`;
+      }
+      const repOpts = ["CTO", "Arjun"].concat(names.filter((n) => n !== x.name)).map((n) => opt(n, n, x.rep)).join("");
+      const statOpts = STATUS_OPTIONS.map((o) => opt(o.id, o.label, x.st)).join("");
+      const divOpts = DIVISIONS.map((dv) => opt(dv, divLabel(dv), x.div)).join("");
+      return `<div class="org-card org-edit ${cls}" ${oid(x)}>
+        <input class="org-in org-in-name" data-field="name" value="${esc(x.name)}" placeholder="Name" title="Name">
+        <input class="org-in" data-field="designation" value="${esc(x.desig)}" placeholder="Designation" title="Designation">
+        <div class="org-in-row"><select class="org-in org-sel" data-field="division" title="Division">${divOpts}</select><select class="org-in org-sel" data-field="status" title="Status">${statOpts}</select></div>
+        <input class="org-in" data-field="baseHQ" value="${esc(x.hq)}" placeholder="Base HQ" title="Base HQ">
+        <input class="org-in" data-field="zone" value="${esc(x.zone)}" placeholder="Zone" title="Zone">
+        <label class="org-rep">Reports to <select class="org-in org-sel" data-field="reportsTo">${repOpts}</select></label>
+        <div class="org-actions"><button class="org-add" data-name="${esc(x.name)}" title="Add a report under ${esc(x.name)}">＋ report</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Remove">✕</button></div>
+      </div>`;
+    };
     const node = (x, seen) => {
       if (seen.has(x.name)) return "";
       seen.add(x.name);
       const kids = childrenOf(x.name);
       const cls = x.st === "vacant" ? "org-vacant" : x.st === "tojoin" ? "org-tojoin" : (x.div === "Salon/Spa" ? "org-spa" : "");
-      const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
       return `<li class="org-node">
-        <div class="org-card ${cls}">
-          <span class="org-name">${esc(x.name)}</span>
-          <span class="org-desig">${esc(x.desig)}</span>${hq}
-        </div>
+        ${cardHtml(x, cls)}
         ${kids.length ? `<ul class="org-children">${kids.map((k) => node(k, seen)).join("")}</ul>` : ""}
       </li>`;
     };
@@ -385,6 +405,47 @@
         <ul class="org-children">${arjunNode}${ctoPeers.map((k) => node(k, seen)).join("")}</ul>
       </li>
     </ul>`;
+  }
+
+  // Write an edited field from an org card back to the roster (add or base row).
+  function orgCardWrite(card, field, val) {
+    if (!card) return;
+    const aid = card.getAttribute("data-aid"), num = card.getAttribute("data-num");
+    if (aid !== null) { const p = rosterAdds.find((x) => x._aid === aid); if (p) p[field] = val; }
+    else if (num !== null) rosterEdits[num + "#" + field] = val;
+  }
+  function mountOrgChart() {
+    const box = document.getElementById("orgScroll");
+    if (box) box.innerHTML = renderOrgChart(orgDiv);
+    wireOrgChart();
+  }
+  function wireOrgChart() {
+    if (!isAdmin()) return;
+    document.querySelectorAll("#orgScroll .org-in").forEach((el) => {
+      const card = el.closest(".org-card");
+      if (el.tagName === "SELECT") {
+        el.onchange = () => { orgCardWrite(card, el.dataset.field, el.value); saveEdits("Roster · " + el.dataset.field); mountOrgChart(); };
+      } else {
+        el.onblur = () => { orgCardWrite(card, el.dataset.field, el.value.trim()); saveEdits("Roster · " + el.dataset.field); };
+      }
+    });
+    document.querySelectorAll("#orgScroll .org-add").forEach((b) => {
+      b.onclick = () => {
+        const parent = b.dataset.name || "Arjun";
+        const aid = "r" + (rosterAddSeq++);
+        rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: parent, zone: "", status: "active" });
+        saveEdits("Added a report under " + parent);
+        mountOrgChart();
+      };
+    });
+    document.querySelectorAll("#orgScroll .org-del").forEach((b) => {
+      b.onclick = () => {
+        if (!window.confirm("Remove " + (b.dataset.name || "this person") + " from the roster?")) return;
+        const aid = b.getAttribute("data-aid"), num = b.getAttribute("data-num");
+        removePerson(aid !== null ? { _aid: aid } : { num: +num });
+        mountOrgChart();
+      };
+    });
   }
 
   function wireTeamSubnav() {
@@ -494,12 +555,12 @@
       });
       wireRosterEdit();
       wireTeamSubnav();
+      wireOrgChart();
       document.querySelectorAll("[data-orgdiv]").forEach((b) => {
         b.onclick = () => {
           orgDiv = b.dataset.orgdiv;
           document.querySelectorAll("[data-orgdiv]").forEach((x) => x.classList.toggle("active", x === b));
-          const box = document.getElementById("orgScroll");
-          if (box) box.innerHTML = renderOrgChart(orgDiv);
+          mountOrgChart();
         };
       });
       const orgTopBtn = document.getElementById("orgTopBtn");
@@ -509,47 +570,28 @@
         const title = (window.prompt("Subtitle / status (e.g. name or 'position vacant'):", orgTop.title || "") || "").trim();
         orgTop = { name, title };
         saveEdits("Renamed top position → " + name);
-        const box = document.getElementById("orgScroll");
-        if (box) box.innerHTML = renderOrgChart(orgDiv);
+        mountOrgChart();
       };
     }, 0);
 
     return teamSubnav() + `
       <div class="section-head">
         <h1>Team Roster</h1>
-        <p>All sales personnel across zones for ${esc(D.meta.fiscalYear)}, including vacant positions and new joinees.${isAdmin() ? " Click any cell to edit — changes save for everyone." : ""}</p>
+        <p>Reporting hierarchy for ${esc(D.meta.fiscalYear)}.${isAdmin() ? " Edit any card directly — change name, designation, HQ, zone, division, reports-to or status; it saves for everyone." : ""}</p>
       </div>
       <div class="card" style="margin-bottom:20px"><div class="stat-row">${summaryCards}</div></div>
-      <details class="card org-wrap" style="margin-bottom:20px" open>
-        <summary class="org-summary">Reporting hierarchy</summary>
-        <div class="controls" style="margin:12px 0 0">
+      <div class="card">
+        <div class="controls" style="margin:0 0 12px">
           <div class="seg">
             <button data-orgdiv="all" class="${orgDiv === "all" ? "active" : ""}">All</button>
             <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
             <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
           </div>
-          ${isAdmin() ? `<div class="hq-actions"><button id="orgTopBtn" class="ghost-btn" type="button">✎ Rename top</button></div>` : ""}
+          ${isAdmin() ? `<div class="hq-actions"><button id="orgTopBtn" class="ghost-btn" type="button">✎ Rename top</button><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a person reporting to Arjun (NSM)">＋ Add person</button></div>` : ""}
         </div>
         <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
-        ${isAdmin() ? `<div class="muted-note" style="margin-top:8px">This chart is built from the roster below. To add someone, use <b>＋ Add person</b> under the table and set who they report to — the chart updates automatically.</div>` : ""}
-      </details>
-      <div class="controls">
-        <input id="teamSearch" class="search" type="search" value="${esc(teamSearch)}" placeholder="Search name, HQ, zone, division…" />
-        <div class="seg">
-          <button data-tfilter="all" class="${teamFilter === "all" ? "active" : ""}">All</button>
-          <button data-tfilter="active" class="${teamFilter === "active" ? "active" : ""}">Active</button>
-          <button data-tfilter="tojoin" class="${teamFilter === "tojoin" ? "active" : ""}">To join</button>
-          <button data-tfilter="vacant" class="${teamFilter === "vacant" ? "active" : ""}">Vacant</button>
-        </div>
-        <div class="seg">
-          <button data-tdiv="all" class="${teamDivision === "all" ? "active" : ""}">All div.</button>
-          <button data-tdiv="Derma" class="${teamDivision === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
-          <button data-tdiv="Salon/Spa" class="${teamDivision === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
-        </div>
-        ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a team member. Set their Status (Active / To join / Vacant) in the new row.">＋ Add person</button></div>` : ""}
-      </div>
-      ${isAdmin() ? `<div class="muted-note" style="margin:0 0 8px">One button for everyone — <b>＋ Add person</b>. In the new row, set <b>Status</b> to <b>Active</b> (current staff), <b>To join</b> (new joinee), or <b>Vacant</b> (open seat). Vacant/To-join rows also show on the Vacancies tab.</div>` : ""}
-      <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody id="teamBody">${view()}</tbody></table></div>`;
+        ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">Edit any card directly. <b>＋ report</b> adds someone under that person; <b>✕</b> removes them. <b>＋ Add person</b> (top) adds under Arjun. Set <b>Status</b> to <b>Vacant</b>/<b>To join</b> and it also shows on the Vacancies tab.</div>` : ""}
+      </div>`;
   }
 
   // "Ravi Kumar · Base HQ → Pune" describing an edited roster field.
@@ -621,13 +663,9 @@
     const add = document.getElementById("rosterAddBtn");
     if (add) add.onclick = () => {
       const aid = "r" + (rosterAddSeq++);
-      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "", zone: "" });
+      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: "Arjun", zone: "", status: "active" });
       saveEdits("Added a person");
-      // Reset filters/sub-tab so the freshly-added (Active) row is visible —
-      // otherwise an active filter (e.g. "Vacant") hides it and it looks broken.
-      teamTab = "roster"; teamFilter = "all"; teamDivision = "all"; teamSearch = "";
-      go("team");
-      flashRow(aid); // scroll it into view (table is a scroll box) and highlight
+      mountOrgChart();
     };
   }
 
