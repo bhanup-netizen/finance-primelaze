@@ -232,7 +232,7 @@
   }
 
   /* ================= TEAM ROSTER ================= */
-  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDiv = "all";
+  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDiv = "Derma";
   let orgTop = { name: "CTO", title: "Chief — position vacant" }; // editable top node
   let orgNsm = { name: "Arjun", desig: "National Sales Manager" };  // editable NSM node
   let orgEditId = null; // which card is currently open for editing ("aid:x"/"num:n"/"nsm"/"cto")
@@ -609,7 +609,6 @@
       <div class="card">
         <div class="controls" style="margin:0 0 12px">
           <div class="seg">
-            <button data-orgdiv="all" class="${orgDiv === "all" ? "active" : ""}">All</button>
             <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
             <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
           </div>
