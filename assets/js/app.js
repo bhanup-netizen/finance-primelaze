@@ -234,6 +234,8 @@
   /* ================= TEAM ROSTER ================= */
   let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDiv = "all";
   let orgTop = { name: "CTO", title: "Chief — position vacant" }; // editable top node
+  let orgNsm = { name: "Arjun", desig: "National Sales Manager" };  // editable NSM node
+  let orgEditId = null; // which card is currently open for editing ("aid:x"/"num:n"/"nsm"/"cto")
   const rosterEdits = {}; // `${num}#${field}` -> value
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
   let rosterAddSeq = 0;
@@ -336,8 +338,10 @@
   // divFilter: "all" | "Derma" | "Salon/Spa" (Arjun is NSM of every division).
   function renderOrgChart(divFilter) {
     divFilter = divFilter || "all";
-    const ARJUN = "Arjun";
-    const isCto = (r) => /^cto$/i.test(r);
+    const ed = isAdmin();
+    const CTO = (orgTop.name || "CTO").trim() || "CTO";
+    const NSM = (orgNsm.name || "Arjun").trim() || "Arjun";
+    const isCto = (r) => /^cto$/i.test(r) || r === CTO;
     const all = roster()
       .filter((p) => divFilter === "all" || (rval(p, "division") || "Derma") === divFilter)
       .map((p) => ({
@@ -355,16 +359,17 @@
       .sort((a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name));
     const rank = (a, b) => orgRank(a.desig) - orgRank(b.desig) || a.name.localeCompare(b.name);
 
-    const ed = isAdmin();
     const names = all.map((x) => x.name);
+    const cardId = (x) => (x._aid != null ? "aid:" + x._aid : "num:" + x.num);
     const oid = (x) => (x._aid != null ? `data-aid="${esc(x._aid)}"` : `data-num="${x.num}"`);
     const opt = (v, l, cur) => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}>${esc(l)}</option>`;
-    const cardHtml = (x, cls) => {
-      if (!ed) {
-        const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
-        return `<div class="org-card ${cls}"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}</div>`;
-      }
-      const repOpts = ["CTO", "Arjun"].concat(names.filter((n) => n !== x.name)).map((n) => opt(n, n, x.rep)).join("");
+    const icons = (x) => `<div class="org-icons"><button class="org-editbtn" data-id="${cardId(x)}" title="Edit">✎</button><button class="org-add" data-name="${esc(x.name)}" title="Add a report under ${esc(x.name)}">＋</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Remove">✕</button></div>`;
+    const compact = (x, cls) => {
+      const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}</div>${ed ? icons(x) : ""}</div>`;
+    };
+    const editForm = (x, cls) => {
+      const repOpts = [CTO, NSM].concat(names.filter((n) => n !== x.name)).map((n) => opt(n, n, x.rep)).join("");
       const statOpts = STATUS_OPTIONS.map((o) => opt(o.id, o.label, x.st)).join("");
       const divOpts = DIVISIONS.map((dv) => opt(dv, divLabel(dv), x.div)).join("");
       return `<div class="org-card org-edit ${cls}" ${oid(x)}>
@@ -374,9 +379,10 @@
         <input class="org-in" data-field="baseHQ" value="${esc(x.hq)}" placeholder="Base HQ" title="Base HQ">
         <input class="org-in" data-field="zone" value="${esc(x.zone)}" placeholder="Zone" title="Zone">
         <label class="org-rep">Reports to <select class="org-in org-sel" data-field="reportsTo">${repOpts}</select></label>
-        <div class="org-actions"><button class="org-add" data-name="${esc(x.name)}" title="Add a report under ${esc(x.name)}">＋ report</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Remove">✕</button></div>
+        <div class="org-actions"><button class="org-done" title="Done">✓ Done</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Delete">✕ Delete</button></div>
       </div>`;
     };
+    const cardHtml = (x, cls) => (ed && orgEditId === cardId(x)) ? editForm(x, cls) : compact(x, cls);
     const node = (x, seen) => {
       if (seen.has(x.name)) return "";
       seen.add(x.name);
@@ -388,20 +394,30 @@
       </li>`;
     };
 
-    const seen = new Set([ARJUN, "CTO"]);
-    // Arjun's reports: reportsTo = "Arjun", or orphans (unknown manager, not CTO).
-    const arjunKids = all.filter((x) => x.name !== ARJUN && !isCto(x.rep) && (x.rep === ARJUN || !byName[x.rep])).sort(rank);
-    // Peers of Arjun that report straight to the (vacant) CTO.
-    const ctoPeers = all.filter((x) => x.name !== ARJUN && isCto(x.rep)).sort(rank);
+    // Special top nodes (NSM = Arjun, CTO) — each editable via its own pencil.
+    const specialCard = (key, cls, name, sub, subField) => {
+      if (ed && orgEditId === key) {
+        return `<div class="org-card ${cls} org-edit" data-special="${key}">
+          <input class="org-in org-in-name" data-field="name" value="${esc(name)}" placeholder="Name">
+          <input class="org-in" data-field="${subField}" value="${esc(sub)}" placeholder="Designation / title">
+          <div class="org-actions"><button class="org-done" title="Done">✓ Done</button></div></div>`;
+      }
+      const addBtn = key === "nsm" ? `<button class="org-add" data-name="${esc(name)}" title="Add a report under ${esc(name)}">＋</button>` : "";
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(name)}</span><span class="org-desig">${esc(sub)}</span></div>${ed ? `<div class="org-icons"><button class="org-editbtn" data-id="${key}" title="Edit">✎</button>${addBtn}</div>` : ""}</div>`;
+    };
+
+    const seen = new Set([NSM, CTO, "Arjun", "CTO"]);
+    const arjunKids = all.filter((x) => x.name !== NSM && !isCto(x.rep) && (x.rep === NSM || x.rep === "Arjun" || !byName[x.rep])).sort(rank);
+    const ctoPeers = all.filter((x) => x.name !== NSM && isCto(x.rep)).sort(rank);
 
     const arjunNode = `<li class="org-node">
-      <div class="org-card org-root"><span class="org-name">Arjun</span><span class="org-desig">National Sales Manager</span></div>
+      ${specialCard("nsm", "org-root", NSM, orgNsm.desig || "National Sales Manager", "desig")}
       <ul class="org-children">${arjunKids.map((k) => node(k, seen)).join("")}</ul>
     </li>`;
 
     return `<ul class="org-tree">
       <li class="org-node">
-        <div class="org-card org-cto"><span class="org-name">${esc(orgTop.name || "CTO")}</span><span class="org-desig">${esc(orgTop.title || "")}</span></div>
+        ${specialCard("cto", "org-cto", CTO, orgTop.title || "", "title")}
         <ul class="org-children">${arjunNode}${ctoPeers.map((k) => node(k, seen)).join("")}</ul>
       </li>
     </ul>`;
@@ -421,28 +437,47 @@
   }
   function wireOrgChart() {
     if (!isAdmin()) return;
+    // pencil → open this card for editing
+    document.querySelectorAll("#orgScroll .org-editbtn").forEach((b) => {
+      b.onclick = () => { orgEditId = b.dataset.id; mountOrgChart(); };
+    });
+    // ✓ Done → close the open editor
+    document.querySelectorAll("#orgScroll .org-done").forEach((b) => {
+      b.onclick = () => { orgEditId = null; mountOrgChart(); };
+    });
+    // field edits (person cards + the special NSM/CTO cards)
     document.querySelectorAll("#orgScroll .org-in").forEach((el) => {
       const card = el.closest(".org-card");
-      if (el.tagName === "SELECT") {
-        el.onchange = () => { orgCardWrite(card, el.dataset.field, el.value); saveEdits("Roster · " + el.dataset.field); mountOrgChart(); };
-      } else {
-        el.onblur = () => { orgCardWrite(card, el.dataset.field, el.value.trim()); saveEdits("Roster · " + el.dataset.field); };
-      }
+      const special = card.getAttribute("data-special");
+      const commit = () => {
+        const f = el.dataset.field;
+        const v = el.tagName === "SELECT" ? el.value : el.value.trim();
+        if (special === "nsm") orgNsm[f] = v;
+        else if (special === "cto") { orgTop[f] = v; }
+        else orgCardWrite(card, f, v);
+        saveEdits("Roster · " + f);
+        if (el.tagName === "SELECT") mountOrgChart();
+      };
+      if (el.tagName === "SELECT") el.onchange = commit; else el.onblur = commit;
     });
+    // ＋ add a report under this person, and open it for editing
     document.querySelectorAll("#orgScroll .org-add").forEach((b) => {
       b.onclick = () => {
         const parent = b.dataset.name || "Arjun";
         const aid = "r" + (rosterAddSeq++);
         rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", baseHQ: "", reportsTo: parent, zone: "", status: "active" });
         saveEdits("Added a report under " + parent);
+        orgEditId = "aid:" + aid; // open the new card so it's ready to fill in
         mountOrgChart();
       };
     });
+    // ✕ delete a person
     document.querySelectorAll("#orgScroll .org-del").forEach((b) => {
       b.onclick = () => {
         if (!window.confirm("Remove " + (b.dataset.name || "this person") + " from the roster?")) return;
         const aid = b.getAttribute("data-aid"), num = b.getAttribute("data-num");
         removePerson(aid !== null ? { _aid: aid } : { num: +num });
+        orgEditId = null;
         mountOrgChart();
       };
     });
@@ -563,21 +598,12 @@
           mountOrgChart();
         };
       });
-      const orgTopBtn = document.getElementById("orgTopBtn");
-      if (orgTopBtn) orgTopBtn.onclick = () => {
-        const name = (window.prompt("Top position title (e.g. CTO, Managing Director):", orgTop.name || "CTO") || "").trim();
-        if (!name) return;
-        const title = (window.prompt("Subtitle / status (e.g. name or 'position vacant'):", orgTop.title || "") || "").trim();
-        orgTop = { name, title };
-        saveEdits("Renamed top position → " + name);
-        mountOrgChart();
-      };
     }, 0);
 
     return teamSubnav() + `
       <div class="section-head">
         <h1>Team Roster</h1>
-        <p>Reporting hierarchy for ${esc(D.meta.fiscalYear)}.${isAdmin() ? " Edit any card directly — change name, designation, HQ, zone, division, reports-to or status; it saves for everyone." : ""}</p>
+        <p>Reporting hierarchy for ${esc(D.meta.fiscalYear)}.${isAdmin() ? " Click <b>✎</b> on any card to edit that person, <b>＋</b> to add a report under them, <b>✕</b> to remove." : ""}</p>
       </div>
       <div class="card" style="margin-bottom:20px"><div class="stat-row">${summaryCards}</div></div>
       <div class="card">
@@ -587,10 +613,10 @@
             <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
             <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
           </div>
-          ${isAdmin() ? `<div class="hq-actions"><button id="orgTopBtn" class="ghost-btn" type="button">✎ Rename top</button><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a person reporting to Arjun (NSM)">＋ Add person</button></div>` : ""}
+          ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a person reporting to the NSM">＋ Add person</button></div>` : ""}
         </div>
         <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
-        ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">Edit any card directly. <b>＋ report</b> adds someone under that person; <b>✕</b> removes them. <b>＋ Add person</b> (top) adds under Arjun. Set <b>Status</b> to <b>Vacant</b>/<b>To join</b> and it also shows on the Vacancies tab.</div>` : ""}
+        ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">On each card: <b>✎</b> edit that person (incl. the top CTO &amp; NSM), <b>＋</b> add a report under them, <b>✕</b> delete. <b>＋ Add person</b> (top) adds under the NSM. Set <b>Status</b> to <b>Vacant</b>/<b>To join</b> and it also shows on the Vacancies tab.</div>` : ""}
       </div>`;
   }
 
@@ -3826,6 +3852,7 @@
       if (e.moqJar != null) orderState.moqJar = e.moqJar;
       if (e.moqRetail != null) orderState.moqRetail = e.moqRetail;
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "" };
+      if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager" };
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -3856,7 +3883,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {

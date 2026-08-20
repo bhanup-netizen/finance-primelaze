@@ -488,6 +488,14 @@ tr.total-row:hover td { background: var(--surface-3); }
   padding: 7px 13px; border: 1px solid var(--border); border-radius: 10px;
   background: var(--surface-2);
 }
+.org-cardmain { display: inline-flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.org-icons { display: inline-flex; gap: 3px; margin-left: 10px; }
+.org-icons button {
+  font-size: 12px; line-height: 1; padding: 3px 6px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface); cursor: pointer; color: var(--text-2);
+}
+.org-icons button:hover { background: var(--surface-2); color: var(--text); }
+.org-icons .org-del:hover { color: var(--bad); }
 .org-card.org-edit {
   display: flex; flex-direction: column; align-items: stretch; gap: 4px;
   width: 210px; padding: 8px; text-align: left;
