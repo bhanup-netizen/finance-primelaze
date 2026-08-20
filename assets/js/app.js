@@ -1018,6 +1018,16 @@
   const hqSales = {};     // device sales: `${sheet}` -> [{ id, product, buyer, location, soldBy, amount }]
   const hqEsthSales = {}; // esthemax sales: `${sheet}` -> [{ id, product, qty, buyer, location, soldBy, amount }]
   let hqSaleSeq = 0;
+  // New model: quarterly targets by salesperson × product per HQ.
+  // `${sheet}` -> [{ id, person, product, q2, q3, q4 }]
+  // Standard fiscal quarters: Q2 = Jul–Sep 2026, Q3 = Oct–Dec 2026, Q4 = Jan–Mar 2027.
+  const hqSpTargets = {};
+  let hqTgtSeq = 0;
+  const HQ_QUARTERS = [
+    { key: "q2", label: "Q2 · Jul–Sep 2026" },
+    { key: "q3", label: "Q3 · Oct–Dec 2026" },
+    { key: "q4", label: "Q4 · Jan–Mar 2027" },
+  ];
   const esthemaxProductNames = () => {
     const s = new Set();
     Object.values(D.esthemaxPrices || {}).forEach((mk) => Object.values(mk.groups || {}).forEach((rows) => rows.forEach((r) => { if (r.name) s.add(r.name); })));
@@ -1134,14 +1144,13 @@
     return `
       <div class="section-head">
         <h1>Regional HQ Targets</h1>
-        <p>FY26-27 device &amp; Celluma plans per regional headquarters. FY26-27 quantities are editable — totals recompute live. Download a PDF of the plan with the matching incentive tables and terms.</p>
+        <p>Quarterly sales targets by salesperson &amp; product per regional headquarters — <b>Q2 (Jul–Sep 2026)</b>, <b>Q3 (Oct–Dec 2026)</b>, <b>Q4 (Jan–Mar 2027)</b>. Salespeople are linked from the Team Roster.</p>
       </div>
       <div class="controls">
         <select id="hqSelect" class="select">${opts}</select>
         <div class="hq-actions"><button id="hqDownload" class="dl-btn" type="button">⤓ Download PDF</button></div>
       </div>
-      <div id="hqDetail">${hqDetail(D.hqTargets[hqIndex])}</div>
-      ${hqSalesByPersonSection()}`;
+      <div id="hqDetail">${hqDetail(D.hqTargets[hqIndex])}</div>`;
   }
 
   function mountHqDetail(h) {
@@ -1158,91 +1167,45 @@
     return v;
   };
   function wireHqDetail() {
-    document.querySelectorAll("[data-hqyear]").forEach((b) => {
-      b.onclick = () => { hqYear = +b.dataset.hqyear; mountHqDetail(D.hqTargets[hqIndex]); };
-    });
-    document.querySelectorAll(".tgt-input").forEach((inp) => {
-      inp.oninput = () => {
-        const val = nonNeg(inp);
-        if (inp.dataset.add != null) {
-          const arr = hqAdds[inp.dataset.pk] || [];
-          const a = arr[+inp.dataset.add];
-          if (a) a.fy2627 = val;
-        } else {
-          hqEdits[inp.dataset.pk + "#" + inp.dataset.ri] = val === "" ? null : val;
-        }
-        recomputeHqPlan(inp.dataset.pk);
-        saveEdits("Updated annual target");
-      };
-    });
-    // Per-product quarterly targets (Q1–Q4) for the selected year.
-    document.querySelectorAll(".hq-qtr").forEach((inp) => {
-      inp.oninput = () => {
-        const q = inp.dataset.q, val = nonNeg(inp);
-        const k = `${inp.dataset.pk}#${inp.dataset.row}#${hqYear}`;
-        (hqQtr[k] || (hqQtr[k] = {}))[q] = val;
-        recomputeHqQtr(inp.dataset.pk);
-        saveEdits(`Updated ${q} ${hqYear} target`);
-      };
-    });
-    // Add a product row from the Device list
-    document.querySelectorAll(".hq-add-btn").forEach((b) => {
-      b.onclick = () => {
-        const pk = b.dataset.pk;
-        const sel = document.querySelector('.hq-add-select[data-pk="' + pk + '"]');
-        const val = document.querySelector('.hq-add-val[data-pk="' + pk + '"]');
-        const name = sel && sel.value;
-        if (!name) { if (sel) sel.focus(); return; }
-        const dev = deviceByName(name);
-        const deviceValue = dev && isNum(dev.standard) ? dev.standard : (dev && isNum(dev.minimum) ? dev.minimum : null);
-        let qty = parseFloat(val && val.value); if (isNaN(qty) || qty < 0) qty = 0;
-        (hqAdds[pk] = hqAdds[pk] || []).push({ product: name, fy2627: qty, deviceValue });
-        saveEdits("Added target product " + name);
-        mountHqDetail(D.hqTargets[hqIndex]);
-      };
-    });
-    document.querySelectorAll(".hq-add-rm").forEach((b) => {
-      b.onclick = () => {
-        const arr = hqAdds[b.dataset.pk];
-        if (arr) arr.splice(+b.dataset.ai, 1);
-        saveEdits("Removed a target product");
-        mountHqDetail(D.hqTargets[hqIndex]);
-      };
-    });
-    // Sales-achieved records (who bought / where / who sold / how much).
     const h = D.hqTargets[hqIndex];
-    const key = h && h.sheet;
-    const storeFor = (s) => (s === "esth" ? hqEsthSales : hqSales);
-    document.querySelectorAll(".sale-in").forEach((el) => {
-      const commit = () => {
-        const rec = (storeFor(el.dataset.store)[key] || []).find((x) => x.id === el.dataset.id);
-        if (rec) {
-          const numField = el.type === "number";
-          rec[el.dataset.field] = numField ? (el.value === "" ? "" : parseFloat(el.value)) : el.value;
-          saveEdits("Sale record · " + el.dataset.field + " → " + el.value);
-          if (numField) mountHqDetail(h); // refresh rollup totals
+    if (!h) return;
+    const rows = hqSpTargets[h.sheet] || (hqSpTargets[h.sheet] = []);
+    // Edit salesperson / product / Q1 / Q2 on a target row.
+    document.querySelectorAll(".hqt-in").forEach((el) => {
+      el.onchange = () => {
+        const rec = rows.find((x) => x.id === el.dataset.id);
+        if (!rec) return;
+        const f = el.dataset.field;
+        const isQtr = HQ_QUARTERS.some((q) => q.key === f);
+        if (isQtr) {
+          let v = parseFloat(el.value);
+          rec[f] = el.value === "" || isNaN(v) ? "" : Math.max(0, v);
+          saveEdits("HQ target · " + f);
+          mountHqDetail(h); // refresh totals
+        } else {
+          rec[f] = el.value;
+          saveEdits("HQ target · " + f);
         }
       };
-      el.onchange = commit;
-      if (el.tagName === "INPUT" && el.type === "text") el.onblur = commit;
     });
-    document.querySelectorAll(".sale-rm").forEach((b) => {
+    // Delete a target row.
+    document.querySelectorAll(".hqt-rm").forEach((b) => {
       b.onclick = () => {
-        if (!window.confirm("Remove this sale record?")) return;
-        const map = storeFor(b.dataset.store);
-        map[key] = (map[key] || []).filter((x) => x.id !== b.dataset.id);
-        saveEdits("Removed a sale record"); mountHqDetail(h);
+        if (!window.confirm("Delete this target row?")) return;
+        const i = rows.findIndex((x) => x.id === b.dataset.id);
+        if (i >= 0) rows.splice(i, 1);
+        saveEdits("Removed HQ target row");
+        mountHqDetail(h);
       };
     });
-    const addDev = document.getElementById("hqSaleAdd");
-    if (addDev) addDev.onclick = () => {
-      (hqSales[key] = hqSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", buyer: "", location: "", soldBy: "", amount: "" });
-      saveEdits("Added a device sale record"); mountHqDetail(h);
-    };
-    const addEsth = document.getElementById("hqEsthAdd");
-    if (addEsth) addEsth.onclick = () => {
-      (hqEsthSales[key] = hqEsthSales[key] || []).push({ id: "s" + (hqSaleSeq++), product: "", qty: "", buyer: "", location: "", soldBy: "", amount: "" });
-      saveEdits("Added an Esthemax sale record"); mountHqDetail(h);
+    // Add a target row.
+    const add = document.getElementById("hqTgtAdd");
+    if (add) add.onclick = () => {
+      const rec = { id: "t" + (hqTgtSeq++), person: "", product: "" };
+      HQ_QUARTERS.forEach((q) => { rec[q.key] = ""; });
+      rows.push(rec);
+      saveEdits("Added HQ target row");
+      mountHqDetail(h);
     };
   }
 
@@ -1338,102 +1301,56 @@
 
   // Hide monetary (Value in Lakhs / Std Value) figures — units only on screen.
   const isMoney = (label) => /value|lakh|inr|₹/i.test(String(label));
+  // Combined product list for a target row: HQ plan products + devices + Esthemax.
+  function hqAllProducts(h) {
+    const s = new Set();
+    hqProductNames(h).forEach((n) => n && s.add(n));
+    esthemaxProductNames().forEach((n) => n && s.add(n));
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }
   function hqDetail(h) {
-    if (hqYear == null) hqYear = hqYears()[0];
-    const yearBar = `<div class="controls" style="margin-bottom:14px"><div class="seg">${hqYears().map((y) => `<button data-hqyear="${y}" class="${hqYear === y ? "active" : ""}">${y}</button>`).join("")}</div></div>`;
-    const summary = (h.summary || []).filter((s) => !isMoney(s.label)).map((s) => `
-      <div class="stat">
-        <b>${isNum(s.value) ? inr(s.value) : esc(s.value)}</b>
-        <span>${esc(s.label)}${s.note ? " · " + esc(s.note) : ""}</span>
-      </div>`).join("");
+    const admin = isAdmin();
+    const rows = hqSpTargets[h.sheet] || (hqSpTargets[h.sheet] = []);
+    const people = salesPeopleList();
+    const products = hqAllProducts(h);
 
-    const effVal = (pk, ri, orig) => {
-      const e = hqEdits[pk + "#" + ri];
-      return e != null ? e : orig;
-    };
+    const optList = (arr, cur, ph) =>
+      `<option value="">${ph}</option>` +
+      arr.concat(cur && !arr.includes(cur) ? [cur] : []).map((n) => `<option${n === cur ? " selected" : ""}>${esc(n)}</option>`).join("");
+    const personCell = (rec) => admin
+      ? `<select class="hqt-in" data-id="${rec.id}" data-field="person">${optList(people, rec.person, "— salesperson —")}</select>`
+      : esc(rec.person || "—");
+    const productCell = (rec) => admin
+      ? `<select class="hqt-in" data-id="${rec.id}" data-field="product">${optList(products, rec.product, "— product —")}</select>`
+      : esc(rec.product || "—");
+    const qCell = (rec, q) => admin
+      ? `<td class="num"><input class="hqt-in" type="number" min="0" data-id="${rec.id}" data-field="${q}" value="${esc(rec[q] ?? "")}" style="max-width:92px"></td>`
+      : `<td class="num">${rec[q] == null || rec[q] === "" ? "—" : inr(rec[q])}</td>`;
 
-    const plans = (h.plans && h.plans.length ? h.plans : []).map((pl, pi) => {
-      const pk = h.sheet + "#" + pi;
-      const pid = idfor(pk);
-      const QK = ["q1", "q2", "q3", "q4"];
-      const baseYear = hqYears()[0];
-      const head = ["Product", "FY25-26", "FY26-27", `Q1 ${hqYear}`, `Q2 ${hqYear}`, `Q3 ${hqYear}`, `Q4 ${hqYear}`]
-        .map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
-      const productRows = pl.rows.filter((r) => !r.isTotal);
-      const adds = hqAdds[pk] || [];
-      // Effective quarter value for the selected year: explicit override wins;
-      // else (base year only) the annual FY26-27 auto-split across quarters.
-      const qEff = (rowKey, annual, q) => {
-        const v = hqQtr[`${pk}#${rowKey}#${hqYear}`];
-        if (v && v[q] != null) return v[q];
-        return hqYear === baseYear ? splitQuarters(annual)[q] : "";
-      };
-      // units total over device rows (numeric deviceValue) incl. added products
-      let tu = 0; const tq = { q1: 0, q2: 0, q3: 0, q4: 0 };
-      const addQtr = (rowKey, annual) => QK.forEach((q) => { const n = parseFloat(qEff(rowKey, annual, q)); if (!isNaN(n)) tq[q] += n; });
-      productRows.forEach((r, ri) => { const ann = effVal(pk, ri, r.fy2627); if (isNum(r.deviceValue) && isNum(ann)) tu += ann; addQtr(String(ri), ann); });
-      adds.forEach((a, ai) => { const v = parseFloat(a.fy2627); if (!isNaN(v) && isNum(a.deviceValue)) tu += v; addQtr("a" + ai, a.fy2627); });
+    const qTot = {}; HQ_QUARTERS.forEach((q) => { qTot[q.key] = 0; });
+    const body = rows.map((rec) => {
+      let tot = 0;
+      HQ_QUARTERS.forEach((q) => { const v = parseFloat(rec[q.key]) || 0; qTot[q.key] += v; tot += v; });
+      return `<tr>
+        ${admin ? `<td class="num"><button class="ghost-btn danger hqt-rm" data-id="${rec.id}" title="Delete this target">🗑</button></td>` : ""}
+        <td>${personCell(rec)}</td>
+        <td>${productCell(rec)}</td>
+        ${HQ_QUARTERS.map((q) => qCell(rec, q.key)).join("")}
+        <td class="num">${tot ? inr(tot) : "—"}</td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="${4 + HQ_QUARTERS.length + (admin ? 1 : 0)}" class="empty">No targets yet.${admin ? " Click “Add target row”." : ""}</td></tr>`;
 
-      const qtrCells = (rowKey, annual) => QK.map((q) => {
-        const dv = qEff(rowKey, annual, q);
-        return isAdmin()
-          ? `<td class="num"><input class="hq-qtr" type="number" min="0" data-pk="${esc(pk)}" data-row="${rowKey}" data-q="${q}" value="${esc(dv == null || dv === "" ? "" : dv)}" style="max-width:58px"></td>`
-          : `<td class="num">${dv == null || dv === "" ? "—" : esc(dv)}</td>`;
-      }).join("");
+    const head = (admin ? [""] : []).concat("Salesperson", "Product", HQ_QUARTERS.map((q) => q.label), "Total")
+      .map((x, i) => `<th class="${i >= (admin ? 3 : 2) ? "num" : ""}">${esc(x)}</th>`).join("");
+    const grand = HQ_QUARTERS.reduce((s, q) => s + qTot[q.key], 0);
+    const totalRow = `<tr class="total-row"><td colspan="${admin ? 3 : 2}">TOTAL</td>${HQ_QUARTERS.map((q) => `<td class="num">${inr(qTot[q.key])}</td>`).join("")}<td class="num">${inr(grand)}</td></tr>`;
+    const addCtrl = admin ? `<div class="hq-add-row" style="margin-top:12px"><button id="hqTgtAdd" class="dl-btn" type="button">＋ Add target row</button></div>` : "";
 
-      const prodHtml = productRows.map((r, ri) => {
-        const editable = isNum(r.fy2627);
-        const v = effVal(pk, ri, r.fy2627);
-        const fyCell = editable
-          ? `<input class="tgt-input" type="number" min="0" data-pk="${esc(pk)}" data-ri="${ri}" data-dv="${isNum(r.deviceValue) ? r.deviceValue : ""}" value="${v}" ${roAttr()} />`
-          : (r.fy2627 ?? "—");
-        return `<tr><td class="t-name">${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${fyCell}</td>${qtrCells(String(ri), v)}</tr>`;
-      }).join("");
-
-      const addHtml = adds.map((a, ai) => {
-        const fyCell = isAdmin()
-          ? `<input class="tgt-input" type="number" min="0" data-pk="${esc(pk)}" data-add="${ai}" data-dv="${isNum(a.deviceValue) ? a.deviceValue : ""}" value="${esc(a.fy2627)}" />`
-          : esc(a.fy2627);
-        const rm = isAdmin() ? ` <button class="linkish hq-add-rm" data-pk="${esc(pk)}" data-ai="${ai}" title="Remove">✕</button>` : "";
-        return `<tr><td class="t-name">${esc(a.product)}${rm}</td><td class="num">—</td><td class="num">${fyCell}</td>${qtrCells("a" + ai, a.fy2627)}</tr>`;
-      }).join("");
-
-      const totalHtml = `<tr class="total-row"><td>TOTAL</td><td class="num"></td><td class="num" id="totu_${pid}">${inr(tu)}</td>${QK.map((q) => `<td class="num" id="totq_${pid}_${q}">${inr(tq[q])}</td>`).join("")}</tr>`;
-
-      const addCtrl = isAdmin() ? `
-        <div class="hq-add-row">
-          <select class="hq-add-select select" data-pk="${esc(pk)}">
-            <option value="">＋ Add product from Device list…</option>
-            ${deviceNames().map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}
-          </select>
-          <input class="hq-add-val" type="number" min="0" placeholder="FY26-27 qty" data-pk="${esc(pk)}">
-          <button class="ghost-btn hq-add-btn" data-pk="${esc(pk)}" type="button">Add</button>
-        </div>` : "";
-
-      return `${pl.label ? `<div class="subplan-title">${esc(pl.label)}</div>` : ""}${table(head, prodHtml + addHtml + totalHtml)}${addCtrl}`;
-    }).join("");
-
-    const quarters = (h.quarterly || []).filter((q) => !isMoney(q.basis)).map((q) => `
-      <div class="card">
-        <div class="q-label" style="margin-bottom:8px;font-weight:700;color:var(--text-2)">${esc(q.basis)} · Annual ${isNum(q.annual) ? inr(q.annual) : q.annual}</div>
-        <div class="grid quarter-grid">
-          ${["q1", "q2", "q3", "q4"].map((qq, i) => `
-            <div class="quarter"><div class="q-label">Q${i + 1}</div><div class="q-val">${isNum(q[qq]) ? inr(q[qq]) : q[qq] ?? "—"}</div></div>`).join("")}
-        </div>
-      </div>`).join("");
-
-    const datalist = `<datalist id="salesPeople">${salesPeopleList().map((n) => `<option value="${esc(n)}">`).join("")}</datalist>` +
-      `<datalist id="hqStates">${((D.refs && D.refs.states) || []).map((s) => `<option value="${esc(s)}">`).join("")}</datalist>`;
     return `
       <div class="callout">${esc(h.title)}${h.subtitle ? `<div class="muted-note" style="margin-top:6px">${esc(h.subtitle)}</div>` : ""}</div>
-      ${summary ? `<div class="card" style="margin-bottom:22px"><div class="stat-row">${summary}</div></div>` : ""}
-      ${datalist}
-      <div class="muted-note" style="margin-bottom:6px">Quarterly targets — pick a year (next 5 years). Q1–Q4 columns below are for the selected year.</div>
-      ${yearBar}
-      ${plans || `<div class="empty">No product plan — placeholder HQ pending hire.</div>`}
-      ${quarters ? `<div class="block"><h2>Quarterly split</h2><div class="grid" style="gap:14px">${quarters}</div></div>` : ""}
-      ${hqSalesSection(h, "dev")}
-      ${hqSalesSection(h, "esth")}`;
+      <div class="muted-note" style="margin-bottom:8px">Set a quarterly target per <b>salesperson × product</b>. Salespeople come from the <b>Team Roster</b>. ${admin ? "Add, edit or delete rows below." : ""}</div>
+      ${table(head, body + totalRow)}
+      ${addCtrl}`;
   }
 
   /* ---- HQ target PDF (targets + incentives + T&C) ---- */
@@ -3926,6 +3843,11 @@
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
       if (e.hqQtr) Object.keys(e.hqQtr).forEach((k) => { hqQtr[k] = e.hqQtr[k]; });
+      if (e.hqSpTargets && typeof e.hqSpTargets === "object") {
+        Object.keys(e.hqSpTargets).forEach((k) => { if (Array.isArray(e.hqSpTargets[k])) hqSpTargets[k] = e.hqSpTargets[k]; });
+        const ids = Object.values(hqSpTargets).flat().map((x) => +String(x.id).slice(1)).filter((n) => !isNaN(n));
+        hqTgtSeq = ids.length ? Math.max(...ids) + 1 : 0;
+      }
       if (e.hqSales) Object.keys(e.hqSales).forEach((k) => { if (Array.isArray(e.hqSales[k])) hqSales[k] = e.hqSales[k]; });
       if (e.hqEsthSales) Object.keys(e.hqEsthSales).forEach((k) => { if (Array.isArray(e.hqEsthSales[k])) hqEsthSales[k] = e.hqEsthSales[k]; });
       {
@@ -3972,7 +3894,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
