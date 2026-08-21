@@ -339,6 +339,8 @@
     "sandeep": "Sandeep Kukadiya", "sandeep sir": "Sandeep Kukadiya", "sandeep kumar dhirajlal kukadiya": "Sandeep Kukadiya",
     "ramandeep": "Ramandeep Kaur", "ramandeep kaur": "Ramandeep Kaur",
     "brajesh": "Brajeshkumar Veeramuthu", "brajeshkumar veeramuthu": "Brajeshkumar Veeramuthu",
+    "brajesh kumar": "Brajeshkumar Veeramuthu", "brajeshkumar": "Brajeshkumar Veeramuthu", "brijesh": "Brajeshkumar Veeramuthu",
+    "dhinesh ramalingam": "Dhinesh Ramalingam",
     "akshay jain": "Akshay Jain",
     "lubdha dangle": "Ms. Lubdha", "lubdha": "Ms. Lubdha",
     "ambika": "Ambika Anand", "ambika anand": "Ambika Anand",
@@ -352,11 +354,15 @@
     // Puneet's sales are credited to Primelaze direct (PLM).
     "puneet": "PLM",
   };
-  // Return the proper roster name for a person value ("PLM" and unknowns pass through).
-  const properPersonName = (n) => {
-    const key = String(n == null ? "" : n).trim().toLowerCase();
-    return PERSON_NAME_FIX[key] || (n == null ? "" : String(n).trim());
+  // Lookup key: lower-case, single-spaced, honorifics stripped (Mr./Dr./…,
+  // trailing sir/ji) so "Dhinesh sir", "Brajesh  Kumar", "Mr. Arjun" all collapse.
+  const personFixKey = (n) => {
+    let key = String(n == null ? "" : n).trim().toLowerCase().replace(/\s+/g, " ");
+    return key.replace(/^(mr|mr\.|dr|dr\.|ms|ms\.|mrs|mrs\.|shri)\s+/, "")
+              .replace(/[\s,]+(sir|ji|madam|mam|ma'am)\.?$/, "").trim();
   };
+  // Proper roster name for a person value ("PLM" and unknowns pass through).
+  const properPersonName = (n) => PERSON_NAME_FIX[personFixKey(n)] || String(n == null ? "" : n).trim();
   // Person-name column indices per demo view (Manager / Salesperson / Confirmed-by).
   const DEMO_NAME_COLS = { current: [5], status: [5, 6], movement: [], packing: [] };
   function seedDemoNames() {
@@ -371,7 +377,7 @@
         DEMO_NAME_COLS[view].forEach((ci) => {
           const key = r + "#" + ci;
           const cur = demoEdits[view][key] != null ? demoEdits[view][key] : row[ci];
-          const proper = PERSON_NAME_FIX[String(cur == null ? "" : cur).trim().toLowerCase()];
+          const proper = PERSON_NAME_FIX[personFixKey(cur)];
           if (proper && proper !== cur) { demoEdits[view][key] = proper; changed++; }
         });
       });
