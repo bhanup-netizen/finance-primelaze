@@ -343,6 +343,9 @@
   const deptOf = (p) => (rval(p, "dept") || "").trim() || "Sales";
   // Fixed sales zones — Zone is chosen from this list (City stays free text).
   const ZONES = ["North1", "North2", "East+NE", "West", "South"];
+  // Non-sales staff (Marketing/Admin/HR/Service/Finance) use location options.
+  const NONSALES_ZONES = ["WFH", "Zirakpur", "Pondicherry"];
+  const zonesFor = (dept) => (dept === "Sales" ? ZONES : NONSALES_ZONES);
   const isRemoved = (p) => p._aid == null && rosterRemovals.includes(p.num);
   function removePerson(p) {
     let nm = "";
@@ -494,7 +497,7 @@
         <div class="org-in-row"><select class="org-in org-sel" data-field="dept" title="Department">${deptOpts}</select><select class="org-in org-sel" data-field="division" title="Division">${divOpts}</select></div>
         <div class="org-in-row"><select class="org-in org-sel" data-field="status" title="Status">${statOpts}</select></div>
         <input class="org-in" data-field="baseHQ" value="${esc(x.hq)}" placeholder="City" title="City / base HQ">
-        <select class="org-in org-sel" data-field="zone" title="Zone"><option value="">— zone —</option>${ZONES.concat(x.zone && !ZONES.includes(x.zone) ? [x.zone] : []).map((z) => opt(z, z, x.zone)).join("")}</select>
+        <select class="org-in org-sel" data-field="zone" title="${x.dept === "Sales" ? "Zone" : "Location"}"><option value="">— ${x.dept === "Sales" ? "zone" : "location"} —</option>${zonesFor(x.dept).concat(x.zone && !zonesFor(x.dept).includes(x.zone) ? [x.zone] : []).map((z) => opt(z, z, x.zone)).join("")}</select>
         <label class="org-rep">Reports to <select class="org-in org-sel" data-field="reportsTo">${repOpts}</select></label>
         ${kraEdit(cardId(x))}
         <div class="org-actions"><button class="org-done" title="Done">✓ Done</button><button class="org-del" ${oid(x)} data-name="${esc(x.name)}" title="Delete">✕ Delete</button></div>
