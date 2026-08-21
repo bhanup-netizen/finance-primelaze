@@ -1209,6 +1209,96 @@
   // Standard fiscal quarters: Q2 = Jul–Sep 2026, Q3 = Oct–Dec 2026, Q4 = Jan–Mar 2027.
   const hqSpTargets = {};
   let hqTgtSeq = 0;
+  // Official Sep-26 → Mar-27 targets (from finance's target sheet), by HQ.
+  // Q2 = Sep-26, Q3 = Oct+Nov+Dec-26, Q4 = Jan+Feb+Mar-27.
+  const SEED_HQ_TARGETS = {
+      "Punjab HQ": [
+        { person: "Akshay Jain", product: "Cellina PR", q2: 0, q3: 3, q4: 3 },
+        { person: "Akshay Jain", product: "Biaxis", q2: 1, q3: 3, q4: 6 },
+        { person: "Akshay Jain", product: "Vossman", q2: 0, q3: 2, q4: 3 },
+        { person: "Akshay Jain", product: "Magic Pulse", q2: 0, q3: 1, q4: 3 },
+        { person: "Akshay Jain", product: "Blaumman", q2: 0, q3: 0, q4: 2 },
+        { person: "Akshay Jain", product: "Torr RF", q2: 0, q3: 0, q4: 2 },
+        { person: "Akshay Jain", product: "Polylase", q2: 0, q3: 0, q4: 2 },
+        { person: "Akshay Jain", product: "Celluma", q2: 1, q3: 5, q4: 6 },
+      ],
+      "Delhi HQ": [
+        { person: "Ambika Anand", product: "Cellina PR", q2: 0, q3: 3, q4: 3 },
+        { person: "Ambika Anand", product: "Biaxis", q2: 0, q3: 0, q4: 3 },
+        { person: "Ambika Anand", product: "Vossman", q2: 0, q3: 2, q4: 3 },
+        { person: "Ambika Anand", product: "Magic Pulse", q2: 0, q3: 0, q4: 3 },
+        { person: "Ambika Anand", product: "Blaumman", q2: 0, q3: 0, q4: 2 },
+        { person: "Ambika Anand", product: "Torr RF", q2: 0, q3: 0, q4: 2 },
+        { person: "Ambika Anand", product: "Polylase", q2: 0, q3: 0, q4: 1 },
+        { person: "Ambika Anand", product: "Celluma", q2: 1, q3: 5, q4: 6 },
+      ],
+      "West HQ": [
+        { person: "Bimal Kumar", product: "Cellina PR", q2: 1, q3: 3, q4: 4 },
+        { person: "Bimal Kumar", product: "Biaxis", q2: 0, q3: 1, q4: 3 },
+        { person: "Bimal Kumar", product: "Vossman", q2: 0, q3: 2, q4: 3 },
+        { person: "Bimal Kumar", product: "Magic Pulse", q2: 0, q3: 0, q4: 2 },
+        { person: "Bimal Kumar", product: "Earbrium Glass", q2: 0, q3: 0, q4: 1 },
+        { person: "Bimal Kumar", product: "Blaumman", q2: 0, q3: 0, q4: 2 },
+        { person: "Bimal Kumar", product: "Torr RF", q2: 0, q3: 0, q4: 1 },
+        { person: "Bimal Kumar", product: "Polylase", q2: 0, q3: 0, q4: 2 },
+        { person: "Bimal Kumar", product: "Celluma", q2: 1, q3: 5, q4: 6 },
+        { person: "Sandeep Kukadiya", product: "Cellina PR", q2: 1, q3: 3, q4: 6 },
+        { person: "Sandeep Kukadiya", product: "Biaxis", q2: 0, q3: 0, q4: 2 },
+        { person: "Sandeep Kukadiya", product: "Vossman", q2: 0, q3: 0, q4: 3 },
+        { person: "Sandeep Kukadiya", product: "Magic Pulse", q2: 0, q3: 0, q4: 3 },
+        { person: "Sandeep Kukadiya", product: "Blaumman", q2: 0, q3: 0, q4: 3 },
+        { person: "Sandeep Kukadiya", product: "Torr RF", q2: 0, q3: 0, q4: 2 },
+        { person: "Sandeep Kukadiya", product: "Polylase", q2: 0, q3: 0, q4: 1 },
+        { person: "Sandeep Kukadiya", product: "Celluma", q2: 1, q3: 5, q4: 6 },
+      ],
+      "Vijayawada HQ": [
+        { person: "Vamshi Krishna", product: "Cellina PR", q2: 0, q3: 3, q4: 3 },
+        { person: "Vamshi Krishna", product: "Biaxis", q2: 0, q3: 0, q4: 3 },
+        { person: "Vamshi Krishna", product: "Vossman", q2: 0, q3: 0, q4: 3 },
+        { person: "Vamshi Krishna", product: "Magic Pulse", q2: 0, q3: 0, q4: 3 },
+        { person: "Vamshi Krishna", product: "Earbrium Glass", q2: 0, q3: 0, q4: 1 },
+        { person: "Vamshi Krishna", product: "Blaumman", q2: 0, q3: 0, q4: 1 },
+        { person: "Vamshi Krishna", product: "Torr RF", q2: 0, q3: 0, q4: 1 },
+        { person: "Vamshi Krishna", product: "Polylase", q2: 0, q3: 0, q4: 1 },
+        { person: "Vamshi Krishna", product: "Celluma", q2: 1, q3: 5, q4: 6 },
+      ],
+      "Hyderabad HQ": [
+        { person: "Ibrahim / Siva", product: "Cellina PR", q2: 1, q3: 3, q4: 6 },
+        { person: "Ibrahim / Siva", product: "Biaxis", q2: 0, q3: 1, q4: 3 },
+        { person: "Ibrahim / Siva", product: "Vossman", q2: 0, q3: 2, q4: 3 },
+        { person: "Ibrahim / Siva", product: "Magic Pulse", q2: 0, q3: 0, q4: 3 },
+        { person: "Ibrahim / Siva", product: "Blaumman", q2: 0, q3: 3, q4: 3 },
+        { person: "Ibrahim / Siva", product: "Torr RF", q2: 0, q3: 0, q4: 2 },
+        { person: "Ibrahim / Siva", product: "Polylase", q2: 0, q3: 0, q4: 2 },
+        { person: "Ibrahim / Siva", product: "Celluma", q2: 1, q3: 5, q4: 6 },
+      ],
+      "Chennai HQ": [
+        { person: "Dhinesh Ramalingam", product: "Cellina PR", q2: 0, q3: 3, q4: 3 },
+        { person: "Dhinesh Ramalingam", product: "Biaxis", q2: 0, q3: 2, q4: 3 },
+        { person: "Dhinesh Ramalingam", product: "Vossman", q2: 0, q3: 2, q4: 3 },
+        { person: "Dhinesh Ramalingam", product: "Magic Pulse", q2: 0, q3: 0, q4: 3 },
+        { person: "Dhinesh Ramalingam", product: "Earbrium Glass", q2: 0, q3: 2, q4: 3 },
+        { person: "Dhinesh Ramalingam", product: "Blaumman", q2: 0, q3: 0, q4: 2 },
+        { person: "Dhinesh Ramalingam", product: "Torr RF", q2: 0, q3: 0, q4: 5 },
+        { person: "Dhinesh Ramalingam", product: "Polylase", q2: 0, q3: 0, q4: 1 },
+        { person: "Dhinesh Ramalingam", product: "Celluma", q2: 1, q3: 5, q4: 6 },
+        { person: "Dhinesh / Arjun (Direct)", product: "Celluma (Direct)", q2: 16, q3: 49, q4: 51 },
+      ],
+    };
+  const HQ_TARGET_SEED_VERSION = 1;
+  let hqTargetSeedVersion = 0; // last applied HQ-target seed version (from edits doc)
+  function seedHqTargets() {
+    if (!(roleIsAdmin() || hasAnyEditGrant())) return;
+    if (hqTargetSeedVersion >= HQ_TARGET_SEED_VERSION) return; // apply once
+    Object.keys(SEED_HQ_TARGETS).forEach((sheet) => {
+      hqSpTargets[sheet] = SEED_HQ_TARGETS[sheet].map((r) => ({
+        id: "t" + (hqTgtSeq++), person: r.person, product: r.product, q2: r.q2, q3: r.q3, q4: r.q4,
+      }));
+    });
+    hqTargetSeedVersion = HQ_TARGET_SEED_VERSION;
+    saveEdits("Imported HQ targets Sep26-Mar27");
+  }
+
   const HQ_QUARTERS = [
     { key: "q2", label: "Q2 · Jul–Sep 2026" },
     { key: "q3", label: "Q3 · Oct–Dec 2026" },
@@ -3998,6 +4088,7 @@
     await loadEdits();
     seedServiceTeam();
     seedDemoNames();
+    seedHqTargets();
   }
 
   async function loadEdits() {
@@ -4034,6 +4125,7 @@
       if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
+      if (typeof e.hqTargetSeedVersion === "number") hqTargetSeedVersion = e.hqTargetSeedVersion;
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
       if (Array.isArray(e.customDesignations)) { customDesignations.length = 0; e.customDesignations.forEach((d) => customDesignations.push(d)); }
       if (Array.isArray(e.paymentAdds)) {
@@ -4097,7 +4189,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
