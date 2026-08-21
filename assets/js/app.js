@@ -232,7 +232,7 @@
   }
 
   /* ================= TEAM ROSTER ================= */
-  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDept = "Sales";
+  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDept = "Sales", orgSalesDiv = "Derma";
   let orgTop = { name: "CTO", title: "Chief — position vacant", empId: "" }; // editable top node
   let orgNsm = { name: "Arjun", desig: "National Sales Manager", empId: "" };  // editable NSM node
   let orgEditId = null; // which card is currently open for editing ("aid:x"/"num:n"/"nsm"/"cto")
@@ -439,6 +439,8 @@
     const isCto = (r) => /^cto$/i.test(r) || r === CTO;
     const all = roster()
       .filter((p) => deptOf(p) === deptFilter)
+      // Sales is additionally split by division (Primelaze / Casovil).
+      .filter((p) => deptFilter !== "Sales" || (rval(p, "division") || "Derma") === orgSalesDiv)
       .map((p) => ({
       _aid: p._aid, num: p.num,
       name: (rval(p, "name") || "").trim(),
@@ -609,9 +611,10 @@
       b.onclick = () => {
         const parent = b.dataset.name || "Arjun";
         const aid = "r" + (rosterAddSeq++);
-        // Inherit the department currently on screen so the new card stays
-        // visible under the active department tab instead of vanishing.
-        rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
+        // Inherit the department (and Sales division) currently on screen so
+        // the new card stays visible under the active tab instead of vanishing.
+        const ndiv = orgDept === "Sales" ? orgSalesDiv : "Derma";
+        rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: ndiv, dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
         saveEdits("Added a report under " + parent);
         orgEditId = "aid:" + aid; // open the new card so it's ready to fill in
         mountOrgChart();
@@ -793,6 +796,15 @@
         b.onclick = () => {
           orgDept = b.dataset.orgdept;
           document.querySelectorAll("[data-orgdept]").forEach((x) => x.classList.toggle("active", x === b));
+          const bar = document.getElementById("orgSalesDivBar");
+          if (bar) bar.style.display = orgDept === "Sales" ? "" : "none";
+          mountOrgChart();
+        };
+      });
+      document.querySelectorAll("[data-orgsalesdiv]").forEach((b) => {
+        b.onclick = () => {
+          orgSalesDiv = b.dataset.orgsalesdiv;
+          document.querySelectorAll("[data-orgsalesdiv]").forEach((x) => x.classList.toggle("active", x === b));
           mountOrgChart();
         };
       });
@@ -810,6 +822,11 @@
             ${ORG_DEPTS.map((d) => `<button data-orgdept="${esc(d)}" class="${orgDept === d ? "active" : ""}">${esc(d)}</button>`).join("")}
           </div>
           ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a person to this department">＋ Add person</button></div>` : ""}
+        </div>
+        <div class="controls" id="orgSalesDivBar" style="margin:0 0 12px${orgDept === "Sales" ? "" : ";display:none"}">
+          <div class="seg">
+            ${DIVISIONS.map((dv) => `<button data-orgsalesdiv="${esc(dv)}" class="${orgSalesDiv === dv ? "active" : ""}">${esc(divLabel(dv))}</button>`).join("")}
+          </div>
         </div>
         <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDept)}</div>
         ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">Tabs above filter the chart by <b>department</b>. On each card: <b>✎</b> edit (incl. department &amp; the top CEO/Sales Director), <b>＋</b> add a report under them, <b>✕</b> delete. <b>＋ Add person</b> (top) adds into the current department under the Sales Director. Vacant seats live on the <b>Vacancies</b> tab.</div>` : ""}
@@ -888,7 +905,8 @@
       // New person joins the current department; under the Sales Director for
       // Sales, otherwise as a top-level card in that department.
       const parent = orgDept === "Sales" ? "Arjun" : (orgNsm.name || "Arjun");
-      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
+      const ndiv = orgDept === "Sales" ? orgSalesDiv : "Derma";
+      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: ndiv, dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
       saveEdits("Added a person");
       orgEditId = "aid:" + aid;
       mountOrgChart();
