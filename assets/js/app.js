@@ -257,6 +257,15 @@
     { empId: "PLM0063", name: "Sonal Swapnil Lad", designation: "Accountant", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0104", name: "SumithraDevi", designation: "Admin Assistant", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0098", name: "Viisvesh S", designation: "Junior Accounts Executive", reportsTo: "Dhinesh Ramalingam" },
+    // Support & sales staff reporting to Arjun (Sales Director), per the org chart.
+    { empId: "PLM0003", name: "Ayush Sharma", designation: "Admin Manager", reportsTo: "Arjun" },
+    { empId: "PLM0113", name: "Vikas Parouha", designation: "Operations Manager", reportsTo: "Arjun" },
+    { empId: "PLM0100", name: "Sandeepika Bhardwaj", designation: "Human Resource Manager", reportsTo: "Arjun" },
+    { empId: "PLM0044", name: "Akshay Dahiya", designation: "Graphic Designer", reportsTo: "Arjun" },
+    { empId: "PLM0054", name: "Rashmi Jadli", designation: "Graphic Designer", reportsTo: "Arjun" },
+    { empId: "PLM103", name: "Avedan Sharma", designation: "Admin Assistant", reportsTo: "Arjun" },
+    { empId: "PLM0094", name: "Brajeshkumar Veeramuthu", designation: "Sales Executive", reportsTo: "Arjun", baseHQ: "Chennai" },
+    { empId: "PLM0116", name: "Ashutosh Galge", designation: "Trainee", reportsTo: "Ms. Lubdha", division: "Salon/Spa" },
   ];
   // Employee numbers for existing base-roster people, matched by exact name.
   const EMP_ID_BY_NAME = {
@@ -265,7 +274,7 @@
     "Sushma S": "PLM0105", "D. Siva": "PLM0115",
   };
   // Employee numbers to drop from any earlier seed (people the user asked to ignore).
-  const SEED_REMOVE_EMPIDS = new Set(["PLM0014"]); // M. Balasubramania Bala
+  const SEED_REMOVE_EMPIDS = new Set(["PLM0014", "LHR0011", "LHR0007"]); // Bala; Harshita; Manjot
   function seedServiceTeam() {
     if (!(roleIsAdmin() || hasAnyEditGrant())) return; // only writers seed + persist
     let changed = 0;
@@ -276,7 +285,7 @@
     const have = new Set(roster().map((p) => String(rval(p, "empId") || "").toUpperCase()).filter(Boolean));
     SEED_SERVICE_TEAM.forEach((s) => {
       if (have.has(s.empId.toUpperCase())) return;
-      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: "Derma", baseHQ: "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
+      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: s.division || "Derma", baseHQ: s.baseHQ || "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
       changed++;
     });
     // Attach employee numbers to existing people (base rows via rosterEdits).
