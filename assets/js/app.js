@@ -330,9 +330,9 @@
     if (changed) saveEdits("Applied org-chart update (" + changed + ")");
   }
 
-  // Demo-machine people fields carry messy short/misspelled names. Map each
-  // known variant (lower-cased) to the proper roster name.
-  const DEMO_NAME_FIX = {
+  // People fields (demo machines, outstanding payments) carry messy short/
+  // misspelled names. Map each known variant (lower-cased) to the proper name.
+  const PERSON_NAME_FIX = {
     "avinesh": "Avinesh Periyasamy", "avinesh periyasamy": "Avinesh Periyasamy",
     "ibrahim": "Ibrahim", "ibrahim mohamad": "Ibrahim",
     "ayush": "Ayush Sharma", "ayush sharma": "Ayush Sharma",
@@ -347,8 +347,13 @@
     "sushma": "Sushma S",
     "vamsi": "Vamshi Krishna", "vamsi arudra": "Vamshi Krishna",
     "naresh": "Naresh Chaudhary", "bimal": "Bimal Kumar",
-    // Kuldeep resigned — reassign all his demo machines to Akshay Jain.
+    // Kuldeep resigned — reassign everything from him to Akshay Jain.
     "kudeep": "Akshay Jain", "kuldeep": "Akshay Jain", "kuldeep singh": "Akshay Jain",
+  };
+  // Return the proper roster name for a person value ("PLM" and unknowns pass through).
+  const properPersonName = (n) => {
+    const key = String(n == null ? "" : n).trim().toLowerCase();
+    return PERSON_NAME_FIX[key] || (n == null ? "" : String(n).trim());
   };
   // Person-name column indices per demo view (Manager / Salesperson / Confirmed-by).
   const DEMO_NAME_COLS = { current: [5], status: [5, 6], movement: [], packing: [] };
@@ -364,7 +369,7 @@
         DEMO_NAME_COLS[view].forEach((ci) => {
           const key = r + "#" + ci;
           const cur = demoEdits[view][key] != null ? demoEdits[view][key] : row[ci];
-          const proper = DEMO_NAME_FIX[String(cur == null ? "" : cur).trim().toLowerCase()];
+          const proper = PERSON_NAME_FIX[String(cur == null ? "" : cur).trim().toLowerCase()];
           if (proper && proper !== cur) { demoEdits[view][key] = proper; changed++; }
         });
       });
@@ -2371,7 +2376,9 @@
     // Machine install status → "Installed" / "Pending" / "".
     const ms = String(r.machineStatus || "");
     const machineStatus = /install/i.test(ms) ? "Installed" : /pend/i.test(ms) ? "Pending" : "";
-    return Object.assign({}, r, { committed, received, pending, status, daysOverdue, dueDays, machineStatus });
+    // Normalize the salesperson to the proper roster name (imports + base data).
+    const salesPerson = properPersonName(r.salesPerson);
+    return Object.assign({}, r, { salesPerson, committed, received, pending, status, daysOverdue, dueDays, machineStatus });
   }
   const payAll = () => {
     if (payHideAll) return [];
