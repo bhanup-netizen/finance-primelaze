@@ -245,6 +245,31 @@
   // Uploaded KRA docs per position, keyed by card id ("aid:xx" / "num:xx").
   // Value: { name, url, path, size, at, by }. File bytes live in Firebase Storage.
   const kraFiles = {};
+  // One-time seed: Service team org (Dhinesh = Service Director under the CEO).
+  // Added to the roster on first admin load, de-duplicated by employee number.
+  const SEED_SERVICE_TEAM = [
+    { empId: "PLM001", name: "Dhinesh Ramalingam", designation: "Service Director", reportsTo: "CTO" },
+    { empId: "PLM0029", name: "Akash Anbarasan", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0013", name: "Avinesh Periyasamy", designation: "Service Manager", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0025", name: "Balaji Balu B", designation: "Service Technician", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0014", name: "M. Balasubramania Bala", designation: "Factory Manager", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0031", name: "Pankaj Verma", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0062", name: "Santhosh Kumar R", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0063", name: "Sonal Swapnil Lad", designation: "Accountant", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0104", name: "SumithraDevi", designation: "Admin Assistant", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0098", name: "Viisvesh S", designation: "Junior Accounts Executive", reportsTo: "Dhinesh Ramalingam" },
+  ];
+  function seedServiceTeam() {
+    if (!(roleIsAdmin() || hasAnyEditGrant())) return; // only writers seed + persist
+    const have = new Set(roster().map((p) => String(rval(p, "empId") || "").toUpperCase()).filter(Boolean));
+    let added = 0;
+    SEED_SERVICE_TEAM.forEach((s) => {
+      if (have.has(s.empId.toUpperCase())) return;
+      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: "Derma", baseHQ: "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
+      added++;
+    });
+    if (added) saveEdits("Seeded service team (" + added + ")");
+  }
   // Prompt + target list for the "＋ Add new…" option, keyed by roster field.
   const customListFor = (field) =>
     field === "designation"
@@ -355,6 +380,7 @@
       hq: rval(p, "baseHQ") || "",
       zone: rval(p, "zone") || "",
       div: rval(p, "division") || "Derma",
+      empId: rval(p, "empId") || "",
       st: estatus(p),
     })).filter((x) => x.name && x.st !== "vacant"); // vacant seats live on the Vacancies tab, not the chart
     const byName = {}; all.forEach((x) => { byName[x.name] = x; });
@@ -376,7 +402,8 @@
     const compact = (x, cls) => {
       const hq = x.hq && x.hq !== "—" ? `<span class="org-hq">${esc(x.hq)}</span>` : "";
       const zone = x.zone && x.zone !== "—" ? `<span class="org-zone">${esc(x.zone)}</span>` : "";
-      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span><span class="org-desig">${esc(x.desig)}</span>${hq}${zone}${kraChip(cardId(x))}</div>${ed ? icons(x) : ""}</div>`;
+      const emp = x.empId ? `<span class="org-emp">${esc(x.empId)}</span>` : "";
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(x.name)}</span>${emp}<span class="org-desig">${esc(x.desig)}</span>${hq}${zone}${kraChip(cardId(x))}</div>${ed ? icons(x) : ""}</div>`;
     };
     // KRA upload/replace/remove block inside the edit form (keyed by card id
     // for regular people, "sp:nsm" / "sp:cto" for the special top nodes).
@@ -396,6 +423,7 @@
       const divOpts = DIVISIONS.map((dv) => opt(dv, divLabel(dv), x.div)).join("");
       return `<div class="org-card org-edit ${cls}" ${oid(x)}>
         <input class="org-in org-in-name" data-field="name" value="${esc(x.name)}" placeholder="Name" title="Name">
+        <input class="org-in" data-field="empId" value="${esc(x.empId)}" placeholder="Employee no. (e.g. PLM001)" title="Employee number">
         <input class="org-in" data-field="designation" value="${esc(x.desig)}" placeholder="Designation" title="Designation">
         <div class="org-in-row"><select class="org-in org-sel" data-field="division" title="Division">${divOpts}</select><select class="org-in org-sel" data-field="status" title="Status">${statOpts}</select></div>
         <input class="org-in" data-field="baseHQ" value="${esc(x.hq)}" placeholder="Base HQ" title="Base HQ">
@@ -3796,6 +3824,7 @@
 
     D = await decryptData(key);
     await loadEdits();
+    seedServiceTeam();
   }
 
   async function loadEdits() {
