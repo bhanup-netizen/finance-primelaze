@@ -347,7 +347,8 @@
     "sushma": "Sushma S",
     "vamsi": "Vamshi Krishna", "vamsi arudra": "Vamshi Krishna",
     "naresh": "Naresh Chaudhary", "bimal": "Bimal Kumar",
-    "kudeep": "Kuldeep Singh", "kuldeep": "Kuldeep Singh", "kuldeep singh": "Kuldeep Singh",
+    // Kuldeep resigned — reassign all his demo machines to Akshay Jain.
+    "kudeep": "Akshay Jain", "kuldeep": "Akshay Jain", "kuldeep singh": "Akshay Jain",
   };
   // Person-name column indices per demo view (Manager / Salesperson / Confirmed-by).
   const DEMO_NAME_COLS = { current: [5], status: [5, 6], movement: [], packing: [] };
