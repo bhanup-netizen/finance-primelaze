@@ -271,10 +271,12 @@
   const EMP_ID_BY_NAME = {
     "Akshay Jain": "PLM0096", "Ambika Anand": "PLM0041", "Ibrahim": "PLM0006",
     "Ms. Lubdha": "PLM0112", "Vamshi Krishna": "PLM0102", "Sandeep Kukadiya": "PLM0004",
-    "Sushma S": "PLM0105", "D. Siva": "PLM0115",
+    "Sushma S": "PLM0105", "D. Siva": "PLM0115", "Bimal Kumar": "PLM0090", "Naresh Chaudhary": "PLM0101",
   };
   // Employee numbers to drop from any earlier seed (people the user asked to ignore).
   const SEED_REMOVE_EMPIDS = new Set(["PLM0014", "LHR0011", "LHR0007"]); // Bala; Harshita; Manjot
+  // People to remove by exact name (base roster rows the user asked to delete).
+  const SEED_REMOVE_NAMES = new Set(["Ranjith"]);
   // Bump whenever the seed definitions above change so the reconcile re-applies once.
   const SEED_VERSION = 2;
   let seedVersion = 0; // last applied seed version, restored from the edits doc
@@ -283,8 +285,13 @@
     let changed = 0;
     // Drop ignored people that a previous seed may have added.
     for (let i = rosterAdds.length - 1; i >= 0; i--) {
-      if (SEED_REMOVE_EMPIDS.has(String(rosterAdds[i].empId || "").toUpperCase())) { rosterAdds.splice(i, 1); changed++; }
+      if (SEED_REMOVE_EMPIDS.has(String(rosterAdds[i].empId || "").toUpperCase())
+        || SEED_REMOVE_NAMES.has(String(rosterAdds[i].name || "").trim())) { rosterAdds.splice(i, 1); changed++; }
     }
+    // Remove named base-roster people (via rosterRemovals, keyed by num).
+    (D.roster.people || []).forEach((p) => {
+      if (SEED_REMOVE_NAMES.has(String(p.name || "").trim()) && !rosterRemovals.includes(p.num)) { rosterRemovals.push(p.num); changed++; }
+    });
     const have = new Set(roster().map((p) => String(rval(p, "empId") || "").toUpperCase()).filter(Boolean));
     SEED_SERVICE_TEAM.forEach((s) => {
       if (have.has(s.empId.toUpperCase())) return;
