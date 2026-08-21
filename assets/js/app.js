@@ -1182,6 +1182,18 @@
     customPeople.forEach((n) => n && s.add(n));
     return Array.from(s).sort((a, b) => a.localeCompare(b));
   };
+  // Only active SALES-department people — used for HQ sales targets. Includes
+  // the Sales Director (Arjun) and any custom-added names.
+  const salesStaffList = () => {
+    const s = new Set();
+    roster().forEach((p) => {
+      const n = (rval(p, "name") || "").trim();
+      if (n && !/^vacant/i.test(n) && estatus(p) !== "vacant" && deptOf(p) === "Sales") s.add(n);
+    });
+    if (orgNsm && orgNsm.name) s.add(orgNsm.name.trim());
+    customPeople.forEach((n) => n && s.add(n));
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  };
   const newDevices = []; // admin-added devices for the Device (price book) tab
   const idfor = (s) => s.replace(/[^a-z0-9]/gi, "_");
 
@@ -1442,7 +1454,7 @@
   function hqDetail(h) {
     const admin = isAdmin();
     const rows = hqSpTargets[h.sheet] || (hqSpTargets[h.sheet] = []);
-    const people = salesPeopleList();
+    const people = salesStaffList();
     const products = hqAllProducts(h);
 
     const optList = (arr, cur, ph) =>
