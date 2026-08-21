@@ -1490,7 +1490,7 @@
     const addCtrl = admin ? `<div class="hq-add-row" style="margin-top:12px"><button id="hqTgtAdd" class="dl-btn" type="button">＋ Add target row</button></div>` : "";
 
     return `
-      <div class="callout">${esc(h.title)}${h.subtitle ? `<div class="muted-note" style="margin-top:6px">${esc(h.subtitle)}</div>` : ""}</div>
+      <div class="callout">${esc(h.title)}</div>
       <div class="muted-note" style="margin-bottom:8px">Set a quarterly target per <b>salesperson × product</b>. Salespeople come from the <b>Team Roster</b>. ${admin ? "Add, edit or delete rows below." : ""}</div>
       ${table(head, body + totalRow)}
       ${addCtrl}`;
