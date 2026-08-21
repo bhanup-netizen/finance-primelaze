@@ -233,8 +233,8 @@
 
   /* ================= TEAM ROSTER ================= */
   let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDiv = "Derma";
-  let orgTop = { name: "CTO", title: "Chief — position vacant" }; // editable top node
-  let orgNsm = { name: "Arjun", desig: "National Sales Manager" };  // editable NSM node
+  let orgTop = { name: "CTO", title: "Chief — position vacant", empId: "" }; // editable top node
+  let orgNsm = { name: "Arjun", desig: "National Sales Manager", empId: "" };  // editable NSM node
   let orgEditId = null; // which card is currently open for editing ("aid:x"/"num:n"/"nsm"/"cto")
   const rosterEdits = {}; // `${num}#${field}` -> value
   const rosterAdds = [];  // [{_aid, name, designation, division, baseHQ, reportsTo, zone}]
@@ -252,23 +252,50 @@
     { empId: "PLM0029", name: "Akash Anbarasan", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0013", name: "Avinesh Periyasamy", designation: "Service Manager", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0025", name: "Balaji Balu B", designation: "Service Technician", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0014", name: "M. Balasubramania Bala", designation: "Factory Manager", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0031", name: "Pankaj Verma", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0062", name: "Santhosh Kumar R", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0063", name: "Sonal Swapnil Lad", designation: "Accountant", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0104", name: "SumithraDevi", designation: "Admin Assistant", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0098", name: "Viisvesh S", designation: "Junior Accounts Executive", reportsTo: "Dhinesh Ramalingam" },
   ];
+  // Employee numbers for existing base-roster people, matched by exact name.
+  const EMP_ID_BY_NAME = {
+    "Akshay Jain": "PLM0096", "Ambika Anand": "PLM0041", "Ibrahim": "PLM0006",
+    "Ms. Lubdha": "PLM0112", "Vamshi Krishna": "PLM0102", "Sandeep Kukadiya": "PLM0004",
+    "Sushma S": "PLM0105", "D. Siva": "PLM0115",
+  };
+  // Employee numbers to drop from any earlier seed (people the user asked to ignore).
+  const SEED_REMOVE_EMPIDS = new Set(["PLM0014"]); // M. Balasubramania Bala
   function seedServiceTeam() {
     if (!(roleIsAdmin() || hasAnyEditGrant())) return; // only writers seed + persist
+    let changed = 0;
+    // Drop ignored people that a previous seed may have added.
+    for (let i = rosterAdds.length - 1; i >= 0; i--) {
+      if (SEED_REMOVE_EMPIDS.has(String(rosterAdds[i].empId || "").toUpperCase())) { rosterAdds.splice(i, 1); changed++; }
+    }
     const have = new Set(roster().map((p) => String(rval(p, "empId") || "").toUpperCase()).filter(Boolean));
-    let added = 0;
     SEED_SERVICE_TEAM.forEach((s) => {
       if (have.has(s.empId.toUpperCase())) return;
       rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: "Derma", baseHQ: "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
-      added++;
+      changed++;
     });
-    if (added) saveEdits("Seeded service team (" + added + ")");
+    // Attach employee numbers to existing people (base rows via rosterEdits).
+    roster().forEach((p) => {
+      const nm = String(rval(p, "name") || "").trim();
+      const code = EMP_ID_BY_NAME[nm];
+      if (!code || String(rval(p, "empId") || "").trim()) return;
+      if (p._aid != null) { const rp = rosterAdds.find((x) => x._aid === p._aid); if (rp) rp.empId = code; }
+      else rosterEdits[p.num + "#empId"] = code;
+      changed++;
+    });
+    // Arjun (NSM node) → Sales Director with employee number PLM007.
+    if (orgNsm.desig !== "Sales Director" || !orgNsm.empId) {
+      if (!orgNsm.name || orgNsm.name === "Arjun") orgNsm.name = "Arjun Sharma";
+      orgNsm.desig = "Sales Director";
+      if (!orgNsm.empId) orgNsm.empId = "PLM007";
+      changed++;
+    }
+    if (changed) saveEdits("Applied org-chart update (" + changed + ")");
   }
   // Prompt + target list for the "＋ Add new…" option, keyed by roster field.
   const customListFor = (field) =>
@@ -449,17 +476,19 @@
     };
 
     // Special top nodes (NSM = Arjun, CTO) — each editable via its own pencil.
-    const specialCard = (key, cls, name, sub, subField) => {
+    const specialCard = (key, cls, name, sub, subField, emp) => {
       const kkey = "sp:" + key;
       if (ed && orgEditId === key) {
         return `<div class="org-card ${cls} org-edit" data-special="${key}">
           <input class="org-in org-in-name" data-field="name" value="${esc(name)}" placeholder="Name">
+          <input class="org-in" data-field="empId" value="${esc(emp || "")}" placeholder="Employee no. (e.g. PLM007)" title="Employee number">
           <input class="org-in" data-field="${subField}" value="${esc(sub)}" placeholder="Designation / title">
           ${kraEdit(kkey)}
           <div class="org-actions"><button class="org-done" title="Done">✓ Done</button></div></div>`;
       }
+      const empChip = emp ? `<span class="org-emp">${esc(emp)}</span>` : "";
       const addBtn = key === "nsm" ? `<button class="org-add" data-name="${esc(name)}" title="Add a report under ${esc(name)}">＋</button>` : "";
-      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(name)}</span><span class="org-desig">${esc(sub)}</span>${kraChip(kkey)}</div>${ed ? `<div class="org-icons"><button class="org-editbtn" data-id="${key}" title="Edit">✎</button>${addBtn}</div>` : ""}</div>`;
+      return `<div class="org-card ${cls}"><div class="org-cardmain"><span class="org-name">${esc(name)}</span>${empChip}<span class="org-desig">${esc(sub)}</span>${kraChip(kkey)}</div>${ed ? `<div class="org-icons"><button class="org-editbtn" data-id="${key}" title="Edit">✎</button>${addBtn}</div>` : ""}</div>`;
     };
 
     // Special node names never render as ordinary cards; card-id set tracks
@@ -470,13 +499,13 @@
     const ctoPeers = all.filter((x) => x.name !== NSM && isCto(x.rep)).sort(rank);
 
     const arjunNode = `<li class="org-node">
-      ${specialCard("nsm", "org-root", NSM, orgNsm.desig || "National Sales Manager", "desig")}
+      ${specialCard("nsm", "org-root", NSM, orgNsm.desig || "National Sales Manager", "desig", orgNsm.empId)}
       <ul class="org-children">${arjunKids.map((k) => node(k, seen)).join("")}</ul>
     </li>`;
 
     return `<ul class="org-tree">
       <li class="org-node">
-        ${specialCard("cto", "org-cto", CTO, orgTop.title || "", "title")}
+        ${specialCard("cto", "org-cto", CTO, orgTop.title || "", "title", orgTop.empId)}
         <ul class="org-children">${arjunNode}${ctoPeers.map((k) => node(k, seen)).join("")}</ul>
       </li>
     </ul>`;
@@ -3891,8 +3920,8 @@
       if (e.customs != null) orderState.customs = e.customs;
       if (e.moqJar != null) orderState.moqJar = e.moqJar;
       if (e.moqRetail != null) orderState.moqRetail = e.moqRetail;
-      if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "" };
-      if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager" };
+      if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "", empId: e.orgTop.empId || "" };
+      if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager", empId: e.orgNsm.empId || "" };
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
