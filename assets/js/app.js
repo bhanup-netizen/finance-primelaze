@@ -254,16 +254,16 @@
     { empId: "PLM0025", name: "Balaji Balu B", designation: "Service Technician", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0031", name: "Pankaj Verma", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0062", name: "Santhosh Kumar R", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0063", name: "Sonal Swapnil Lad", designation: "Accountant", reportsTo: "Dhinesh Ramalingam" },
+    { empId: "PLM0063", name: "Sonal Swapnil Lad", designation: "Finance Manager", reportsTo: "Dhinesh Ramalingam" },
     { empId: "PLM0104", name: "SumithraDevi", designation: "Admin Assistant", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0098", name: "Viisvesh S", designation: "Junior Accounts Executive", reportsTo: "Dhinesh Ramalingam" },
-    // Support & sales staff reporting to Arjun (Sales Director), per the org chart.
+    { empId: "PLM0098", name: "Viisvesh S", designation: "Junior Accounts Executive", reportsTo: "Sonal Swapnil Lad" },
+    // Support & marketing staff reporting to Arjun (Sales Director), per the org chart.
     { empId: "PLM0003", name: "Ayush Sharma", designation: "Admin Manager", reportsTo: "Arjun" },
-    { empId: "PLM0113", name: "Vikas Parouha", designation: "Operations Manager", reportsTo: "Arjun" },
+    { empId: "PLM0113", name: "Vikas Parouha", designation: "Sales Project Manager", reportsTo: "Arjun" },
     { empId: "PLM0100", name: "Sandeepika Bhardwaj", designation: "Human Resource Manager", reportsTo: "Arjun" },
     { empId: "PLM0044", name: "Akshay Dahiya", designation: "Graphic Designer", reportsTo: "Arjun" },
     { empId: "PLM0054", name: "Rashmi Jadli", designation: "Graphic Designer", reportsTo: "Arjun" },
-    { empId: "PLM103", name: "Avedan Sharma", designation: "Admin Assistant", reportsTo: "Arjun" },
+    { empId: "PLM103", name: "Avedan Sharma", designation: "Program Manager", reportsTo: "Arjun" },
     { empId: "PLM0094", name: "Brajeshkumar Veeramuthu", designation: "Sales Executive", reportsTo: "Arjun", baseHQ: "Chennai" },
     { empId: "PLM0116", name: "Ashutosh Galge", designation: "Trainee", reportsTo: "Ms. Lubdha", division: "Salon/Spa" },
   ];
@@ -275,6 +275,9 @@
   };
   // Employee numbers to drop from any earlier seed (people the user asked to ignore).
   const SEED_REMOVE_EMPIDS = new Set(["PLM0014", "LHR0011", "LHR0007"]); // Bala; Harshita; Manjot
+  // Bump whenever the seed definitions above change so the reconcile re-applies once.
+  const SEED_VERSION = 2;
+  let seedVersion = 0; // last applied seed version, restored from the edits doc
   function seedServiceTeam() {
     if (!(roleIsAdmin() || hasAnyEditGrant())) return; // only writers seed + persist
     let changed = 0;
@@ -288,6 +291,19 @@
       rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: s.division || "Derma", baseHQ: s.baseHQ || "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
       changed++;
     });
+    // When the seed definitions change (SEED_VERSION bumped), reconcile already-
+    // seeded rows ONCE — updates designation/reporting/etc. without clobbering
+    // later manual edits (which happen at the same or a newer seed version).
+    if (seedVersion < SEED_VERSION) {
+      SEED_SERVICE_TEAM.forEach((s) => {
+        const rp = rosterAdds.find((x) => String(x.empId || "").toUpperCase() === s.empId.toUpperCase());
+        if (!rp) return;
+        const want = { name: s.name, designation: s.designation, reportsTo: s.reportsTo, division: s.division || "Derma", baseHQ: s.baseHQ || "" };
+        Object.keys(want).forEach((k) => { if (rp[k] !== want[k]) { rp[k] = want[k]; changed++; } });
+      });
+      seedVersion = SEED_VERSION;
+      changed++;
+    }
     // Attach employee numbers to existing people (base rows via rosterEdits).
     roster().forEach((p) => {
       const nm = String(rval(p, "name") || "").trim();
@@ -3898,6 +3914,7 @@
       }
       if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
+      if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
       if (Array.isArray(e.customDesignations)) { customDesignations.length = 0; e.customDesignations.forEach((d) => customDesignations.push(d)); }
       if (Array.isArray(e.paymentAdds)) {
@@ -3961,7 +3978,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
