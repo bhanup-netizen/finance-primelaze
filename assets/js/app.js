@@ -349,6 +349,8 @@
     "naresh": "Naresh Chaudhary", "bimal": "Bimal Kumar",
     // Kuldeep resigned — reassign everything from him to Akshay Jain.
     "kudeep": "Akshay Jain", "kuldeep": "Akshay Jain", "kuldeep singh": "Akshay Jain",
+    // Puneet's sales are credited to Primelaze direct (PLM).
+    "puneet": "PLM",
   };
   // Return the proper roster name for a person value ("PLM" and unknowns pass through).
   const properPersonName = (n) => {
@@ -2847,7 +2849,7 @@
         <input id="paySearch" class="search" type="search" placeholder="Search customer, HQ, rep, remark…" value="${esc(payFilter.q)}">
         ${sel("payCat", payFilter.cat, payUniq(rows0, "category"), "Category")}
         ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
-        ${sel("paySp", payFilter.sp, payUniq(rows0, "salesPerson"), "Sales Person")}
+        <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Due period</span><select id="payDueSel" class="select"><option value="">All</option><option value="below30"${payFilter.due === "below30" ? " selected" : ""}>Below 30 days / Pending machines</option><option value="above30"${payFilter.due === "above30" ? " selected" : ""}>Above 30 days / Installed machines</option></select></label>
         <label class="ord-field"><span>Committed from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}"></label>
