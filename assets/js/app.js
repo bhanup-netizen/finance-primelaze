@@ -329,6 +329,47 @@
     }
     if (changed) saveEdits("Applied org-chart update (" + changed + ")");
   }
+
+  // Demo-machine people fields carry messy short/misspelled names. Map each
+  // known variant (lower-cased) to the proper roster name.
+  const DEMO_NAME_FIX = {
+    "avinesh": "Avinesh Periyasamy", "avinesh periyasamy": "Avinesh Periyasamy",
+    "ibrahim": "Ibrahim", "ibrahim mohamad": "Ibrahim",
+    "ayush": "Ayush Sharma", "ayush sharma": "Ayush Sharma",
+    "sandeep": "Sandeep Kukadiya", "sandeep sir": "Sandeep Kukadiya", "sandeep kumar dhirajlal kukadiya": "Sandeep Kukadiya",
+    "ramandeep": "Ramandeep Kaur", "ramandeep kaur": "Ramandeep Kaur",
+    "brajesh": "Brajeshkumar Veeramuthu", "brajeshkumar veeramuthu": "Brajeshkumar Veeramuthu",
+    "akshay jain": "Akshay Jain",
+    "lubdha dangle": "Ms. Lubdha", "lubdha": "Ms. Lubdha",
+    "ambika": "Ambika Anand", "ambika anand": "Ambika Anand",
+    "dhinesh": "Dhinesh Ramalingam",
+    "mr. arjun": "Arjun Sharma", "arjun": "Arjun Sharma",
+    "sushma": "Sushma S",
+    "vamsi": "Vamshi Krishna", "vamsi arudra": "Vamshi Krishna",
+    "naresh": "Naresh Chaudhary", "bimal": "Bimal Kumar",
+    "kudeep": "Kuldeep Singh", "kuldeep": "Kuldeep Singh", "kuldeep singh": "Kuldeep Singh",
+  };
+  // Person-name column indices per demo view (Manager / Salesperson / Confirmed-by).
+  const DEMO_NAME_COLS = { current: [5], status: [5, 6], movement: [], packing: [] };
+  function seedDemoNames() {
+    if (!(roleIsAdmin() || hasAnyEditGrant())) return;
+    if (!D || !D.demoMachines) return;
+    let changed = 0;
+    Object.keys(DEMO_NAME_COLS).forEach((view) => {
+      const t = D.demoMachines[view];
+      if (!t || !Array.isArray(t.rows)) return;
+      demoEdits[view] = demoEdits[view] || {};
+      t.rows.forEach((row, r) => {
+        DEMO_NAME_COLS[view].forEach((ci) => {
+          const key = r + "#" + ci;
+          const cur = demoEdits[view][key] != null ? demoEdits[view][key] : row[ci];
+          const proper = DEMO_NAME_FIX[String(cur == null ? "" : cur).trim().toLowerCase()];
+          if (proper && proper !== cur) { demoEdits[view][key] = proper; changed++; }
+        });
+      });
+    });
+    if (changed) saveEdits("Demo names normalized (" + changed + ")");
+  }
   // Prompt + target list for the "＋ Add new…" option, keyed by roster field.
   const customListFor = (field) =>
     field === "designation"
@@ -3940,6 +3981,7 @@
     D = await decryptData(key);
     await loadEdits();
     seedServiceTeam();
+    seedDemoNames();
   }
 
   async function loadEdits() {
