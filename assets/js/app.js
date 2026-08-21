@@ -232,7 +232,7 @@
   }
 
   /* ================= TEAM ROSTER ================= */
-  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDiv = "Derma";
+  let teamFilter = "all", teamSearch = "", teamDivision = "all", teamTab = "roster", orgDept = "Sales";
   let orgTop = { name: "CTO", title: "Chief — position vacant", empId: "" }; // editable top node
   let orgNsm = { name: "Arjun", desig: "National Sales Manager", empId: "" };  // editable NSM node
   let orgEditId = null; // which card is currently open for editing ("aid:x"/"num:n"/"nsm"/"cto")
@@ -248,24 +248,24 @@
   // One-time seed: Service team org (Dhinesh = Service Director under the CEO).
   // Added to the roster on first admin load, de-duplicated by employee number.
   const SEED_SERVICE_TEAM = [
-    { empId: "PLM001", name: "Dhinesh Ramalingam", designation: "Service Director", reportsTo: "CTO" },
-    { empId: "PLM0029", name: "Akash Anbarasan", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0013", name: "Avinesh Periyasamy", designation: "Service Manager", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0025", name: "Balaji Balu B", designation: "Service Technician", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0031", name: "Pankaj Verma", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0062", name: "Santhosh Kumar R", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0063", name: "Sonal Swapnil Lad", designation: "Finance Manager", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0104", name: "SumithraDevi", designation: "Admin Assistant", reportsTo: "Dhinesh Ramalingam" },
-    { empId: "PLM0098", name: "Viisvesh S", designation: "Junior Accounts Executive", reportsTo: "Sonal Swapnil Lad" },
+    { empId: "PLM001", name: "Dhinesh Ramalingam", designation: "Service Director", reportsTo: "CTO", dept: "Service" },
+    { empId: "PLM0029", name: "Akash Anbarasan", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam", dept: "Service" },
+    { empId: "PLM0013", name: "Avinesh Periyasamy", designation: "Service Manager", reportsTo: "Dhinesh Ramalingam", dept: "Service" },
+    { empId: "PLM0025", name: "Balaji Balu B", designation: "Service Technician", reportsTo: "Dhinesh Ramalingam", dept: "Service" },
+    { empId: "PLM0031", name: "Pankaj Verma", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam", dept: "Service" },
+    { empId: "PLM0062", name: "Santhosh Kumar R", designation: "Service Engineer", reportsTo: "Dhinesh Ramalingam", dept: "Service" },
+    { empId: "PLM0063", name: "Sonal Swapnil Lad", designation: "Finance Manager", reportsTo: "Dhinesh Ramalingam", dept: "Finance" },
+    { empId: "PLM0104", name: "SumithraDevi", designation: "Admin Assistant", reportsTo: "Dhinesh Ramalingam", dept: "Service" },
+    { empId: "PLM0098", name: "Viisvesh S", designation: "Junior Accounts Executive", reportsTo: "Sonal Swapnil Lad", dept: "Finance" },
     // Support & marketing staff reporting to Arjun (Sales Director), per the org chart.
-    { empId: "PLM0003", name: "Ayush Sharma", designation: "Admin Manager", reportsTo: "Arjun" },
-    { empId: "PLM0113", name: "Vikas Parouha", designation: "Sales Project Manager", reportsTo: "Arjun" },
-    { empId: "PLM0100", name: "Sandeepika Bhardwaj", designation: "Human Resource Manager", reportsTo: "Arjun" },
-    { empId: "PLM0044", name: "Akshay Dahiya", designation: "Graphic Designer", reportsTo: "Arjun" },
-    { empId: "PLM0054", name: "Rashmi Jadli", designation: "Graphic Designer", reportsTo: "Arjun" },
-    { empId: "PLM103", name: "Avedan Sharma", designation: "Program Manager", reportsTo: "Arjun" },
-    { empId: "PLM0094", name: "Brajeshkumar Veeramuthu", designation: "Sales Executive", reportsTo: "Arjun", baseHQ: "Chennai" },
-    { empId: "PLM0116", name: "Ashutosh Galge", designation: "Trainee", reportsTo: "Ms. Lubdha", division: "Salon/Spa" },
+    { empId: "PLM0003", name: "Ayush Sharma", designation: "Admin Manager", reportsTo: "Arjun", dept: "Admin" },
+    { empId: "PLM0113", name: "Vikas Parouha", designation: "Sales Project Manager", reportsTo: "Arjun", dept: "Sales" },
+    { empId: "PLM0100", name: "Sandeepika Bhardwaj", designation: "Human Resource Manager", reportsTo: "Arjun", dept: "HR" },
+    { empId: "PLM0044", name: "Akshay Dahiya", designation: "Graphic Designer", reportsTo: "Arjun", dept: "Marketing" },
+    { empId: "PLM0054", name: "Rashmi Jadli", designation: "Graphic Designer", reportsTo: "Arjun", dept: "Marketing" },
+    { empId: "PLM103", name: "Avedan Sharma", designation: "Program Manager", reportsTo: "Arjun", dept: "Marketing" },
+    { empId: "PLM0094", name: "Brajeshkumar Veeramuthu", designation: "Sales Executive", reportsTo: "Arjun", baseHQ: "Chennai", dept: "Sales" },
+    { empId: "PLM0116", name: "Ashutosh Galge", designation: "Trainee", reportsTo: "Ms. Lubdha", division: "Salon/Spa", dept: "Sales" },
   ];
   // Employee numbers for existing base-roster people, matched by exact name.
   const EMP_ID_BY_NAME = {
@@ -278,7 +278,7 @@
   // People to remove by exact name (base roster rows the user asked to delete).
   const SEED_REMOVE_NAMES = new Set(["Ranjith"]);
   // Bump whenever the seed definitions above change so the reconcile re-applies once.
-  const SEED_VERSION = 2;
+  const SEED_VERSION = 3;
   let seedVersion = 0; // last applied seed version, restored from the edits doc
   function seedServiceTeam() {
     if (!(roleIsAdmin() || hasAnyEditGrant())) return; // only writers seed + persist
@@ -295,7 +295,7 @@
     const have = new Set(roster().map((p) => String(rval(p, "empId") || "").toUpperCase()).filter(Boolean));
     SEED_SERVICE_TEAM.forEach((s) => {
       if (have.has(s.empId.toUpperCase())) return;
-      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: s.division || "Derma", baseHQ: s.baseHQ || "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
+      rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: s.division || "Derma", dept: s.dept || "Sales", baseHQ: s.baseHQ || "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
       changed++;
     });
     // When the seed definitions change (SEED_VERSION bumped), reconcile already-
@@ -305,7 +305,7 @@
       SEED_SERVICE_TEAM.forEach((s) => {
         const rp = rosterAdds.find((x) => String(x.empId || "").toUpperCase() === s.empId.toUpperCase());
         if (!rp) return;
-        const want = { name: s.name, designation: s.designation, reportsTo: s.reportsTo, division: s.division || "Derma", baseHQ: s.baseHQ || "" };
+        const want = { name: s.name, designation: s.designation, reportsTo: s.reportsTo, division: s.division || "Derma", dept: s.dept || "Sales", baseHQ: s.baseHQ || "" };
         Object.keys(want).forEach((k) => { if (rp[k] !== want[k]) { rp[k] = want[k]; changed++; } });
       });
       seedVersion = SEED_VERSION;
@@ -338,6 +338,9 @@
   // Display names (internal values kept for stored data compatibility).
   const DIV_LABELS = { "Derma": "Primelaze", "Salon/Spa": "Casovil" };
   const divLabel = (v) => DIV_LABELS[v] || v || "";
+  // Org-chart departments (tabs). People with no explicit dept default to Sales.
+  const ORG_DEPTS = ["Sales", "Marketing", "Admin", "HR", "Service", "Finance"];
+  const deptOf = (p) => (rval(p, "dept") || "").trim() || "Sales";
   const isRemoved = (p) => p._aid == null && rosterRemovals.includes(p.num);
   function removePerson(p) {
     let nm = "";
@@ -421,16 +424,16 @@
     return 3;
   }
 
-  // Build the reporting-hierarchy tree from Reports-To + designation data.
-  // divFilter: "all" | "Derma" | "Salon/Spa" (Arjun is NSM of every division).
-  function renderOrgChart(divFilter) {
-    divFilter = divFilter || "all";
+  // Build the reporting-hierarchy tree from Reports-To + designation data,
+  // filtered to one department tab (Sales / Marketing / Admin / HR / Service / Finance).
+  function renderOrgChart(deptFilter) {
+    deptFilter = deptFilter || "Sales";
     const ed = isAdmin();
     const CTO = (orgTop.name || "CTO").trim() || "CTO";
     const NSM = (orgNsm.name || "Arjun").trim() || "Arjun";
     const isCto = (r) => /^cto$/i.test(r) || r === CTO;
     const all = roster()
-      .filter((p) => divFilter === "all" || (rval(p, "division") || "Derma") === divFilter)
+      .filter((p) => deptOf(p) === deptFilter)
       .map((p) => ({
       _aid: p._aid, num: p.num,
       name: (rval(p, "name") || "").trim(),
@@ -439,6 +442,7 @@
       hq: rval(p, "baseHQ") || "",
       zone: rval(p, "zone") || "",
       div: rval(p, "division") || "Derma",
+      dept: deptOf(p),
       empId: rval(p, "empId") || "",
       st: estatus(p),
     })).filter((x) => x.name && x.st !== "vacant"); // vacant seats live on the Vacancies tab, not the chart
@@ -480,11 +484,13 @@
       const repOpts = [CTO, NSM].concat(names.filter((n) => n !== x.name)).map((n) => opt(n, n, x.rep)).join("");
       const statOpts = STATUS_OPTIONS.map((o) => opt(o.id, o.label, x.st)).join("");
       const divOpts = DIVISIONS.map((dv) => opt(dv, divLabel(dv), x.div)).join("");
+      const deptOpts = ORG_DEPTS.map((d) => opt(d, d, x.dept)).join("");
       return `<div class="org-card org-edit ${cls}" ${oid(x)}>
         <input class="org-in org-in-name" data-field="name" value="${esc(x.name)}" placeholder="Name" title="Name">
         <input class="org-in" data-field="empId" value="${esc(x.empId)}" placeholder="Employee no. (e.g. PLM001)" title="Employee number">
         <input class="org-in" data-field="designation" value="${esc(x.desig)}" placeholder="Designation" title="Designation">
-        <div class="org-in-row"><select class="org-in org-sel" data-field="division" title="Division">${divOpts}</select><select class="org-in org-sel" data-field="status" title="Status">${statOpts}</select></div>
+        <div class="org-in-row"><select class="org-in org-sel" data-field="dept" title="Department">${deptOpts}</select><select class="org-in org-sel" data-field="division" title="Division">${divOpts}</select></div>
+        <div class="org-in-row"><select class="org-in org-sel" data-field="status" title="Status">${statOpts}</select></div>
         <input class="org-in" data-field="baseHQ" value="${esc(x.hq)}" placeholder="Base HQ" title="Base HQ">
         <input class="org-in" data-field="zone" value="${esc(x.zone)}" placeholder="Zone" title="Zone">
         <label class="org-rep">Reports to <select class="org-in org-sel" data-field="reportsTo">${repOpts}</select></label>
@@ -527,18 +533,31 @@
     // what's already been drawn so same-named people don't collapse into one.
     const skipNames = new Set([NSM, CTO, "Arjun", "CTO"]);
     const seen = new Set();
-    const arjunKids = all.filter((x) => x.name !== NSM && !isCto(x.rep) && (x.rep === NSM || x.rep === "Arjun" || !byName[x.rep])).sort(rank);
-    const ctoPeers = all.filter((x) => x.name !== NSM && isCto(x.rep)).sort(rank);
 
-    const arjunNode = `<li class="org-node">
-      ${specialCard("nsm", "org-root", NSM, orgNsm.desig || "National Sales Manager", "desig", orgNsm.empId)}
-      <ul class="org-children">${arjunKids.map((k) => node(k, seen)).join("")}</ul>
-    </li>`;
+    let inner;
+    if (deptFilter === "Sales") {
+      // Sales keeps the CEO → Sales Director (Arjun/NSM) → sales-team structure.
+      const arjunKids = all.filter((x) => x.name !== NSM && !isCto(x.rep) && (x.rep === NSM || x.rep === "Arjun" || !byName[x.rep])).sort(rank);
+      const ctoPeers = all.filter((x) => x.name !== NSM && isCto(x.rep)).sort(rank);
+      const arjunNode = `<li class="org-node">
+        ${specialCard("nsm", "org-root", NSM, orgNsm.desig || "National Sales Manager", "desig", orgNsm.empId)}
+        <ul class="org-children">${arjunKids.map((k) => node(k, seen)).join("")}</ul>
+      </li>`;
+      inner = `${arjunNode}${ctoPeers.map((k) => node(k, seen)).join("")}`;
+    } else {
+      // Other departments: everyone whose manager is outside this department
+      // becomes a top-level card under the CEO; in-department reports nest.
+      const roots = all.filter((x) => !byName[x.rep] || x.rep === x.name).sort(rank);
+      let html = roots.map((k) => node(k, seen)).join("");
+      // Safety net: render anyone not reached from a root (orphaned manager).
+      all.filter((x) => !seen.has(cardId(x))).sort(rank).forEach((x) => { html += node(x, seen); });
+      inner = html;
+    }
 
     return `<ul class="org-tree">
       <li class="org-node">
         ${specialCard("cto", "org-cto", CTO, orgTop.title || "", "title", orgTop.empId)}
-        <ul class="org-children">${arjunNode}${ctoPeers.map((k) => node(k, seen)).join("")}</ul>
+        <ul class="org-children">${inner || `<li class="org-node"><div class="org-empty-dept">No one in this department yet.</div></li>`}</ul>
       </li>
     </ul>`;
   }
@@ -552,7 +571,7 @@
   }
   function mountOrgChart() {
     const box = document.getElementById("orgScroll");
-    if (box) box.innerHTML = renderOrgChart(orgDiv);
+    if (box) box.innerHTML = renderOrgChart(orgDept);
     wireOrgChart();
   }
   function wireOrgChart() {
@@ -585,10 +604,9 @@
       b.onclick = () => {
         const parent = b.dataset.name || "Arjun";
         const aid = "r" + (rosterAddSeq++);
-        // Inherit the division currently on screen so the new card stays visible
-        // under the active tab (Primelaze/Casovil) instead of vanishing.
-        const div = (orgDiv === "Derma" || orgDiv === "Salon/Spa") ? orgDiv : "Derma";
-        rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: div, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
+        // Inherit the department currently on screen so the new card stays
+        // visible under the active department tab instead of vanishing.
+        rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
         saveEdits("Added a report under " + parent);
         orgEditId = "aid:" + aid; // open the new card so it's ready to fill in
         mountOrgChart();
@@ -766,10 +784,10 @@
       wireRosterEdit();
       wireTeamSubnav();
       wireOrgChart();
-      document.querySelectorAll("[data-orgdiv]").forEach((b) => {
+      document.querySelectorAll("[data-orgdept]").forEach((b) => {
         b.onclick = () => {
-          orgDiv = b.dataset.orgdiv;
-          document.querySelectorAll("[data-orgdiv]").forEach((x) => x.classList.toggle("active", x === b));
+          orgDept = b.dataset.orgdept;
+          document.querySelectorAll("[data-orgdept]").forEach((x) => x.classList.toggle("active", x === b));
           mountOrgChart();
         };
       });
@@ -783,14 +801,13 @@
       <div class="card" style="margin-bottom:20px"><div class="stat-row">${summaryCards}</div></div>
       <div class="card">
         <div class="controls" style="margin:0 0 12px">
-          <div class="seg">
-            <button data-orgdiv="Derma" class="${orgDiv === "Derma" ? "active" : ""}">${esc(divLabel("Derma"))}</button>
-            <button data-orgdiv="Salon/Spa" class="${orgDiv === "Salon/Spa" ? "active" : ""}">${esc(divLabel("Salon/Spa"))}</button>
+          <div class="seg org-dept-seg">
+            ${ORG_DEPTS.map((d) => `<button data-orgdept="${esc(d)}" class="${orgDept === d ? "active" : ""}">${esc(d)}</button>`).join("")}
           </div>
-          ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a person reporting to the NSM">＋ Add person</button></div>` : ""}
+          ${isAdmin() ? `<div class="hq-actions"><button id="rosterAddBtn" class="dl-btn" type="button" title="Add a person to this department">＋ Add person</button></div>` : ""}
         </div>
-        <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDiv)}</div>
-        ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">On each card: <b>✎</b> edit that person (incl. the top CTO &amp; NSM), <b>＋</b> add a report under them, <b>✕</b> delete. <b>＋ Add person</b> (top) adds under the NSM. This chart shows filled &amp; incoming people only — <b>Vacant</b> seats live on the <b>Vacancies</b> tab (set a card's Status to Vacant to move it there; Hire it and it comes back to the chart).</div>` : ""}
+        <div class="org-scroll" id="orgScroll">${renderOrgChart(orgDept)}</div>
+        ${isAdmin() ? `<div class="muted-note" style="margin-top:10px">Tabs above filter the chart by <b>department</b>. On each card: <b>✎</b> edit (incl. department &amp; the top CEO/Sales Director), <b>＋</b> add a report under them, <b>✕</b> delete. <b>＋ Add person</b> (top) adds into the current department under the Sales Director. Vacant seats live on the <b>Vacancies</b> tab.</div>` : ""}
       </div>`;
   }
 
@@ -863,8 +880,10 @@
     const add = document.getElementById("rosterAddBtn");
     if (add) add.onclick = () => {
       const aid = "r" + (rosterAddSeq++);
-      const div = (orgDiv === "Derma" || orgDiv === "Salon/Spa") ? orgDiv : "Derma";
-      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: div, baseHQ: "", reportsTo: "Arjun", zone: "", status: "active" });
+      // New person joins the current department; under the Sales Director for
+      // Sales, otherwise as a top-level card in that department.
+      const parent = orgDept === "Sales" ? "Arjun" : (orgNsm.name || "Arjun");
+      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: "Derma", dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
       saveEdits("Added a person");
       orgEditId = "aid:" + aid;
       mountOrgChart();
