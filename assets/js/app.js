@@ -3603,6 +3603,58 @@
     return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg>`;
   }
 
+  // Build the printable PDF purchase order (items that need reordering).
+  function buildPurchaseReport(rows) {
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+    let totUnits = 0, totMoney = 0;
+    const body = rows.map((r) => {
+      totUnits += r.toBuy; totMoney += (r.money || 0);
+      return `<tr>
+        <td>${esc(r.it.name)}</td>
+        <td>${esc(r.it.category)}</td>
+        <td class="num">${inr(r.it.requiredStock)}</td>
+        <td class="num">${inr(r.current)}</td>
+        <td class="num">${inr(Math.round(r.need))}</td>
+        <td class="num"><b>${inr(Math.round(r.toBuy))}</b></td>
+      </tr>`;
+    }).join("");
+    const foot = `<tr><td colspan="5"><b>TOTAL</b></td><td class="num"><b>${inr(Math.round(totUnits))} units</b></td></tr>`;
+    return `
+      <div class="p-section">
+        <h1>${esc(D.meta.company)} — Esthemax Purchase Order</h1>
+        <div class="p-sub">Items below required stock — reorder list</div>
+        <p class="p-meta">Generated ${esc(stamp)} · ${rows.length} items · ${inr(Math.round(totUnits))} units to buy${totMoney ? ` · est. landed ${rupeeShort(totMoney)}` : ""}</p>
+        ${pTable([{ label: "Item" }, { label: "Category" }, { label: "Required", num: 1 }, { label: "Current", num: 1 }, { label: "Shortfall", num: 1 }, { label: "To Buy", num: 1 }], body + foot)}
+        <p class="p-meta" style="margin-top:14px">Buy quantities are rounded to the minimum order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}).</p>
+      </div>`;
+  }
+  // Super-admin: generate a PDF purchase order and open a pre-filled email.
+  function emailPurchaseList() {
+    const rows = orderCompute().filter((r) => r.toBuy > 0).sort((a, b) => b.toBuy - a.toBuy);
+    if (!rows.length) { window.alert("Nothing to reorder — every item is at or above required stock."); return; }
+    let to = window.prompt("Email the purchase order to (recipient email):", orderState.buyEmail || "");
+    if (to == null) return;
+    to = to.trim();
+    if (to && to !== orderState.buyEmail) { orderState.buyEmail = to; saveEdits("Set purchase-order email"); }
+    // 1) Build the PDF report and open the print/save dialog.
+    let area = document.getElementById("printArea");
+    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
+    area.innerHTML = buildPurchaseReport(rows);
+    document.body.classList.add("printing");
+    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 40);
+    // 2) Open a pre-filled email with the list in the body (attach the PDF).
+    if (to) {
+      const lines = rows.map((r) => `• ${r.it.name} (${r.it.category}) — buy ${Math.round(r.toBuy)}  [have ${r.current}, required ${r.it.requiredStock}]`).join("\n");
+      const totUnits = Math.round(rows.reduce((s, r) => s + r.toBuy, 0));
+      const subject = `Purchase order — Esthemax reorder (${rows.length} items, ${totUnits} units)`;
+      const bodyText = `Hi,\n\nPlease arrange purchase of the following Esthemax items. Full details are in the attached PDF (please attach the PDF that just opened for saving):\n\n${lines}\n\nTotal: ${totUnits} units across ${rows.length} items.\n\nThanks,\nPrimelaze`;
+      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+      setTimeout(() => { window.open(mailto, "_blank"); }, 700);
+    }
+  }
+
   function renderOrder() {
     orderInit();
     const lineOpts = INVENTORY_LINES.map((l) =>
@@ -3644,6 +3696,8 @@
       };
       const addBtn = document.getElementById("ordAddBtn");
       if (addBtn) addBtn.onclick = () => esthAddItem();
+      const buyBtn = document.getElementById("ordBuyEmail");
+      if (buyBtn) buyBtn.onclick = () => emailPurchaseList();
       orderPaint();
     }, 0);
 
@@ -3696,6 +3750,7 @@
         <input id="ordSearch" class="search" type="search" placeholder="Search item…" value="${esc(orderState.q)}" />
         <div class="seg">${catSeg}</div>
         ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
+        ${isSuperAdmin() ? `<button id="ordBuyEmail" class="dl-btn" type="button" title="Generate a PDF purchase order of everything that needs buying and email it">📧 Email purchase order</button>` : ""}
       </div>
 
       <div class="table-wrap">
@@ -3703,14 +3758,13 @@
           <thead><tr>
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
-                 <th class="num">Required</th><th class="num">Current</th>${isSuperAdmin() ? `<th class="num">To Buy</th>
-                 <th>ETA (arrival)</th>` : ""}<th></th>`
-              : `<th>Product</th><th class="num">Current stock</th><th>Status</th>${isSuperAdmin() ? `<th>Estimated arrival</th>` : ""}`}
+                 <th class="num">Required</th><th class="num">Current</th>${isSuperAdmin() ? `<th class="num">To Buy</th>` : ""}<th></th>`
+              : `<th>Product</th><th class="num">Current stock</th><th>Status</th>`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan.${isSuperAdmin() ? ` To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Order quantity &amp; arrival are visible to super admins only.` : ""}</div>` : ""}`;
+      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan.${isSuperAdmin() ? ` To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Use <b>📧 Email purchase order</b> to generate a PDF of everything that needs buying and email it. Order quantities are visible to super admins only.` : ""}</div>` : ""}`;
   }
 
   function orderPaint() {
@@ -3745,7 +3799,6 @@
           <td class="t-name">${esc(r.it.name)}</td>
           <td class="num">${inr(r.current)}</td>
           <td>${status}</td>
-          ${isSuperAdmin() ? `<td>${orderState.eta[r.i] ? esc(orderState.eta[r.i]) : "—"}</td>` : ""}
         </tr>`;
       }
       const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
@@ -3757,11 +3810,10 @@
         <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
-        ${isSuperAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
-        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}" title="Expected arrival at Primelaze" /></td>` : ""}
+        ${isSuperAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>` : ""}
         <td style="white-space:nowrap"><button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? (isSuperAdmin() ? 10 : 8) : 3}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? (isSuperAdmin() ? 9 : 8) : 3}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) {
       bEl.innerHTML = body; orderBindStockInputs();
@@ -4157,6 +4209,7 @@
       if (e.customs != null) orderState.customs = e.customs;
       if (e.moqJar != null) orderState.moqJar = e.moqJar;
       if (e.moqRetail != null) orderState.moqRetail = e.moqRetail;
+      if (e.buyEmail) orderState.buyEmail = e.buyEmail;
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "", empId: e.orgTop.empId || "" };
       if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager", empId: e.orgNsm.empId || "" };
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
@@ -4189,7 +4242,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
