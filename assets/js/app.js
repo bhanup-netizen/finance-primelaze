@@ -3621,22 +3621,17 @@
     const foot = `<tr><td colspan="5"><b>TOTAL</b></td><td class="num"><b>${inr(Math.round(totUnits))} units</b></td></tr>`;
     return `
       <div class="p-section">
-        <h1>${esc(D.meta.company)} — Esthemax Purchase Order</h1>
+        <h1>${esc(D.meta.company)} — Esthemax Low-Stock Report</h1>
         <div class="p-sub">Items below required stock — reorder list</div>
         <p class="p-meta">Generated ${esc(stamp)} · ${rows.length} items · ${inr(Math.round(totUnits))} units to buy${totMoney ? ` · est. landed ${rupeeShort(totMoney)}` : ""}</p>
         ${pTable([{ label: "Item" }, { label: "Category" }, { label: "Required", num: 1 }, { label: "Current", num: 1 }, { label: "Shortfall", num: 1 }, { label: "To Buy", num: 1 }], body + foot)}
         <p class="p-meta" style="margin-top:14px">Buy quantities are rounded to the minimum order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}).</p>
       </div>`;
   }
-  // Super-admin: generate a PDF purchase order and open a pre-filled email.
-  function emailPurchaseList() {
+  // Super-admin: build & download a PDF low-stock (reorder) report.
+  function downloadLowStockReport() {
     const rows = orderCompute().filter((r) => r.toBuy > 0).sort((a, b) => b.toBuy - a.toBuy);
     if (!rows.length) { window.alert("Nothing to reorder — every item is at or above required stock."); return; }
-    let to = window.prompt("Email the purchase order to (recipient email):", orderState.buyEmail || "");
-    if (to == null) return;
-    to = to.trim();
-    if (to && to !== orderState.buyEmail) { orderState.buyEmail = to; saveEdits("Set purchase-order email"); }
-    // 1) Build the PDF report and open the print/save dialog.
     let area = document.getElementById("printArea");
     if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
     area.innerHTML = buildPurchaseReport(rows);
@@ -3644,15 +3639,6 @@
     const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
     setTimeout(() => window.print(), 40);
-    // 2) Open a pre-filled email with the list in the body (attach the PDF).
-    if (to) {
-      const lines = rows.map((r) => `• ${r.it.name} (${r.it.category}) — buy ${Math.round(r.toBuy)}  [have ${r.current}, required ${r.it.requiredStock}]`).join("\n");
-      const totUnits = Math.round(rows.reduce((s, r) => s + r.toBuy, 0));
-      const subject = `Purchase order — Esthemax reorder (${rows.length} items, ${totUnits} units)`;
-      const bodyText = `Hi,\n\nPlease arrange purchase of the following Esthemax items. Full details are in the attached PDF (please attach the PDF that just opened for saving):\n\n${lines}\n\nTotal: ${totUnits} units across ${rows.length} items.\n\nThanks,\nPrimelaze`;
-      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
-      setTimeout(() => { window.open(mailto, "_blank"); }, 700);
-    }
   }
 
   function renderOrder() {
@@ -3696,8 +3682,8 @@
       };
       const addBtn = document.getElementById("ordAddBtn");
       if (addBtn) addBtn.onclick = () => esthAddItem();
-      const buyBtn = document.getElementById("ordBuyEmail");
-      if (buyBtn) buyBtn.onclick = () => emailPurchaseList();
+      const lowBtn = document.getElementById("ordLowStock");
+      if (lowBtn) lowBtn.onclick = () => downloadLowStockReport();
       orderPaint();
     }, 0);
 
@@ -3750,7 +3736,7 @@
         <input id="ordSearch" class="search" type="search" placeholder="Search item…" value="${esc(orderState.q)}" />
         <div class="seg">${catSeg}</div>
         ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
-        ${isSuperAdmin() ? `<button id="ordBuyEmail" class="dl-btn" type="button" title="Generate a PDF purchase order of everything that needs buying and email it">📧 Email purchase order</button>` : ""}
+        ${isSuperAdmin() ? `<button id="ordLowStock" class="dl-btn" type="button" title="Download a PDF report of everything below required stock">⬇ Low-stock report (PDF)</button>` : ""}
       </div>
 
       <div class="table-wrap">
@@ -3764,7 +3750,7 @@
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan.${isSuperAdmin() ? ` To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Use <b>📧 Email purchase order</b> to generate a PDF of everything that needs buying and email it. Order quantities are visible to super admins only.` : ""}</div>` : ""}`;
+      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan.${isSuperAdmin() ? ` To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Use <b>⬇ Low-stock report (PDF)</b> to download a report of everything that needs buying. Order quantities are visible to super admins only.` : ""}</div>` : ""}`;
   }
 
   function orderPaint() {
