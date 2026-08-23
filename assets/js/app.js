@@ -3416,7 +3416,7 @@
   //   money   = toBuy × landing
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
-  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, eta: {}, cat: "All", q: "", lineData: {} };
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, eta: {}, cat: "All", status: "all", q: "", lineData: {} };
   // Esthemax has the full reorder plan; Devices & Celluma are simple stock logs.
   const INVENTORY_LINES = [
     { id: "esthemax", label: "Esthemax", ready: true },
@@ -3673,6 +3673,13 @@
           orderPaint();
         };
       });
+      document.querySelectorAll("[data-ostatus]").forEach((b) => {
+        b.onclick = () => {
+          orderState.status = b.dataset.ostatus;
+          document.querySelectorAll("[data-ostatus]").forEach((x) => x.classList.toggle("active", x === b));
+          orderPaint();
+        };
+      });
       const reset = document.getElementById("ordReset");
       if (reset) reset.onclick = () => {
         const p = D.esthemaxOrder.params;
@@ -3735,6 +3742,11 @@
       <div class="controls">
         <input id="ordSearch" class="search" type="search" placeholder="Search item…" value="${esc(orderState.q)}" />
         <div class="seg">${catSeg}</div>
+        <div class="seg">
+          <button data-ostatus="all" class="${orderState.status === "all" ? "active" : ""}">All status</button>
+          <button data-ostatus="canSell" class="${orderState.status === "canSell" ? "active" : ""}">Can sell</button>
+          <button data-ostatus="reorder" class="${orderState.status === "reorder" ? "active" : ""}">Reorder</button>
+        </div>
         ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
         ${isSuperAdmin() ? `<button id="ordLowStock" class="dl-btn" type="button" title="Download a PDF report of everything below required stock">⬇ Low-stock report (PDF)</button>` : ""}
       </div>
@@ -3755,9 +3767,10 @@
 
   function orderPaint() {
     const rows = orderCompute();
-    const q = orderState.q, cat = orderState.cat;
+    const q = orderState.q, cat = orderState.cat, statusF = orderState.status;
     const filtered = rows.filter((r) =>
       (cat === "All" || r.it.category === cat) &&
+      (statusF === "all" || (statusF === "canSell" ? r.canSell : !r.canSell)) &&
       (!q || r.it.name.toLowerCase().includes(q)));
 
     // KPIs from the *filtered* set so category views make sense
