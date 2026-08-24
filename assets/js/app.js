@@ -3882,7 +3882,7 @@
     return `
       <div class="section-head">
         <h1>Inventory — Esthemax</h1>
-        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} Primelaze + ${esc(p.salonMonths)} Casovil months. Items with stock ≥ required are marked <b>On hold</b>; others <b>Reorder</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
+        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} Primelaze + ${esc(p.salonMonths)} Casovil months. Items with stock ≥ required are marked <b>Saleable</b>; others <b>On hold</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
       </div>
       ${lineSelector}
 
@@ -3904,8 +3904,8 @@
         <div class="seg">${catSeg}</div>
         <div class="seg">
           <button data-ostatus="all" class="${orderState.status === "all" ? "active" : ""}">All status</button>
-          <button data-ostatus="canSell" class="${orderState.status === "canSell" ? "active" : ""}">On hold</button>
-          <button data-ostatus="reorder" class="${orderState.status === "reorder" ? "active" : ""}">Reorder</button>
+          <button data-ostatus="canSell" class="${orderState.status === "canSell" ? "active" : ""}">Saleable</button>
+          <button data-ostatus="reorder" class="${orderState.status === "reorder" ? "active" : ""}">On hold</button>
         </div>
         ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
         ${isSuperAdmin() ? `<button id="ordLowStock" class="dl-btn" type="button" title="Download a PDF report of everything below required stock">⬇ Low-stock report (PDF)</button>` : ""}
@@ -3940,8 +3940,8 @@
     const canSell = filtered.filter((r) => r.canSell).length;
     const admin = isAdmin();
     const kpis = [
-      { cls: "k-good", label: "On hold", value: inr(canSell), note: `of ${filtered.length} shown` },
-      { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
+      { cls: "k-good", label: "Saleable", value: inr(canSell), note: `of ${filtered.length} shown` },
+      { cls: "", label: "On hold", value: inr(toOrder), note: "stock below required" },
     ].concat(isSuperAdmin() ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
@@ -3950,8 +3950,8 @@
     const sorted = filtered.slice().sort((a, b) => b.money - a.money || b.toBuy - a.toBuy);
     const body = sorted.map((r) => {
       const status = r.canSell
-        ? `<span class="badge b-good">On hold</span>`
-        : `<span class="badge b-warn">Reorder</span>`;
+        ? `<span class="badge b-good">Saleable</span>`
+        : `<span class="badge b-warn">On hold</span>`;
       if (!admin) {
         // View: Product · Current stock · Status (arrival is super-admin only).
         return `<tr>
