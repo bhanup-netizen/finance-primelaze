@@ -1647,28 +1647,42 @@
     return `<table><thead><tr>${h}</tr></thead><tbody>${bodyRows}</tbody></table>`;
   }
 
+  // True if any salesperson tied to this HQ has a direct report in the roster
+  // (i.e. is a manager) — used to decide whether to print Sales-Manager tables.
+  function hqHasManager(h) {
+    const people = new Set();
+    (hqSpTargets[h.sheet] || []).forEach((r) => { if (r.person) people.add(String(r.person).trim()); });
+    (h.plans || []).forEach((pl) => { const m = /—\s*([^(]+?)\s*(?:\(|$)/.exec(pl.label || ""); if (m) people.add(m[1].trim()); });
+    if (!people.size) return false;
+    const managers = new Set(roster().map((p) => String(rval(p, "reportsTo") || "").trim()).filter(Boolean));
+    for (const nm of people) { if (managers.has(nm)) return true; }
+    return false;
+  }
   function buildHqPrint(h) {
     const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
 
-    const summary = (h.summary || []).map((s) =>
-      `<tr><td>${esc(s.label)}</td><td class="num">${isNum(s.value) ? inr(s.value) : esc(s.value)}</td><td>${esc(s.note || "")}</td></tr>`).join("");
+    // Current-FY target only — drop last-year actuals, Std Value and YoY Stretch.
+    const summary = (h.summary || [])
+      .filter((s) => !/25-26|actual|std\s*value|value\s*\(l\)|yoy|stretch/i.test(s.label))
+      .map((s) => `<tr><td>${esc(s.label)}</td><td class="num">${isNum(s.value) ? inr(s.value) : esc(s.value)}</td><td>${esc(s.note || "")}</td></tr>`).join("");
 
     const plansHtml = (h.plans || []).map((pl, pi) => {
       const pk = h.sheet + "#" + pi;
-      let tu = 0, tv = 0;
+      let tu = 0;
       const body = pl.rows.filter((r) => !r.isTotal).map((r, ri) => {
         const v = hqEdits[pk + "#" + ri] != null ? hqEdits[pk + "#" + ri] : r.fy2627;
-        const rowTv = (isNum(v) && isNum(r.deviceValue)) ? v * r.deviceValue : (isNum(r.totalValue) ? r.totalValue : null);
-        if (isNum(v) && isNum(r.deviceValue)) { tu += v; tv += v * r.deviceValue; }
-        return `<tr><td>${esc(r.product)}</td><td class="num">${r.fy2526 ?? "—"}</td><td class="num">${isNum(v) ? inr(v) : esc(v ?? "—")}</td><td class="num">${isNum(r.deviceValue) ? inr(r.deviceValue) : "—"}</td><td class="num">${isNum(rowTv) ? inr(rowTv) : "—"}</td></tr>`;
+        if (isNum(v)) tu += v;
+        return `<tr><td>${esc(r.product)}</td><td class="num">${isNum(v) ? inr(v) : esc(v ?? "—")}</td></tr>`;
       }).join("");
-      const headers = [{ label: "Product" }, { label: "FY25-26", num: 1 }, { label: "FY26-27", num: 1 }, { label: "Device Value (L)", num: 1 }, { label: "Total Value (L)", num: 1 }];
-      return `<h3>${esc(pl.label || "Product plan")}</h3>${pTable(headers, body + `<tr><td><b>TOTAL</b></td><td></td><td class="num"><b>${inr(tu)}</b></td><td></td><td class="num"><b>${inr(tv)}</b></td></tr>`)}`;
+      const headers = [{ label: "Product" }, { label: "FY26-27 Target", num: 1 }];
+      return `<h3>${esc(pl.label || "Product plan")}</h3>${pTable(headers, body + `<tr><td><b>TOTAL</b></td><td class="num"><b>${inr(tu)}</b></td></tr>`)}`;
     }).join("");
 
-    const qHtml = (h.quarterly || []).length
+    // Quarterly split — units only (drop the Value-in-Lakhs row).
+    const qRows = (h.quarterly || []).filter((q) => !isMoney(q.basis));
+    const qHtml = qRows.length
       ? `<h3>Quarterly split</h3>${pTable([{ label: "Basis" }, { label: "Annual", num: 1 }, { label: "Q1", num: 1 }, { label: "Q2", num: 1 }, { label: "Q3", num: 1 }, { label: "Q4", num: 1 }],
-          h.quarterly.map((q) => `<tr><td>${esc(q.basis)}</td><td class="num">${isNum(q.annual) ? inr(q.annual) : esc(q.annual)}</td>${["q1", "q2", "q3", "q4"].map((k) => `<td class="num">${isNum(q[k]) ? inr(q[k]) : esc(q[k] ?? "—")}</td>`).join("")}</tr>`).join(""))}`
+          qRows.map((q) => `<tr><td>${esc(q.basis)}</td><td class="num">${isNum(q.annual) ? inr(q.annual) : esc(q.annual)}</td>${["q1", "q2", "q3", "q4"].map((k) => `<td class="num">${isNum(q[k]) ? inr(q[k]) : esc(q[k] ?? "—")}</td>`).join("")}</tr>`).join(""))}`
       : "";
 
     // ---- Incentives ----
@@ -1677,6 +1691,9 @@
       [{ label: "Device" }, { label: "Std Sell (L)", num: 1 }, { label: "Min (L)", num: 1 }, { label: "Std Incentive", num: 1 }, { label: "Min Incentive", num: 1 }, { label: "Above-Std" }],
       rows.map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td><td class="num">${rupee(r.stdIncentive)}</td><td class="num">${rupee(r.minIncentive)}</td><td>${esc(r.aboveStd || "—")}</td></tr>`).join(""));
     const mgr = canSeeManagerInc();
+    // Sales-Manager incentive tables print only when this HQ is led by a manager
+    // (someone with a direct report) and the viewer may see manager incentives.
+    const showMgr = mgr && hqHasManager(h);
     const cel = pTable(
       [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: "SP Incentive", num: 1 }].concat(mgr ? [{ label: "Mgr Incentive", num: 1 }] : []),
       D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.sellingPrice)}</td><td class="num">${rupee(r.salespersonIncentive)}</td>${mgr ? `<td class="num">${rupee(r.managerIncentive)}</td>` : ""}</tr>`).join(""));
@@ -1698,10 +1715,10 @@
       </div>
       <div class="p-section p-break">
         <h2>Incentive reference — Devices (Sales Person)</h2>${devTbl(dev.salesperson)}
-        ${mgr ? `<h2>Incentive reference — Devices (Sales Manager · flat 50% of Std)</h2>${devTbl(dev.manager)}` : ""}
+        ${showMgr ? `<h2>Incentive reference — Devices (Sales Manager · flat 50% of Std)</h2>${devTbl(dev.manager)}` : ""}
         <h2>Incentive reference — Celluma</h2>${cel}
         <h2>Incentive reference — Esthemax (Sales Person slab)</h2>${esthTiers(D.incentives.esthemax.salesperson)}
-        ${mgr ? `<h2>Incentive reference — Esthemax (Sales Manager slab)</h2>${esthTiers(D.incentives.esthemax.manager)}` : ""}
+        ${showMgr ? `<h2>Incentive reference — Esthemax (Sales Manager slab)</h2>${esthTiers(D.incentives.esthemax.manager)}` : ""}
       </div>
       <div class="p-section p-break">
         <h2>Incentive terms &amp; conditions</h2>
