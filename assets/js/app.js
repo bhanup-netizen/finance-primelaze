@@ -1742,6 +1742,9 @@
       "Disbursement: released only after the customer's full payment is received; a payment-timing modifier applies based on the number of days from invoice to full payment.",
     ] },
   ];
+  // Admin-editable override for the T&C (null = use the default INCENTIVE_TERMS).
+  let termsOverride = null;
+  const getTerms = () => (Array.isArray(termsOverride) ? termsOverride : INCENTIVE_TERMS);
   // Build a downloadable incentive PDF for one audience ("salesperson" | "manager").
   function buildIncentivePdf(who) {
     const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
@@ -1756,7 +1759,7 @@
     const esthTbl = pTable(
       [{ label: "Tier" }, { label: "Boxes min", num: 1 }, { label: "Boxes max", num: 1 }, { label: "₹/Box", num: 1 }, { label: "Label" }],
       (D.incentives.esthemax[who] || []).map((x) => `<tr><td>${esc(x.tier)}</td><td class="num">${x.min}</td><td class="num">${esc(x.max)}</td><td class="num">${rupee(x.incentive)}</td><td>${esc(x.label)}</td></tr>`).join(""));
-    const terms = INCENTIVE_TERMS.map((sec) => `<h3>${esc(sec.title)}</h3><ul>${sec.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>`).join("");
+    const terms = getTerms().map((sec) => `<h3>${esc(sec.title)}</h3><ul>${sec.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>`).join("");
     return `
       <div class="p-section">
         <h1>${esc(D.meta.company)} — ${label} Incentives</h1>
@@ -1784,7 +1787,7 @@
   const incMgr = () => incWho === "manager" && canSeeManagerInc();
   function renderIncentives() {
     if (incWho === "manager" && !canSeeManagerInc()) incWho = "sales";
-    const refresh = () => { $("#incBody").innerHTML = incBody(); wireAccordion(); };
+    const refresh = () => { $("#incBody").innerHTML = incBody(); wireAccordion(); wireTermsEditor(); };
     setTimeout(() => {
       document.querySelectorAll("[data-inc]").forEach((b) => {
         b.onclick = () => {
@@ -1806,6 +1809,7 @@
       const dlMgr = document.getElementById("incDlMgr");
       if (dlMgr) dlMgr.onclick = () => downloadIncentivePdf("manager");
       wireAccordion();
+      wireTermsEditor();
     }, 0);
 
     return `
@@ -1894,14 +1898,60 @@
   }
 
   function termsView() {
-    const items = INCENTIVE_TERMS.map((sec, i) => `
+    const terms = getTerms();
+    if (isAdmin()) {
+      const sec = terms.map((s, si) => `
+        <div class="card tc-card">
+          <div class="tc-secrow">
+            <input class="tc-title" data-si="${si}" value="${esc(s.title)}" placeholder="Section title">
+            <button class="ghost-btn danger tc-sec-del" data-si="${si}" title="Remove section">✕ Section</button>
+          </div>
+          <ul class="tc-list">
+            ${s.items.map((it, ii) => `<li class="tc-itemrow">
+              <textarea class="tc-item" data-si="${si}" data-ii="${ii}" rows="2" placeholder="Term / condition…">${esc(it)}</textarea>
+              <button class="ghost-btn danger tc-item-del" data-si="${si}" data-ii="${ii}" title="Remove point">✕</button>
+            </li>`).join("")}
+          </ul>
+          <button class="ghost-btn tc-item-add" data-si="${si}" type="button">＋ Add point</button>
+        </div>`).join("");
+      return `<div class="muted-note" style="margin-bottom:10px">Editing incentive Terms &amp; Conditions — changes save for everyone and appear in the incentive PDFs.${termsOverride ? "" : " (Showing the built-in defaults; your first edit starts an editable copy.)"}</div>
+        ${sec}
+        <button id="tcAddSec" class="dl-btn" type="button">＋ Add section</button>`;
+    }
+    const items = terms.map((s, i) => `
       <div class="acc-item ${i === 0 ? "open" : ""}">
-        <button class="acc-head">${esc(sec.title)}<span class="chev">›</span></button>
+        <button class="acc-head">${esc(s.title)}<span class="chev">›</span></button>
         <div class="acc-body">
-          <ul>${sec.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>
+          <ul>${s.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>
         </div>
       </div>`).join("");
     return `<div class="accordion">${items}</div>`;
+  }
+
+  function refreshIncBody() {
+    const b = document.getElementById("incBody");
+    if (b) { b.innerHTML = incBody(); wireAccordion(); wireTermsEditor(); }
+  }
+  function wireTermsEditor() {
+    if (incView !== "terms" || !isAdmin()) return;
+    const ensure = () => { if (!Array.isArray(termsOverride)) termsOverride = JSON.parse(JSON.stringify(INCENTIVE_TERMS)); return termsOverride; };
+    document.querySelectorAll(".tc-title").forEach((el) => {
+      el.onchange = () => { const t = ensure(); t[+el.dataset.si].title = el.value; saveEdits("Terms · section title"); };
+    });
+    document.querySelectorAll(".tc-item").forEach((el) => {
+      el.onchange = () => { const t = ensure(); t[+el.dataset.si].items[+el.dataset.ii] = el.value; saveEdits("Terms · point"); };
+    });
+    document.querySelectorAll(".tc-item-add").forEach((b) => {
+      b.onclick = () => { const t = ensure(); t[+b.dataset.si].items.push("New point"); saveEdits("Terms · added point"); refreshIncBody(); };
+    });
+    document.querySelectorAll(".tc-item-del").forEach((b) => {
+      b.onclick = () => { const t = ensure(); t[+b.dataset.si].items.splice(+b.dataset.ii, 1); saveEdits("Terms · removed point"); refreshIncBody(); };
+    });
+    document.querySelectorAll(".tc-sec-del").forEach((b) => {
+      b.onclick = () => { if (!window.confirm("Remove this whole section?")) return; const t = ensure(); t.splice(+b.dataset.si, 1); saveEdits("Terms · removed section"); refreshIncBody(); };
+    });
+    const addSec = document.getElementById("tcAddSec");
+    if (addSec) addSec.onclick = () => { const t = ensure(); t.push({ title: "New section", items: ["New point"] }); saveEdits("Terms · added section"); refreshIncBody(); };
   }
 
   function wireAccordion() {
@@ -4278,6 +4328,7 @@
       if (e.buyEmail) orderState.buyEmail = e.buyEmail;
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "", empId: e.orgTop.empId || "" };
       if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager", empId: e.orgNsm.empId || "" };
+      if (Array.isArray(e.termsOverride)) termsOverride = e.termsOverride;
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -4308,7 +4359,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
