@@ -1343,7 +1343,13 @@
   const idfor = (s) => s.replace(/[^a-z0-9]/gi, "_");
 
   // All devices available for pricing & target selection = price book + added.
-  const deviceList = () => (D && D.costs ? D.costs.device : []).concat(newDevices);
+  // Admin price edits (ovEdits "pdev:<device>:<field>") are merged in.
+  const DEVICE_PRICE_FIELDS = ["landingCost", "quotation", "standard", "minimum"];
+  const deviceList = () => (D && D.costs ? D.costs.device : []).concat(newDevices).map((r) => {
+    let o = null;
+    DEVICE_PRICE_FIELDS.forEach((f) => { const v = ovEdits["pdev:" + r.device + ":" + f]; if (v != null) { o = o || Object.assign({}, r); o[f] = v; } });
+    return o || r;
+  });
   const deviceNames = () => deviceList().map((d) => d.device).filter(Boolean);
   const deviceByName = (n) => deviceList().find((d) => d.device === n);
 
@@ -1745,20 +1751,54 @@
   // Admin-editable override for the T&C (null = use the default INCENTIVE_TERMS).
   let termsOverride = null;
   const getTerms = () => (Array.isArray(termsOverride) ? termsOverride : INCENTIVE_TERMS);
+
+  // ---- Admin overrides for incentive amounts & device prices ----
+  // Keyed by "group:rowName:field" (e.g. "dsp:Bi-Axis Q Switch:stdIncentive",
+  // "pdev:Inno Plus:standard"). Applied at render time and persisted.
+  const ovEdits = {};
+  const ovGet = (key, orig) => (ovEdits[key] != null ? ovEdits[key] : orig);
+  const ovNumCell = (key, orig, useRupee) => {
+    const eff = ovGet(key, orig);
+    return isAdmin()
+      ? `<td class="num"><input class="ov-in" data-key="${esc(key)}" data-t="num" type="number" step="any" value="${eff == null || eff === "" ? "" : esc(eff)}" style="max-width:108px"></td>`
+      : `<td class="num">${eff == null || eff === "" ? "—" : (useRupee ? rupee(eff) : esc(eff))}</td>`;
+  };
+  const ovTxtCell = (key, orig) => {
+    const eff = ovGet(key, orig);
+    return isAdmin()
+      ? `<td><input class="ov-in" data-key="${esc(key)}" data-t="txt" value="${esc(eff == null ? "" : eff)}" style="min-width:130px"></td>`
+      : `<td class="cell-note">${esc(eff || "—")}</td>`;
+  };
+  function wireOverrides() {
+    document.querySelectorAll(".ov-in").forEach((el) => {
+      el.onchange = () => {
+        const key = el.dataset.key;
+        if (el.dataset.t === "num") {
+          if (el.value === "") delete ovEdits[key];
+          else { const v = parseFloat(el.value); if (!isNaN(v)) ovEdits[key] = v; }
+        } else {
+          if (el.value === "") delete ovEdits[key]; else ovEdits[key] = el.value;
+        }
+        saveEdits("Edited " + key.split(":")[0]);
+      };
+    });
+  }
   // Build a downloadable incentive PDF for one audience ("salesperson" | "manager").
   function buildIncentivePdf(who) {
     const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
     const label = who === "manager" ? "Sales Manager" : "Sales Person";
+    const dg = who === "manager" ? "dmgr" : "dsp";
     const devTbl = pTable(
       [{ label: "Device" }, { label: "Standard (L)", num: 1 }, { label: "Minimum (L)", num: 1 }, { label: "Std Incentive", num: 1 }, { label: "Min Incentive", num: 1 }, { label: "Above Standard" }],
-      (D.incentives.device[who] || []).map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td><td class="num">${rupee(r.stdIncentive)}</td><td class="num">${rupee(r.minIncentive)}</td><td>${esc(r.aboveStd || "—")}</td></tr>`).join(""));
+      (D.incentives.device[who] || []).map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${ovGet(`${dg}:${r.device}:standard`, r.standard) ?? "—"}</td><td class="num">${ovGet(`${dg}:${r.device}:minimum`, r.minimum) ?? "—"}</td><td class="num">${rupee(ovGet(`${dg}:${r.device}:stdIncentive`, r.stdIncentive))}</td><td class="num">${rupee(ovGet(`${dg}:${r.device}:minIncentive`, r.minIncentive))}</td><td>${esc(ovGet(`${dg}:${r.device}:aboveStd`, r.aboveStd) || "—")}</td></tr>`).join(""));
     const celKey = who === "manager" ? "managerIncentive" : "salespersonIncentive";
     const celTbl = pTable(
       [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: label + " incentive", num: 1 }],
-      D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.sellingPrice)}</td><td class="num">${rupee(r[celKey])}</td></tr>`).join(""));
+      D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(ovGet(`cel:${r.model}:sellingPrice`, r.sellingPrice))}</td><td class="num">${rupee(ovGet(`cel:${r.model}:${celKey}`, r[celKey]))}</td></tr>`).join(""));
+    const eg = who === "manager" ? "emgr" : "esp";
     const esthTbl = pTable(
       [{ label: "Tier" }, { label: "Boxes min", num: 1 }, { label: "Boxes max", num: 1 }, { label: "₹/Box", num: 1 }, { label: "Label" }],
-      (D.incentives.esthemax[who] || []).map((x) => `<tr><td>${esc(x.tier)}</td><td class="num">${x.min}</td><td class="num">${esc(x.max)}</td><td class="num">${rupee(x.incentive)}</td><td>${esc(x.label)}</td></tr>`).join(""));
+      (D.incentives.esthemax[who] || []).map((x) => `<tr><td>${esc(x.tier)}</td><td class="num">${ovGet(`${eg}:${x.tier}:min`, x.min)}</td><td class="num">${esc(ovGet(`${eg}:${x.tier}:max`, x.max))}</td><td class="num">${rupee(ovGet(`${eg}:${x.tier}:incentive`, x.incentive))}</td><td>${esc(ovGet(`${eg}:${x.tier}:label`, x.label))}</td></tr>`).join(""));
     const terms = getTerms().map((sec) => `<h3>${esc(sec.title)}</h3><ul>${sec.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>`).join("");
     return `
       <div class="p-section">
@@ -1787,7 +1827,7 @@
   const incMgr = () => incWho === "manager" && canSeeManagerInc();
   function renderIncentives() {
     if (incWho === "manager" && !canSeeManagerInc()) incWho = "sales";
-    const refresh = () => { $("#incBody").innerHTML = incBody(); wireAccordion(); wireTermsEditor(); };
+    const refresh = () => { $("#incBody").innerHTML = incBody(); wireAccordion(); wireTermsEditor(); wireOverrides(); };
     setTimeout(() => {
       document.querySelectorAll("[data-inc]").forEach((b) => {
         b.onclick = () => {
@@ -1810,6 +1850,7 @@
       if (dlMgr) dlMgr.onclick = () => downloadIncentivePdf("manager");
       wireAccordion();
       wireTermsEditor();
+      wireOverrides();
     }, 0);
 
     return `
@@ -1844,57 +1885,59 @@
   }
 
   function deviceIncentive() {
-    const mk = (rows, isMgr) => {
+    const mk = (rows, g) => {
       const head = ["Device", "Quotation (L)", "Standard (L)", "Minimum (L)", "Std Incentive", "Min Incentive", "Above-Std"]
         .map((x, i) => `<th class="${i >= 1 && i <= 5 ? "num" : ""}">${x}</th>`).join("");
       const body = rows.map((r) => `<tr>
         <td class="t-name">${esc(r.device)}</td>
         <td class="num">${r.quotation ?? "—"}</td>
-        <td class="num">${r.standard ?? "—"}</td>
-        <td class="num">${r.minimum ?? "—"}</td>
-        <td class="num">${rupee(r.stdIncentive)}</td>
-        <td class="num">${rupee(r.minIncentive)}</td>
-        <td class="cell-note">${esc(r.aboveStd || "—")}</td></tr>`).join("");
+        ${ovNumCell(`${g}:${r.device}:standard`, r.standard)}
+        ${ovNumCell(`${g}:${r.device}:minimum`, r.minimum)}
+        ${ovNumCell(`${g}:${r.device}:stdIncentive`, r.stdIncentive, true)}
+        ${ovNumCell(`${g}:${r.device}:minIncentive`, r.minIncentive, true)}
+        ${ovTxtCell(`${g}:${r.device}:aboveStd`, r.aboveStd)}</tr>`).join("");
       return table(head, body);
     };
     const mgr = incMgr();
     return `
+      ${isAdmin() ? `<div class="muted-note" style="margin-bottom:8px">Admin: incentive amounts below are editable — changes save for everyone and appear in the incentive PDFs.</div>` : ""}
       ${mgr
-        ? `<div class="block"><h2>Sales Manager plan</h2>${mk(D.incentives.device.manager, true)}</div>`
-        : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson, false)}</div>`}`;
+        ? `<div class="block"><h2>Sales Manager plan</h2>${mk(D.incentives.device.manager, "dmgr")}</div>`
+        : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson, "dsp")}</div>`}`;
   }
 
   function cellumaIncentive() {
     const mgr = incMgr();
+    const fld = mgr ? "managerIncentive" : "salespersonIncentive";
     const cols = ["Model", "Selling Price (excl. GST)", mgr ? "Sales Manager Incentive" : "Salesperson Incentive"];
     const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
     const body = D.incentives.celluma.map((r) => `<tr>
       <td class="t-name">${esc(r.model)}</td>
-      <td class="num">${rupee(r.sellingPrice)}</td>
-      <td class="num">${rupee(mgr ? r.managerIncentive : r.salespersonIncentive)}</td></tr>`).join("");
+      ${ovNumCell(`cel:${r.model}:sellingPrice`, r.sellingPrice, true)}
+      ${ovNumCell(`cel:${r.model}:${fld}`, r[fld], true)}</tr>`).join("");
     return `
-      <div class="callout teal">Single Standard (selling) price per model; no minimum. Manager incentive is a flat 50% of the salesperson standard. Target rule: 1 Celluma / IC / month (12/yr), 10 units per HQ per year at HQ level.</div>
+      <div class="callout teal">Single Standard (selling) price per model; no minimum. Manager incentive is a flat 50% of the salesperson standard.</div>
       ${table(head, body)}`;
   }
 
   function esthemaxIncentive() {
-    const mk = (tiers) => {
+    const mk = (tiers, g) => {
       const head = ["Tier", "Boxes/Month (Min)", "Boxes/Month (Max)", "Incentive ₹/Box", "Tier Label"]
         .map((x, i) => `<th class="${i >= 1 && i <= 3 ? "num" : ""}">${x}</th>`).join("");
       const body = tiers.map((t) => `<tr>
         <td class="t-name">${esc(t.tier)}</td>
-        <td class="num">${t.min}</td>
-        <td class="num">${esc(t.max)}</td>
-        <td class="num">${rupee(t.incentive)}</td>
-        <td>${esc(t.label)}</td></tr>`).join("");
+        ${ovNumCell(`${g}:${t.tier}:min`, t.min)}
+        ${ovNumCell(`${g}:${t.tier}:max`, t.max)}
+        ${ovNumCell(`${g}:${t.tier}:incentive`, t.incentive, true)}
+        ${ovTxtCell(`${g}:${t.tier}:label`, t.label)}</tr>`).join("");
       return table(head, body);
     };
     const mgr = incMgr();
     return `
-      <div class="callout">Hydrojelly 6-tier per-box slab. Threshold = monthly box achievement; incentive applied per box, retrospective to box 1. Payment terms: full incentive if paid within 45 days, 50% within 60 days, none after 60 days.</div>
+      <div class="callout">Hydrojelly 6-tier per-box slab. Threshold = monthly box achievement; incentive applied per box, retrospective to box 1.</div>
       ${mgr
-        ? `<div class="block"><h2>Sales Manager slab</h2>${mk(D.incentives.esthemax.manager)}</div>`
-        : `<div class="block"><h2>Sales Person slab</h2>${mk(D.incentives.esthemax.salesperson)}</div>`}`;
+        ? `<div class="block"><h2>Sales Manager slab</h2>${mk(D.incentives.esthemax.manager, "emgr")}</div>`
+        : `<div class="block"><h2>Sales Person slab</h2>${mk(D.incentives.esthemax.salesperson, "esp")}</div>`}`;
   }
 
   function termsView() {
@@ -1990,7 +2033,7 @@
       ${canSeeLanding() ? `<button data-pmode="admin" class="${priceAdmin() ? "active" : ""}">Admin Price</button>` : ""}
     </div>`;
   function renderPrices() {
-    const refresh = () => { $("#priceBody").innerHTML = priceBody(); wirePriceAdd(); wireProfitCalc(); };
+    const refresh = () => { $("#priceBody").innerHTML = priceBody(); wirePriceAdd(); wireProfitCalc(); wireOverrides(); };
     setTimeout(() => {
       document.querySelectorAll("[data-price]").forEach((b) => {
         b.onclick = () => {
@@ -2006,7 +2049,7 @@
           refresh();
         };
       });
-      wirePriceAdd(); wireProfitCalc();
+      wirePriceAdd(); wireProfitCalc(); wireOverrides();
     }, 0);
     return `
       <div class="section-head">
@@ -2040,10 +2083,10 @@
     const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
     const body = deviceList().map((r) => `<tr>
       <td class="t-name">${esc(r.device)}</td>
-      ${adm ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}
-      <td class="num">${r.quotation ?? "—"}</td>
-      <td class="num">${r.standard ?? "—"}</td>
-      <td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
+      ${adm ? ovNumCell(`pdev:${r.device}:landingCost`, r.landingCost) : ""}
+      ${ovNumCell(`pdev:${r.device}:quotation`, r.quotation)}
+      ${ovNumCell(`pdev:${r.device}:standard`, r.standard)}
+      ${ovNumCell(`pdev:${r.device}:minimum`, r.minimum)}</tr>`).join("");
     const addForm = (adm && isAdmin()) ? `
       <div class="card" style="margin-top:16px">
         <h2 style="margin-top:0">Add device</h2>
@@ -3839,7 +3882,7 @@
     return `
       <div class="section-head">
         <h1>Inventory — Esthemax</h1>
-        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} Primelaze + ${esc(p.salonMonths)} Casovil months. Items with stock ≥ required are marked <b>Can sell</b>; others <b>Reorder</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
+        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} Primelaze + ${esc(p.salonMonths)} Casovil months. Items with stock ≥ required are marked <b>On hold</b>; others <b>Reorder</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
       </div>
       ${lineSelector}
 
@@ -3861,7 +3904,7 @@
         <div class="seg">${catSeg}</div>
         <div class="seg">
           <button data-ostatus="all" class="${orderState.status === "all" ? "active" : ""}">All status</button>
-          <button data-ostatus="canSell" class="${orderState.status === "canSell" ? "active" : ""}">Can sell</button>
+          <button data-ostatus="canSell" class="${orderState.status === "canSell" ? "active" : ""}">On hold</button>
           <button data-ostatus="reorder" class="${orderState.status === "reorder" ? "active" : ""}">Reorder</button>
         </div>
         ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
@@ -3897,7 +3940,7 @@
     const canSell = filtered.filter((r) => r.canSell).length;
     const admin = isAdmin();
     const kpis = [
-      { cls: "k-good", label: "Can sell now", value: inr(canSell), note: `of ${filtered.length} shown` },
+      { cls: "k-good", label: "On hold", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "SKUs to reorder", value: inr(toOrder), note: "stock below required" },
     ].concat(isSuperAdmin() ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
@@ -3907,7 +3950,7 @@
     const sorted = filtered.slice().sort((a, b) => b.money - a.money || b.toBuy - a.toBuy);
     const body = sorted.map((r) => {
       const status = r.canSell
-        ? `<span class="badge b-good">Can sell</span>`
+        ? `<span class="badge b-good">On hold</span>`
         : `<span class="badge b-warn">Reorder</span>`;
       if (!admin) {
         // View: Product · Current stock · Status (arrival is super-admin only).
@@ -4329,6 +4372,7 @@
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "", empId: e.orgTop.empId || "" };
       if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager", empId: e.orgNsm.empId || "" };
       if (Array.isArray(e.termsOverride)) termsOverride = e.termsOverride;
+      if (e.ovEdits && typeof e.ovEdits === "object") { Object.keys(ovEdits).forEach((k) => delete ovEdits[k]); Object.assign(ovEdits, e.ovEdits); }
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -4359,7 +4403,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
