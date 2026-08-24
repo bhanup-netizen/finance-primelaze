@@ -1685,25 +1685,6 @@
           qRows.map((q) => `<tr><td>${esc(q.basis)}</td><td class="num">${isNum(q.annual) ? inr(q.annual) : esc(q.annual)}</td>${["q1", "q2", "q3", "q4"].map((k) => `<td class="num">${isNum(q[k]) ? inr(q[k]) : esc(q[k] ?? "—")}</td>`).join("")}</tr>`).join(""))}`
       : "";
 
-    // ---- Incentives ----
-    const dev = D.incentives.device;
-    const devTbl = (rows) => pTable(
-      [{ label: "Device" }, { label: "Std Sell (L)", num: 1 }, { label: "Min (L)", num: 1 }, { label: "Std Incentive", num: 1 }, { label: "Min Incentive", num: 1 }, { label: "Above-Std" }],
-      rows.map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td><td class="num">${rupee(r.stdIncentive)}</td><td class="num">${rupee(r.minIncentive)}</td><td>${esc(r.aboveStd || "—")}</td></tr>`).join(""));
-    const mgr = canSeeManagerInc();
-    // Sales-Manager incentive tables print only when this HQ is led by a manager
-    // (someone with a direct report) and the viewer may see manager incentives.
-    const showMgr = mgr && hqHasManager(h);
-    const cel = pTable(
-      [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: "SP Incentive", num: 1 }].concat(mgr ? [{ label: "Mgr Incentive", num: 1 }] : []),
-      D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.sellingPrice)}</td><td class="num">${rupee(r.salespersonIncentive)}</td>${mgr ? `<td class="num">${rupee(r.managerIncentive)}</td>` : ""}</tr>`).join(""));
-    const esthTiers = (t) => pTable(
-      [{ label: "Tier" }, { label: "Boxes min", num: 1 }, { label: "Boxes max", num: 1 }, { label: "₹/Box", num: 1 }, { label: "Label" }],
-      t.map((x) => `<tr><td>${esc(x.tier)}</td><td class="num">${x.min}</td><td class="num">${esc(x.max)}</td><td class="num">${rupee(x.incentive)}</td><td>${esc(x.label)}</td></tr>`).join(""));
-
-    const terms = (D.incentives.terms || []).map((sec) =>
-      `<h3>${esc(sec.title)}</h3><dl>${sec.items.map((it) => `<dt>${esc(it.term)}</dt><dd>${esc(it.detail)}</dd>`).join("")}</dl>`).join("");
-
     return `
       <div class="p-section">
         <h1>${esc(D.meta.company)} — ${esc(h.title.split("—")[0].trim())} — FY 2026-27 Targets</h1>
@@ -1712,17 +1693,6 @@
         ${summary ? `<h2>Summary</h2>${pTable([{ label: "Metric" }, { label: "Value", num: 1 }, { label: "Note" }], summary)}` : ""}
         ${plansHtml}
         ${qHtml}
-      </div>
-      <div class="p-section p-break">
-        <h2>Incentive reference — Devices (Sales Person)</h2>${devTbl(dev.salesperson)}
-        ${showMgr ? `<h2>Incentive reference — Devices (Sales Manager · flat 50% of Std)</h2>${devTbl(dev.manager)}` : ""}
-        <h2>Incentive reference — Celluma</h2>${cel}
-        <h2>Incentive reference — Esthemax (Sales Person slab)</h2>${esthTiers(D.incentives.esthemax.salesperson)}
-        ${showMgr ? `<h2>Incentive reference — Esthemax (Sales Manager slab)</h2>${esthTiers(D.incentives.esthemax.manager)}` : ""}
-      </div>
-      <div class="p-section p-break">
-        <h2>Incentive terms &amp; conditions</h2>
-        ${terms}
       </div>`;
   }
 
@@ -1737,6 +1707,79 @@
   }
 
   /* ================= INCENTIVES ================= */
+  // Incentive terms & conditions (from the Sales-Person / Manager incentive sheets).
+  const INCENTIVE_TERMS = [
+    { title: "General criteria", items: [
+      "Employee must be on Primelaze Meditech payroll at the time of disbursement.",
+      "Employee must adhere to company policies and protocols.",
+      "Employee must complete 2 months to be eligible for incentives; new joiners are eligible from the calendar month following joining.",
+      "Incentive eligibility is at management's discretion, explained monthly, and announced at the monthly review meeting after the review.",
+    ] },
+    { title: "Product incentives", items: [
+      "Disbursed in two parts — 50% after receipt of a minimum 10% advance, and the remaining 50% after 100% receipt of payment.",
+      "Machines sold below the minimum eligible product cost are not eligible for incentives.",
+      "Standard payment terms are up to 6 months; incentives for machines sold on terms beyond 6 months are at management's discretion.",
+      "A maximum of 1 month delay over and above the MOU terms is allowed; no product incentive is payable if payment is delayed by more than 1 month.",
+      "For every additional sales amount above the Standard Product Cost, 10% over and above the standard incentive is payable.",
+      "For every HO (direct) sale by Arjun & Dhinesh, the employee is eligible for the product incentive shown in the table.",
+    ] },
+    { title: "Monthly spot incentives", items: [
+      "Awarded on the basis of monthly performance, BIGIN updates, and improvement in product / market knowledge.",
+    ] },
+    { title: "Quarterly incentives", items: [
+      "Employee must complete a minimum of 80 days in the quarter to be eligible (applicable to new employees).",
+      "No incentive is payable for less than 75% achievement of both unit and value.",
+      "Additional incentive is payable for above 105% quarterly achievement (per the table).",
+      "Disbursed as 70% confirmed and paid after 100% payment receipt, and the remaining 30% confirmed and paid only if the employee achieves a minimum of 50% of the next quarter's target.",
+    ] },
+    { title: "Annual bonus", items: [
+      "A fully-paid foreign trip with spouse (3 nights / 4 days) for an employee performing at 100% or above in all 4 quarters — over and above the incentive amount.",
+      "A fully-paid domestic trip with spouse (3 nights / 4 days) for an employee performing at a minimum of 90% in all 4 quarters — over and above the incentive amount.",
+    ] },
+    { title: "Esthemax — terms & conditions", items: [
+      "Eligibility: must be on Primelaze Meditech payroll on the disbursement date; must adhere to company policies and protocols; new joiners are eligible from the calendar month following joining; incentive is forfeited if the employee resigns or is terminated before disbursement, with final-month pro-rata at management's discretion.",
+      "What counts as a sale: only invoiced and dispatched units count — FOC, demo, sample, replacement and warranty units are excluded; corporate sales are excluded from the slab (a ₹50K onboarding bonus applies instead); the sales month is defined by the invoice date; incentive on reversed sales (returns within 60 days) is clawed back from the next month.",
+      "Disbursement: released only after the customer's full payment is received; a payment-timing modifier applies based on the number of days from invoice to full payment.",
+    ] },
+  ];
+  // Build a downloadable incentive PDF for one audience ("salesperson" | "manager").
+  function buildIncentivePdf(who) {
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+    const label = who === "manager" ? "Sales Manager" : "Sales Person";
+    const devTbl = pTable(
+      [{ label: "Device" }, { label: "Standard (L)", num: 1 }, { label: "Minimum (L)", num: 1 }, { label: "Std Incentive", num: 1 }, { label: "Min Incentive", num: 1 }, { label: "Above Standard" }],
+      (D.incentives.device[who] || []).map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td><td class="num">${rupee(r.stdIncentive)}</td><td class="num">${rupee(r.minIncentive)}</td><td>${esc(r.aboveStd || "—")}</td></tr>`).join(""));
+    const celKey = who === "manager" ? "managerIncentive" : "salespersonIncentive";
+    const celTbl = pTable(
+      [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: label + " incentive", num: 1 }],
+      D.incentives.celluma.map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.sellingPrice)}</td><td class="num">${rupee(r[celKey])}</td></tr>`).join(""));
+    const esthTbl = pTable(
+      [{ label: "Tier" }, { label: "Boxes min", num: 1 }, { label: "Boxes max", num: 1 }, { label: "₹/Box", num: 1 }, { label: "Label" }],
+      (D.incentives.esthemax[who] || []).map((x) => `<tr><td>${esc(x.tier)}</td><td class="num">${x.min}</td><td class="num">${esc(x.max)}</td><td class="num">${rupee(x.incentive)}</td><td>${esc(x.label)}</td></tr>`).join(""));
+    const terms = INCENTIVE_TERMS.map((sec) => `<h3>${esc(sec.title)}</h3><ul>${sec.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>`).join("");
+    return `
+      <div class="p-section">
+        <h1>${esc(D.meta.company)} — ${label} Incentives</h1>
+        <div class="p-sub">FY 2026-27 · Devices, Celluma &amp; Esthemax</div>
+        <p class="p-meta">Generated ${esc(stamp)} · All figures excl. GST</p>
+        <h2>Devices</h2>${devTbl}
+        <h2>Celluma</h2>${celTbl}
+        <h2>Esthemax (slab)</h2>${esthTbl}
+      </div>
+      <div class="p-section p-break">
+        <h2>Incentive terms &amp; conditions</h2>${terms}
+      </div>`;
+  }
+  function downloadIncentivePdf(who) {
+    let area = document.getElementById("printArea");
+    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
+    area.innerHTML = buildIncentivePdf(who);
+    document.body.classList.add("printing");
+    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 40);
+  }
+
   let incView = "device", incWho = "sales";
   const incMgr = () => incWho === "manager" && canSeeManagerInc();
   function renderIncentives() {
@@ -1758,6 +1801,10 @@
           refresh();
         };
       });
+      const dlSp = document.getElementById("incDlSp");
+      if (dlSp) dlSp.onclick = () => downloadIncentivePdf("salesperson");
+      const dlMgr = document.getElementById("incDlMgr");
+      if (dlMgr) dlMgr.onclick = () => downloadIncentivePdf("manager");
       wireAccordion();
     }, 0);
 
@@ -1776,6 +1823,10 @@
         <div class="seg" id="incWhoSeg" style="${incView === "terms" ? "display:none" : ""}">
           <button data-incwho="sales" class="${incWho === "sales" ? "active" : ""}">Salesperson</button>
           ${canSeeManagerInc() ? `<button data-incwho="manager" class="${incWho === "manager" ? "active" : ""}">Manager</button>` : ""}
+        </div>
+        <div class="hq-actions">
+          <button id="incDlSp" class="dl-btn" type="button" title="Download the Sales Person incentive sheet (PDF)">⬇ Sales Person (PDF)</button>
+          ${canSeeManagerInc() ? `<button id="incDlMgr" class="dl-btn" type="button" title="Download the Manager incentive sheet (PDF)">⬇ Manager (PDF)</button>` : ""}
         </div>
       </div>
       <div id="incBody">${incBody()}</div>`;
@@ -1804,9 +1855,8 @@
     };
     const mgr = incMgr();
     return `
-      <div class="callout">Standard = selling price (pricelist + ₹50K FY26-27 uplift). Sell above Standard → +10% of the excess (Sales Person only). Below Standard → 70% of Std. Manager earns a flat 50% of Std on reportee sales, full SP rates on direct sales.</div>
       ${mgr
-        ? `<div class="block"><h2>Sales Manager plan <span class="pill-inline">flat 50% of Std</span></h2>${mk(D.incentives.device.manager, true)}</div>`
+        ? `<div class="block"><h2>Sales Manager plan</h2>${mk(D.incentives.device.manager, true)}</div>`
         : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson, false)}</div>`}`;
   }
 
@@ -1844,11 +1894,11 @@
   }
 
   function termsView() {
-    const items = D.incentives.terms.map((sec, i) => `
+    const items = INCENTIVE_TERMS.map((sec, i) => `
       <div class="acc-item ${i === 0 ? "open" : ""}">
         <button class="acc-head">${esc(sec.title)}<span class="chev">›</span></button>
         <div class="acc-body">
-          <dl>${sec.items.map((it) => `<dt>${esc(it.term)}</dt><dd>${esc(it.detail)}</dd>`).join("")}</dl>
+          <ul>${sec.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>
         </div>
       </div>`).join("");
     return `<div class="accordion">${items}</div>`;
