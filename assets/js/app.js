@@ -2032,6 +2032,31 @@
       <button data-pmode="sales" class="${!priceAdmin() ? "active" : ""}">Sales Price</button>
       ${canSeeLanding() ? `<button data-pmode="admin" class="${priceAdmin() ? "active" : ""}">Admin Price</button>` : ""}
     </div>`;
+  function buildPricePdf() {
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+    const adm = priceAdmin();
+    const devHead = [{ label: "Device" }].concat(adm ? [{ label: "Landing (L)", num: 1 }] : []).concat([{ label: "Quotation (L)", num: 1 }, { label: "Standard (L)", num: 1 }, { label: "Minimum (L)", num: 1 }]);
+    const devBody = deviceList().map((r) => `<tr><td>${esc(r.device)}</td>${adm ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}<td class="num">${r.quotation ?? "—"}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
+    const celBody = (D.costs.celluma || []).map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.quotation)}</td><td class="num">${rupee(r.selling)}</td></tr>`).join("");
+    return `
+      <div class="p-section">
+        <h1>${esc(D.meta.company)} — Price List</h1>
+        <div class="p-sub">Devices &amp; Celluma · FY 2026-27</div>
+        <p class="p-meta">Generated ${esc(stamp)} · All values excl. GST${adm ? "" : " · Selling prices"}</p>
+        <h2>Devices (₹ Lakhs)</h2>${pTable(devHead, devBody)}
+        <h2>Celluma (₹)</h2>${pTable([{ label: "Model" }, { label: "Quotation", num: 1 }, { label: "Selling", num: 1 }], celBody)}
+      </div>`;
+  }
+  function downloadPricePdf() {
+    let area = document.getElementById("printArea");
+    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
+    area.innerHTML = buildPricePdf();
+    document.body.classList.add("printing");
+    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 40);
+  }
+
   function renderPrices() {
     const refresh = () => { $("#priceBody").innerHTML = priceBody(); wirePriceAdd(); wireProfitCalc(); wireOverrides(); };
     setTimeout(() => {
@@ -2050,6 +2075,8 @@
         };
       });
       wirePriceAdd(); wireProfitCalc(); wireOverrides();
+      const pdl = document.getElementById("priceDl");
+      if (pdl) pdl.onclick = () => downloadPricePdf();
     }, 0);
     return `
       <div class="section-head">
@@ -2062,6 +2089,7 @@
           <button data-price="device" class="${priceView === "device" ? "active" : ""}">Devices</button>
           <button data-price="celluma" class="${priceView === "celluma" ? "active" : ""}">Celluma</button>
         </div>
+        <div class="hq-actions"><button id="priceDl" class="dl-btn" type="button" title="Download the price list (PDF)">⬇ Price list (PDF)</button></div>
       </div>
       <div id="priceBody">${priceBody()}</div>`;
   }
