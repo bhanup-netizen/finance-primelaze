@@ -113,6 +113,9 @@ a { color: var(--accent); text-decoration: none; }
 .tc-list { list-style: none; padding: 0; margin: 0 0 8px; }
 .tc-itemrow { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
 .tc-item { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
+/* Inventory table — stop the product name column from hogging width. */
+.inv-table td.t-name, .inv-table th:first-child { width: 44%; max-width: 460px; white-space: normal; word-break: break-word; }
+.inv-table th.num, .inv-table td.num { min-width: 92px; }
 .topbar-meta { display: flex; align-items: center; gap: 12px; }
 .fy-pill {
   font-size: 12px; font-weight: 600; color: var(--accent);

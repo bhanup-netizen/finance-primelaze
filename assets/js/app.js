@@ -2297,6 +2297,7 @@
   /* ================= DEMO MACHINES ================= */
   const demoEdits = { current: {}, status: {}, movement: {}, packing: {} };
   const demoAdds = { current: [], status: [], movement: [], packing: [] }; // [{id, vals:[]}]
+  const demoRemovals = { current: [], status: [], movement: [], packing: [] }; // base row indices removed by admin
   let demoAddSeq = 0;
   const DEMO_VIEWS = [
     { id: "current", label: "Current status" },
@@ -2411,18 +2412,19 @@
       const chip = sc ? `<span class="demo-chip ${sc}">${esc(val) || "—"}</span>` : esc(val);
       return `<td class="${cls}">${chip}</td>`;
     }
+    // Delete-row button on the first cell of every row (base + added).
+    const rm = c === 0 ? `<button class="linkish demo-rm" data-id="${rid}" title="Remove this row">✕</button> ` : "";
     if (DATE_COLS.test(colName)) {
-      return `<td class="${cls}"><input class="demo-date" type="date" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
+      return `<td class="${cls}">${rm}<input class="demo-date" type="date" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
     }
     if (FREE_TEXT_COLS.test(colName)) {
-      return `<td class="${cls}"><input class="demo-text" type="text" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
+      return `<td class="${cls}">${rm}<input class="demo-text" type="text" data-r="${rid}" data-c="${c}" value="${esc(val)}"></td>`;
     }
     const opts = demoOptions(colName, c, val, rid);
     const optionHtml = `<option value=""${val ? "" : " selected"}>—</option>` +
       opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("") +
       (PERSON_COLS.test(colName) ? `<option value="__add__">＋ Add new…</option>` : "");
-    const rm = (c === 0 && String(rid).startsWith("a")) ? `<button class="linkish demo-rm" data-id="${rid}" title="Remove">✕</button> ` : "";
-    return `<td class="${cls}"><select class="demo-select ${sc}" data-r="${rid}" data-c="${c}">${optionHtml}</select>${rm}</td>`;
+    return `<td class="${cls}">${rm}<select class="demo-select ${sc}" data-r="${rid}" data-c="${c}">${optionHtml}</select></td>`;
   }
 
   function demoTable() {
@@ -2430,7 +2432,8 @@
     const ed = isAdmin();
     const head = t.columns.map((c) => `<th>${esc(demoColLabel(c))}</th>`).join("");
     const scIdx = demoStatusColIdx();
-    let ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
+    const gone = demoRemovals[demoView] || [];
+    let ids = t.rows.map((_, i) => String(i)).filter((rid) => !gone.includes(+rid)).concat((demoAdds[demoView] || []).map((x) => x.id));
     if (demoFilter !== "all" && scIdx >= 0) {
       ids = ids.filter((rid) => demoVal(rid, scIdx) === demoFilter);
     }
@@ -2448,7 +2451,8 @@
     const counts = {};
     let total = 0;
     const t = D.demoMachines[demoView];
-    const ids = t.rows.map((_, i) => String(i)).concat((demoAdds[demoView] || []).map((x) => x.id));
+    const goneF = demoRemovals[demoView] || [];
+    const ids = t.rows.map((_, i) => String(i)).filter((rid) => !goneF.includes(+rid)).concat((demoAdds[demoView] || []).map((x) => x.id));
     ids.forEach((rid) => { const v = demoVal(rid, scIdx); if (v) { counts[v] = (counts[v] || 0) + 1; total++; } });
     const vals = Object.keys(counts).sort();
     if (!vals.length) return "";
@@ -2518,8 +2522,14 @@
     });
     document.querySelectorAll("#demoBody .demo-rm").forEach((b) => {
       b.onclick = () => {
-        const label = demoRowLabel(b.dataset.id);
-        demoAdds[demoView] = demoAdds[demoView].filter((x) => x.id !== b.dataset.id);
+        const id = b.dataset.id;
+        const label = demoRowLabel(id);
+        if (!window.confirm("Remove this row" + (label ? " (" + label + ")" : "") + "?")) return;
+        if (String(id).startsWith("a")) {
+          demoAdds[demoView] = demoAdds[demoView].filter((x) => x.id !== id);
+        } else if (!(demoRemovals[demoView] || []).includes(+id)) {
+          (demoRemovals[demoView] = demoRemovals[demoView] || []).push(+id);
+        }
         saveEdits("Removed machine" + (label ? " " + label : "")); demoRepaint();
       };
     });
@@ -3912,7 +3922,7 @@
       </div>
 
       <div class="table-wrap">
-        <table>
+        <table class="inv-table">
           <thead><tr>
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
@@ -4327,6 +4337,7 @@
         const ids = Object.values(demoAdds).flat().map((x) => +String(x.id).slice(1)).filter((n) => !isNaN(n));
         demoAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
+      if (e.demoRemovals) ["current", "status", "movement", "packing"].forEach((k) => { if (Array.isArray(e.demoRemovals[k])) demoRemovals[k] = e.demoRemovals[k]; });
       if (e.roster) Object.assign(rosterEdits, e.roster);
       if (Array.isArray(e.rosterAdds)) {
         rosterAdds.length = 0; e.rosterAdds.forEach((p) => rosterAdds.push(p));
@@ -4403,7 +4414,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
