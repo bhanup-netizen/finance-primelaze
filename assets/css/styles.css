@@ -113,9 +113,14 @@ a { color: var(--accent); text-decoration: none; }
 .tc-list { list-style: none; padding: 0; margin: 0 0 8px; }
 .tc-itemrow { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
 .tc-item { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; resize: vertical; }
-/* Inventory table — keep the product-name column readable, others compact. */
-.inv-table td.t-name, .inv-table th:first-child { min-width: 200px; white-space: normal; }
-.inv-table th.num, .inv-table td.num { min-width: 78px; }
+/* Inventory table — compact columns so everything (incl. actions) fits. */
+.inv-table { font-size: 13px; }
+.inv-table th, .inv-table td { padding-left: 8px; padding-right: 8px; }
+.inv-table td.t-name, .inv-table th:first-child { min-width: 170px; max-width: 220px; white-space: normal; }
+.inv-table th.num, .inv-table td.num { min-width: 56px; }
+.inv-table input[type="number"] { max-width: 60px; }
+.inv-table input[type="date"] { max-width: 138px; font-size: 12px; padding: 3px 6px; }
+.inv-table .ghost-btn { padding: 4px 8px; font-size: 12px; }
 .topbar-meta { display: flex; align-items: center; gap: 12px; }
 .fy-pill {
   font-size: 12px; font-weight: 600; color: var(--accent);
