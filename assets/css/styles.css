@@ -606,8 +606,8 @@ tr.total-row:hover td { background: var(--surface-3); }
 .callout.teal { border-color: var(--accent-2); background: var(--accent-2-soft); }
 .muted-note { color: var(--text-3); font-size: 12.5px; margin-top: 10px; }
 
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 820px) { .two-col { grid-template-columns: 1fr; } }
+.two-col { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(0, 1.3fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
 .footer {
   max-width: var(--maxw); margin: 0 auto;
