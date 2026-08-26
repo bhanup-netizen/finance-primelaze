@@ -1907,16 +1907,16 @@
   }
 
   function cellumaIncentive() {
-    const mgr = incMgr();
-    const fld = mgr ? "managerIncentive" : "salespersonIncentive";
-    const cols = ["Model", "Selling Price (excl. GST)", mgr ? "Sales Manager Incentive" : "Salesperson Incentive"];
+    const showMgr = canSeeManagerInc();
+    const cols = ["Model", "Selling Price (excl. GST)", "Salesperson Incentive"].concat(showMgr ? ["Sales Manager Incentive"] : []);
     const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
     const body = D.incentives.celluma.map((r) => `<tr>
       <td class="t-name">${esc(r.model)}</td>
       ${ovNumCell(`cel:${r.model}:sellingPrice`, r.sellingPrice, true)}
-      ${ovNumCell(`cel:${r.model}:${fld}`, r[fld], true)}</tr>`).join("");
+      ${ovNumCell(`cel:${r.model}:salespersonIncentive`, r.salespersonIncentive, true)}
+      ${showMgr ? ovNumCell(`cel:${r.model}:managerIncentive`, r.managerIncentive, true) : ""}</tr>`).join("");
     return `
-      <div class="callout teal">Single Standard (selling) price per model; no minimum. Manager incentive is a flat 50% of the salesperson standard.</div>
+      <div class="callout teal">Single Standard (selling) price per model; no minimum. Sales Manager incentive is a flat 50% of the salesperson standard.</div>
       ${table(head, body)}`;
   }
 
@@ -2191,8 +2191,9 @@
     { id: "Foot Mask", label: "Foot Mask" },
   ];
   function renderEsthemax() {
-    const refresh = () => { $("#mktBody").innerHTML = mktBody(); };
+    const refresh = () => { $("#mktBody").innerHTML = mktBody(); wireOverrides(); };
     setTimeout(() => {
+      wireOverrides();
       document.querySelectorAll("[data-mkt]").forEach((b) => {
         b.onclick = () => { mkt = b.dataset.mkt; document.querySelectorAll("[data-mkt]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
       });
@@ -2258,10 +2259,19 @@
       colIdx.map((i) => `<th class="${i === 2 ? "" : "num"}" title="${esc(labelFor(i))}">${esc(labelFor(i))}</th>`)
     ).join("");
 
+    const mrpCol = cols.findIndex((c, i) => i >= newStart && /^mrp$/i.test(String(c).trim()));
     const body = rows.map((r) => {
       const cells = colIdx.map((i) => {
         const v = r.values[i];
         if (i === 2) return `<td class="t-muted">${v == null ? "—" : esc(v)}</td>`;
+        // MRP is admin-editable (stored as an override keyed by market/group/row).
+        if (i === mrpCol && mrpCol >= 0) {
+          const key = `emrp:${mkt}:${mktGroup}:${r.srNo}`;
+          const eff = ovGet(key, v);
+          return isAdmin()
+            ? `<td class="num"><input class="ov-in" data-key="${esc(key)}" data-t="num" type="number" step="1" value="${eff == null || eff === "" ? "" : esc(eff)}" style="max-width:90px"></td>`
+            : `<td class="num">${isNum(eff) ? inr(eff) : (eff == null ? "—" : esc(eff))}</td>`;
+        }
         return `<td class="num">${isNum(v) ? inr(v) : (v == null ? "—" : esc(v))}</td>`;
       }).join("");
       return `<tr><td class="num t-muted">${r.srNo}</td><td class="t-name">${esc(r.name)}</td>${cells}</tr>`;
