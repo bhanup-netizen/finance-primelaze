@@ -2630,7 +2630,7 @@
   // (old data is always kept). Status is derived live against today's date.
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
-  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" };
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" };
   let payColFilters = {}; // Excel-style per-column filters on the detailed report
   let paySnapshots = [];  // [{at, by, total, rows, cust:{name:outstanding}}] — one per import, for collection tracking
   let payClearBefore = ""; // admin: hide commitments committed before this date
@@ -2702,6 +2702,9 @@
       if (payFilter.hq && d.hq !== payFilter.hq) return false;
       if (payFilter.sp && d.salesPerson !== payFilter.sp) return false;
       if (payFilter.status && d.status !== payFilter.status) return false;
+      // EMI filter: "emi" = rows with EMI details, "nonemi" = rows without.
+      if (payFilter.emi === "emi" && !String(d.emi || "").trim()) return false;
+      if (payFilter.emi === "nonemi" && String(d.emi || "").trim()) return false;
       // Commitment-date range (dated rows only when a range is set).
       if (payFilter.from || payFilter.to) {
         const cd = payCd(d);
@@ -3082,6 +3085,7 @@
       wire("paySp", (e) => { payFilter.sp = e.target.value; payRepaint(); });
       wire("payStatusSel", (e) => { payFilter.status = e.target.value; payRepaint(); });
       wire("payDueSel", (e) => { payFilter.due = e.target.value; payRepaint(); });
+      wire("payEmiSel", (e) => { payFilter.emi = e.target.value; payRepaint(); });
       wire("payFrom", (e) => { payFilter.from = e.target.value; payRepaint(); });
       wire("payTo", (e) => { payFilter.to = e.target.value; payRepaint(); });
       const s = document.getElementById("paySearch");
@@ -3092,7 +3096,7 @@
       if (applyBtn) applyBtn.onclick = () => {
         const gv = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
         payFilter.cat = gv("payCat"); payFilter.hq = gv("payHq"); payFilter.sp = gv("paySp");
-        payFilter.status = gv("payStatusSel"); payFilter.due = gv("payDueSel");
+        payFilter.status = gv("payStatusSel"); payFilter.due = gv("payDueSel"); payFilter.emi = gv("payEmiSel");
         payFilter.from = gv("payFrom"); payFilter.to = gv("payTo");
         payFilter.q = (gv("paySearch") || "").toLowerCase();
         payRepaint();
@@ -3114,7 +3118,7 @@
         if (el.tagName === "SELECT") el.onchange = handler; else el.oninput = handler;
       });
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "" }; payColFilters = {}; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" }; payColFilters = {}; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
@@ -3162,6 +3166,7 @@
         <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Due period</span><select id="payDueSel" class="select"><option value="">All</option><option value="below30"${payFilter.due === "below30" ? " selected" : ""}>Below 30 days / Pending machines</option><option value="above30"${payFilter.due === "above30" ? " selected" : ""}>Above 30 days / Installed machines</option></select></label>
+        <label class="ord-field"><span>EMI</span><select id="payEmiSel" class="select"><option value="">All</option><option value="emi"${payFilter.emi === "emi" ? " selected" : ""}>EMI only</option><option value="nonemi"${payFilter.emi === "nonemi" ? " selected" : ""}>Non-EMI</option></select></label>
         <label class="ord-field"><span>Committed from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}"></label>
         <label class="ord-field"><span>Committed to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}"></label>
         <button id="payApply" class="dl-btn" type="button">Apply</button>
