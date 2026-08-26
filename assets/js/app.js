@@ -3954,7 +3954,7 @@
         <table class="inv-table">
           <thead><tr>
             ${isAdmin()
-              ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
+              ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th>
                  <th class="num">Required</th><th class="num">Current</th>${isAdmin() ? `<th class="num">To Buy</th>` : ""}<th class="num">On order</th><th>ETA (arrival)</th><th></th>`
               : `<th>Product</th><th class="num">Current stock</th><th>Status</th><th class="num">On order</th><th>ETA (arrival)</th>`}
           </tr></thead>
@@ -4007,7 +4007,6 @@
         <td><span class="badge ${catCls}">${esc(r.it.category)}</span></td>
         <td>${status}</td>
         <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
-        <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
         ${isAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>` : ""}
@@ -4015,7 +4014,7 @@
         <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}"></td>
         <td style="white-space:nowrap"><button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? 11 : 5}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? 10 : 5}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) {
       bEl.innerHTML = body; orderBindStockInputs();
