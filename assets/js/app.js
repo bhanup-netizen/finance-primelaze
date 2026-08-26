@@ -3946,7 +3946,7 @@
           <button data-ostatus="reorder" class="${orderState.status === "reorder" ? "active" : ""}">On hold</button>
         </div>
         ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
-        ${isSuperAdmin() ? `<button id="ordLowStock" class="dl-btn" type="button" title="Download a PDF report of everything below required stock">⬇ Low-stock report (PDF)</button>` : ""}
+        ${isAdmin() ? `<button id="ordLowStock" class="dl-btn" type="button" title="Download a PDF report of everything below required stock">⬇ Low-stock report (PDF)</button>` : ""}
       </div>
 
       <div class="table-wrap">
@@ -3954,13 +3954,13 @@
           <thead><tr>
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th><th>Trend</th>
-                 <th class="num">Required</th><th class="num">Current</th>${isSuperAdmin() ? `<th class="num">To Buy</th>` : ""}<th></th>`
+                 <th class="num">Required</th><th class="num">Current</th>${isAdmin() ? `<th class="num">To Buy</th>` : ""}<th></th>`
               : `<th>Product</th><th class="num">Current stock</th><th>Status</th>`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan.${isSuperAdmin() ? ` To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Use <b>⬇ Low-stock report (PDF)</b> to download a report of everything that needs buying. Order quantities are visible to super admins only.` : ""}</div>` : ""}`;
+      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Use <b>⬇ Low-stock report (PDF)</b> to download a report of everything that needs buying.</div>` : ""}`;
   }
 
   function orderPaint() {
@@ -3980,7 +3980,7 @@
     const kpis = [
       { cls: "k-good", label: "Saleable", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "On hold", value: inr(toOrder), note: "stock below required" },
-    ].concat(isSuperAdmin() ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
+    ].concat(isAdmin() ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
     if (kEl) kEl.innerHTML = kpis;
@@ -4007,10 +4007,10 @@
         <td class="spark-cell">${sparkline(r.it.monthly)}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
-        ${isSuperAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>` : ""}
+        ${isAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>` : ""}
         <td style="white-space:nowrap"><button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? (isSuperAdmin() ? 9 : 8) : 3}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? 9 : 3}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) {
       bEl.innerHTML = body; orderBindStockInputs();
