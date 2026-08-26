@@ -2813,6 +2813,8 @@
       case 13: return r.machineStatus || "";
       case 14: return (PAY_STATUS[r.status] || {}).label || "";
       case 15: return r.remark || "";
+      case 16: return r.receivedDate ? fmtDate(r.receivedDate) : "";
+      case 17: return r.emi || "";
       default: return "";
     }
   }
@@ -2825,7 +2827,7 @@
   function payColFilterRow(rows0) {
     const sel = (i, opts) => `<th><select class="pay-cf select" data-ci="${i}" style="width:100%;min-width:90px;font-weight:400"><option value="">All</option>${opts.map((o) => `<option${String(payColFilters[i] || "") === String(o) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></th>`;
     const txt = (i, ph) => `<th><input class="pay-cf" type="search" data-ci="${i}" value="${esc(payColFilters[i] || "")}" placeholder="${esc(ph)}" style="width:100%;min-width:70px;font-weight:400"></th>`;
-    return `<tr class="pay-cf-row">${txt(0, "Customer")}${txt(1, "Product")}${txt(2, "Invoice")}${txt(3, "Date")}${sel(4, payUniq(rows0, "category"))}${sel(5, payUniq(rows0, "hq"))}${sel(6, payUniq(rows0, "salesPerson"))}${txt(7, "Date")}${txt(8, "Days")}${txt(9, "₹")}${txt(10, "₹")}${txt(11, "₹")}${txt(12, "₹")}${sel(13, ["Installed", "Pending"])}${sel(14, PAY_ORDER.map((s) => PAY_STATUS[s].label))}${txt(15, "Remark")}`;
+    return `<tr class="pay-cf-row">${txt(0, "Customer")}${txt(1, "Product")}${txt(2, "Invoice")}${txt(3, "Date")}${sel(4, payUniq(rows0, "category"))}${sel(5, payUniq(rows0, "hq"))}${sel(6, payUniq(rows0, "salesPerson"))}${txt(7, "Date")}${txt(8, "Days")}${txt(9, "₹")}${txt(10, "₹")}${txt(11, "₹")}${txt(12, "₹")}${sel(13, ["Installed", "Pending"])}${sel(14, PAY_ORDER.map((s) => PAY_STATUS[s].label))}${txt(15, "Remark")}${txt(16, "Date")}${txt(17, "EMI")}`;
   }
 
   function payTableRows(rows) {
@@ -2834,7 +2836,7 @@
       if (ra !== rb) return ra - rb;
       return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
     });
-    if (!sorted.length) return `<tr><td colspan="16" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
+    if (!sorted.length) return `<tr><td colspan="18" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
     return sorted.map((r) => {
       const m = PAY_STATUS[r.status];
       const mst = r.machineStatus ? `<span class="pay-badge ${r.machineStatus === "Installed" ? "pay-green" : "pay-yellow"}">${esc(r.machineStatus)}</span>` : "<span class='t-muted'>—</span>";
@@ -2854,7 +2856,9 @@
         <td class="num">${r.pending ? rupee(r.pending) : "—"}</td>
         <td>${mst}</td>
         <td><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></td>
-        <td class="t-muted">${esc(r.remark || "")}</td></tr>`;
+        <td class="t-muted">${esc(r.remark || "")}</td>
+        <td>${r.receivedDate ? esc(fmtDate(r.receivedDate)) : "<span class='t-muted'>—</span>"}</td>
+        <td class="t-muted">${esc(r.emi || "")}</td></tr>`;
     }).join("");
   }
 
@@ -2870,7 +2874,7 @@
       <td class="num"><b>${rupee(c)}</b></td>
       <td class="num"><b>${rupee(rec)}</b></td>
       <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td>
-      <td colspan="3"></td></tr>`;
+      <td colspan="5"></td></tr>`;
   }
 
   // Record the just-imported data as a dated snapshot: total outstanding + a
@@ -2957,7 +2961,7 @@
   }
 
   // ---- Excel / CSV import (append) + template ----
-  const PAY_HEADERS = ["Category", "HQ", "Sales Person", "Customer", "Committed Date", "Invoice No.", "Invoice Date", "Due Days", "Machine Status", "Product Sold", "Sales Value", "Outstanding", "Committed Amount", "Received", "Remark", "Line Items"];
+  const PAY_HEADERS = ["Category", "HQ", "Sales Person", "Customer", "Committed Date", "Invoice No.", "Invoice Date", "Due Days", "Machine Status", "Product Sold", "Sales Value", "Outstanding", "Committed Amount", "Received", "Received Date", "EMI", "Remark", "Line Items"];
   function payNormDate(v) {
     if (!v) return "";
     if (v instanceof Date && !isNaN(v)) {
@@ -2993,6 +2997,8 @@
       outstanding: payNum(g("outstanding", "balance", "outstandingamount")),
       committedAmount: payNum(g("committedamount", "committed", "promisedamount", "amount")),
       received: payNum(g("received", "amountreceived", "collected", "receivedamount")),
+      receivedDate: payNormDate(g("receiveddate", "paymentreceiveddate", "paymentdate", "collecteddate", "receiptdate")),
+      emi: String(g("emi", "emidetails", "emiplan", "installment") || "").trim(),
       remark: String(g("remark", "remarks", "note", "notes", "comment") || "").trim(),
       lineItems: payNum(g("lineitems", "items", "noofitems")),
     };
@@ -3049,8 +3055,8 @@
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
   function payDownloadTemplate() {
-    const sample = ["Consumables", "Telangana", "Vamsi", "Sample Clinic (delete this row)", "2026-09-15", "INV-001", "2026-08-15", 25, "", "Hydrojelly Mask 850ml", 60000, 50000, 50000, 0, "By mid September", 2];
-    const sample2 = ["Machine", "Karnataka", "Sushma S", "Sample Hospital (delete this row)", "2026-07-10", "INV-002", "2026-07-10", 45, "Pending", "Celluma Pro", 4500000, 4000000, 4000000, 0, "Awaiting installation", 1];
+    const sample = ["Consumables", "Telangana", "Vamsi", "Sample Clinic (delete this row)", "2026-09-15", "INV-001", "2026-08-15", 25, "", "Hydrojelly Mask 850ml", 60000, 50000, 50000, 0, "2026-09-20", "", "By mid September", 2];
+    const sample2 = ["Machine", "Karnataka", "Sushma S", "Sample Hospital (delete this row)", "2026-07-10", "INV-002", "2026-07-10", 45, "Pending", "Celluma Pro", 4500000, 4000000, 4000000, 0, "", "6 EMIs × ₹5L/month", "Awaiting installation", 1];
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample, sample2]);
       ws["!cols"] = PAY_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
@@ -3179,7 +3185,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table>
-        <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th></tr>${payColFilterRow(rows0)}</thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th><th>Received date</th><th>EMI</th></tr>${payColFilterRow(rows0)}</thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
