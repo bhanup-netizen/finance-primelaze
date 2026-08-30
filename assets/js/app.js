@@ -2190,10 +2190,11 @@
     { id: "RETAIL HYDROJELLYMASK", label: "Retail" },
     { id: "Foot Mask", label: "Foot Mask" },
   ];
-  function buildEsthemaxPricePdf() {
-    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+  // Download the current Esthemax market + group price list as an Excel file
+  // (a wide price matrix reads far better in a spreadsheet than a printed PDF).
+  function downloadEsthemaxPrice() {
     const m = D.esthemaxPrices[mkt];
-    if (!m) return `<div class="p-section"><h1>No pricing data</h1></div>`;
+    if (!m) { window.alert("No pricing data to download."); return; }
     const cols = m.columns, rows = m.groups[mktGroup] || [], band = m.band || [];
     let newStart = band.findIndex((b, i) => i > 2 && String(b).toLowerCase().includes("new"));
     if (newStart < 0) newStart = Math.floor(cols.length / 2);
@@ -2201,32 +2202,28 @@
     if (String(cols[2] || "").trim() !== "") colIdx.push(2);
     cols.forEach((c, i) => { if (i >= newStart && String(c).trim() !== "") colIdx.push(i); });
     const mrpCol = cols.findIndex((c, i) => i >= newStart && /^mrp$/i.test(String(c).trim()));
-    const head = [`<th class="num">Sr</th>`, `<th>Name</th>`].concat(
-      colIdx.map((i) => `<th class="${i === 2 ? "" : "num"}">${esc(String(cols[i]).replace(/\n/g, " ").trim())}</th>`)).join("");
-    const body = rows.map((r) => {
-      const cells = colIdx.map((i) => {
-        let v = r.values[i];
-        if (i === mrpCol && mrpCol >= 0) v = ovGet(`emrp:${mkt}:${mktGroup}:${r.srNo}`, v);
-        if (i === 2) return `<td>${v == null ? "—" : esc(v)}</td>`;
-        return `<td class="num">${isNum(v) ? inr(v) : (v == null ? "—" : esc(v))}</td>`;
-      }).join("");
-      return `<tr><td class="num">${r.srNo}</td><td>${esc(r.name)}</td>${cells}</tr>`;
-    }).join("");
+    const header = ["Sr", "Name"].concat(colIdx.map((i) => String(cols[i]).replace(/\n/g, " ").trim()));
+    const aoa = [header];
+    rows.forEach((r) => {
+      const row = [r.srNo, r.name];
+      colIdx.forEach((i) => { let v = r.values[i]; if (i === mrpCol && mrpCol >= 0) v = ovGet(`emrp:${mkt}:${mktGroup}:${r.srNo}`, v); row.push(v == null ? "" : v); });
+      aoa.push(row);
+    });
     const grpLabel = (MKT_GROUPS.find((g) => g.id === mktGroup) || {}).label || mktGroup;
-    return `<div class="p-section">
-      <h1>${esc(D.meta.company)} — Esthemax Price List</h1>
-      <div class="p-sub">${esc(mkt === "salon" ? "Salon Market" : "Doctor Market")} · ${esc(grpLabel)} — New Structure</div>
-      <p class="p-meta">Generated ${esc(stamp)} · Excl. GST unless stated</p>
-      ${pTable(head, body)}</div>`;
-  }
-  function downloadEsthemaxPricePdf() {
-    let area = document.getElementById("printArea");
-    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
-    area.innerHTML = buildEsthemaxPricePdf();
-    document.body.classList.add("printing");
-    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
-    window.addEventListener("afterprint", cleanup);
-    setTimeout(() => window.print(), 40);
+    const fname = ("Esthemax_" + (mkt === "salon" ? "Salon" : "Doctor") + "_" + grpLabel + "_prices").replace(/[^\w]+/g, "_") + ".xlsx";
+    if (window.XLSX) {
+      const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+      ws["!cols"] = header.map((h) => ({ wch: Math.max(10, String(h).length + 1) }));
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Prices");
+      window.XLSX.writeFile(wb, fname);
+    } else {
+      const csv = aoa.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const a = document.createElement("a");
+      a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      a.download = fname.replace(/\.xlsx$/, ".csv");
+      a.click();
+    }
   }
 
   function renderEsthemax() {
@@ -2234,7 +2231,7 @@
     setTimeout(() => {
       wireOverrides();
       const edl = document.getElementById("esthPriceDl");
-      if (edl) edl.onclick = () => downloadEsthemaxPricePdf();
+      if (edl) edl.onclick = () => downloadEsthemaxPrice();
       document.querySelectorAll("[data-mkt]").forEach((b) => {
         b.onclick = () => { mkt = b.dataset.mkt; document.querySelectorAll("[data-mkt]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
       });
@@ -2259,7 +2256,7 @@
         <div class="seg">
           ${MKT_GROUPS.map((g) => `<button data-grp="${g.id}" class="${mktGroup === g.id ? "active" : ""}">${g.label}</button>`).join("")}
         </div>
-        <div class="hq-actions"><button id="esthPriceDl" class="dl-btn" type="button" title="Download this Esthemax price list (PDF)">⬇ Price list (PDF)</button></div>
+        <div class="hq-actions"><button id="esthPriceDl" class="dl-btn" type="button" title="Download this Esthemax price list (Excel)">⬇ Price list (Excel)</button></div>
       </div>
       <div id="mktBody">${mktBody()}</div>`;
   }
