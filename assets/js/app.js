@@ -2957,11 +2957,38 @@
   function payCollectionsCard() {
     const col = payCollections();
     const trend = paySnapshots.slice().reverse(); // newest first
+    const cFrom = payFilter.from, cTo = payFilter.to;
+    const ranged = !!(cFrom || cTo);
     let summary;
-    if (!col) {
-      summary = `<p class="muted-note">This shows how much outstanding was <b>collected</b> and <b>when</b>. Import your sheet now, then again after payments come in — the drop per customer will appear here. Snapshots so far: <b>${paySnapshots.length}</b>.</p>`;
+    if (ranged) {
+      // Actual money RECEIVED in the chosen date range (by payment received
+      // date) — computed from the payment records, not from the last upload.
+      const byC = {};
+      payAll().forEach((r) => {
+        const rd = r.receivedDate ? String(r.receivedDate).slice(0, 10) : "";
+        if (!rd || (cFrom && rd < cFrom) || (cTo && rd > cTo)) return;
+        const amt = payNum(r.received); if (!(amt > 0)) return;
+        const c = (r.customer || "—").trim();
+        const o = byC[c] || (byC[c] = { customer: c, collected: 0, sp: r.salesPerson || "", hq: r.hq || "", rd: rd });
+        o.collected += amt; if (rd > o.rd) o.rd = rd;
+        if (!o.sp && r.salesPerson) o.sp = r.salesPerson;
+        if (!o.hq && r.hq) o.hq = r.hq;
+      });
+      const crows = Object.values(byC).sort((a, b) => b.collected - a.collected);
+      const total = crows.reduce((a, r) => a + r.collected, 0);
+      const body = crows.slice(0, 300).map((r) => `<tr>
+        <td class="t-name">${esc(r.customer)}</td>
+        <td>${esc(r.sp ? spLabel(r.sp) : "—")}</td>
+        <td>${esc(r.hq || "—")}</td>
+        <td class="num" style="color:var(--good);font-weight:700">${rupeeShort(r.collected)}</td>
+        <td>${r.rd ? esc(fmtDate(r.rd)) : "—"}</td></tr>`).join("")
+        || `<tr><td colspan="5" class="empty">No payments received in this date range.</td></tr>`;
+      summary = `<p>Collected <b style="color:var(--good)">${rupeeShort(total)}</b> across <b>${crows.length}</b> customer(s)${cFrom ? " from <b>" + esc(cFrom) + "</b>" : ""}${cTo ? " to <b>" + esc(cTo) + "</b>" : ""} — actual payments received in this period (by received date). Change the <b>date range</b> in the filter bar above.</p>
+        <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th>Sales Person</th><th>State</th><th class="num">Collected</th><th>Collected on</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    } else if (!col) {
+      summary = `<p class="muted-note">This shows how much outstanding was <b>collected</b> and <b>when</b>. Import your sheet now, then again after payments come in — the drop per customer will appear here. Or set a <b>date range</b> in the filter bar above to see actual payments received in a period. Snapshots so far: <b>${paySnapshots.length}</b>.</p>`;
     } else {
-      // Look up salesperson, state (HQ) + latest received date per customer.
+      // No date range: show the drop since the previous upload (snapshot diff).
       const meta = {};
       payAll().forEach((r) => {
         const c = (r.customer || "—").trim(); if (!c) return;
@@ -2969,26 +2996,18 @@
         if (!m.sp && r.salesPerson) m.sp = r.salesPerson;
         if (!m.hq && r.hq) m.hq = r.hq;
         const rd = r.receivedDate ? String(r.receivedDate).slice(0, 10) : "";
-        if (rd && rd > m.rd) m.rd = rd; // keep the most recent received date
+        if (rd && rd > m.rd) m.rd = rd;
       });
-      // Attach the collected-on date, then filter by the shared top-bar range.
-      const cFrom = payFilter.from, cTo = payFilter.to;
-      let crows = col.rows.map((r) => ({ ...r, rd: (meta[r.customer] || {}).rd || "" }));
-      const ranged = cFrom || cTo;
-      if (ranged) crows = crows.filter((r) => r.rd && (!cFrom || r.rd >= cFrom) && (!cTo || r.rd <= cTo));
-      const rangedTotal = crows.reduce((a, r) => a + r.collected, 0);
-      const body = crows.slice(0, 200).map((r) => { const mm = meta[r.customer] || {}; return `<tr>
+      const body = col.rows.slice(0, 200).map((r) => { const mm = meta[r.customer] || {}; return `<tr>
         <td class="t-name">${esc(r.customer)}</td>
         <td>${esc(mm.sp ? spLabel(mm.sp) : "—")}</td>
         <td>${esc(mm.hq || "—")}</td>
         <td class="num">${rupeeShort(r.before)}</td>
         <td class="num">${rupeeShort(r.after)}</td>
         <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td>
-        <td>${r.rd ? esc(fmtDate(r.rd)) : "—"}</td></tr>`; }).join("")
-        || `<tr><td colspan="7" class="empty">No collections${ranged ? " in this date range" : " since the previous import"}.</td></tr>`;
-      summary = `<p>${ranged
-        ? `Collected <b style="color:var(--good)">${rupeeShort(rangedTotal)}</b> across <b>${crows.length}</b> customer(s)${cFrom ? " from <b>" + esc(cFrom) + "</b>" : ""}${cTo ? " to <b>" + esc(cTo) + "</b>" : ""} (by payment received date). Set the <b>date range</b> in the filter bar above.`
-        : `Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s). Use the <b>date range</b> in the filter bar above to track a specific period.`}</p>
+        <td>${mm.rd ? esc(fmtDate(mm.rd)) : "—"}</td></tr>`; }).join("")
+        || `<tr><td colspan="7" class="empty">No outstanding decreased since the previous import.</td></tr>`;
+      summary = `<p>Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s). Set a <b>date range</b> in the filter bar above to see actual payments received in a specific period.</p>
         <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th>Sales Person</th><th>State</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th><th>Collected on</th></tr></thead><tbody>${body}</tbody></table></div>`;
     }
     const trendRows = trend.map((s, i) => {
