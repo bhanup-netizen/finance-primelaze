@@ -3370,6 +3370,27 @@
   }
   const leadIsOverdue = (r) => r.nextDate && LEAD_OPEN.indexOf(r.stage || "new") >= 0 && String(r.nextDate).slice(0, 10) < leadToday();
 
+  // Rows that match every ACTIVE filter except the one named — used so each
+  // filter dropdown only offers values that actually exist under the other
+  // filters (e.g. picking a source narrows the Owner list to that source).
+  function leadRowsExcept(rows, exceptField) {
+    const saved = leadFilter[exceptField];
+    leadFilter[exceptField] = "";
+    const out = leadFiltered(rows);
+    leadFilter[exceptField] = saved;
+    return out;
+  }
+  // Owners actually present (assigned) in a set of leads.
+  function leadOwnersPresent(rows) {
+    const s = new Set();
+    rows.forEach((r) => { const o = (r.owner || "").trim(); if (o) s.add(o); });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }
+  // Product-interest values present (from the fixed list) in a set of leads.
+  function leadProductsPresent(rows) {
+    return LEAD_PRODUCTS.filter((p) => rows.some((r) => String(r.product || "").indexOf(p) >= 0));
+  }
+
   function leadKpis(rows) {
     const total = rows.length;
     const open = rows.filter((r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0).length;
@@ -3446,11 +3467,31 @@
     }).join("");
   }
 
+  // Refill one filter <select> with the given values, keeping the current
+  // selection (and keeping it selectable even if it fell out of the list).
+  function leadFillSelect(id, field, values, useSpLabel) {
+    const el = document.getElementById(id); if (!el) return;
+    const cur = leadFilter[field] || "";
+    const vals = cur && values.indexOf(cur) < 0 ? [cur].concat(values) : values;
+    el.innerHTML = `<option value="">All</option>` +
+      vals.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(useSpLabel ? spLabel(v) : v)}</option>`).join("");
+    el.value = cur;
+  }
+  // Rebuild each dropdown so it only lists values that co-exist with the other
+  // active filters (Owner narrows to the chosen source, etc.).
+  function leadSyncFilters(rows0) {
+    leadFillSelect("leadSource", "source", leadUniq(leadRowsExcept(rows0, "source"), "source"));
+    leadFillSelect("leadOwner", "owner", leadOwnersPresent(leadRowsExcept(rows0, "owner")), true);
+    leadFillSelect("leadState", "state", leadUniq(leadRowsExcept(rows0, "state"), "state"));
+    leadFillSelect("leadProduct", "product", leadProductsPresent(leadRowsExcept(rows0, "product")));
+  }
+
   function leadRepaint() {
     const rows0 = leadAll();
     const filtered = leadFiltered(rows0);
     const k = document.getElementById("leadKpis"); if (k) k.innerHTML = leadKpis(rows0);
     const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(rows0); wireLeadChips(); }
+    leadSyncFilters(rows0);
     const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
     const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + " leads";
     wireLeadRowEdits();
@@ -3669,10 +3710,10 @@
       <div id="leadChips">${leadChips(rows0)}</div>
       <div class="controls" style="margin-top:14px">
         <input id="leadSearch" class="search" type="search" placeholder="Search name, salon, mobile, city, rep…" value="${esc(leadFilter.q)}">
-        ${sel("leadSource", leadFilter.source, leadUniq(rows0, "source"), "Source")}
-        ${sel("leadOwner", leadFilter.owner, leadOwners(), "Owner")}
-        ${sel("leadState", leadFilter.state, leadUniq(rows0, "state"), "State")}
-        ${sel("leadProduct", leadFilter.product, LEAD_PRODUCTS, "Product")}
+        ${sel("leadSource", leadFilter.source, leadUniq(leadRowsExcept(rows0, "source"), "source"), "Source")}
+        ${sel("leadOwner", leadFilter.owner, leadOwnersPresent(leadRowsExcept(rows0, "owner")), "Owner")}
+        ${sel("leadState", leadFilter.state, leadUniq(leadRowsExcept(rows0, "state"), "state"), "State")}
+        ${sel("leadProduct", leadFilter.product, leadProductsPresent(leadRowsExcept(rows0, "product")), "Product")}
         <button id="leadClear" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
           ${admin ? `<button id="leadAddBtn" class="dl-btn" type="button">＋ Add lead</button>` : ""}
