@@ -858,3 +858,64 @@ tr.total-row:hover td { background: var(--surface-3); }
   .brand-text span { display: none; }        /* drop subtitle on very small screens */
   .tab { padding: 8px 12px; font-size: 13px; }
 }
+
+/* ================= LEADS · SALES PIPELINE ================= */
+/* Stage accent colours (shared by chips, dots and stage pills). */
+:root {
+  --lst-new: #64748b; --lst-contacted: #2563eb; --lst-demo: #7c3aed;
+  --lst-negotiation: #d97706; --lst-sold: #16a34a; --lst-lost: #dc2626;
+}
+.lead-chips { margin-bottom: 2px; }
+.lead-chip .lead-chip-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); }
+.lch-new .lead-chip-dot { background: var(--lst-new); }
+.lch-contacted .lead-chip-dot { background: var(--lst-contacted); }
+.lch-demo .lead-chip-dot { background: var(--lst-demo); }
+.lch-negotiation .lead-chip-dot { background: var(--lst-negotiation); }
+.lch-sold .lead-chip-dot { background: var(--lst-sold); }
+.lch-lost .lead-chip-dot { background: var(--lst-lost); }
+.lead-chip.active { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Compact board table */
+.lead-table { width: 100%; font-size: 12.5px; }
+.lead-table th, .lead-table td { padding: 6px 8px; vertical-align: middle; }
+.lead-table td { white-space: nowrap; }
+.lead-name { font-weight: 700; }
+.lead-table .t-muted { font-size: 11px; }
+.lead-table .lead-notecell { white-space: normal; max-width: 240px; min-width: 160px; line-height: 1.35; }
+.lead-table .lead-followcell { white-space: normal; min-width: 150px; }
+.lead-src { font-size: 11px; }
+.lead-table select.lead-edit, .lead-table input.lead-edit { font-size: 12px; padding: 3px 5px; }
+.lead-table input.lead-next { width: 120px; }
+.lead-table input.lead-nextd { width: 130px; margin-top: 3px; }
+.lead-table input.lead-amt { width: 90px; text-align: right; }
+.lead-actions { white-space: nowrap; }
+
+/* Stage pill (read-only) + stage select colouring */
+.lead-stage { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; }
+.lst-new { background: var(--lst-new); } .lst-contacted { background: var(--lst-contacted); }
+.lst-demo { background: var(--lst-demo); } .lst-negotiation { background: var(--lst-negotiation); }
+.lst-sold { background: var(--lst-sold); } .lst-lost { background: var(--lst-lost); }
+select.lead-stage-sel { color: #fff; border: none; font-weight: 700; border-radius: 999px; }
+select.lead-stage-sel option { color: var(--text); background: var(--surface); }
+
+/* Row states */
+.lead-table tr.lead-overdue td:nth-child(9) { color: var(--lst-lost); font-weight: 700; }
+.lead-table tr.lead-won { background: color-mix(in srgb, var(--lst-sold) 8%, transparent); }
+
+/* Mini action buttons */
+.mini-btn { font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.mini-btn:hover { border-color: var(--accent); }
+.mini-btn.lead-sold { background: var(--lst-sold); color: #fff; border-color: var(--lst-sold); }
+.mini-btn.danger { color: var(--lst-lost); }
+.mini-btn.danger:hover { border-color: var(--lst-lost); }
+
+/* Add-lead modal */
+.lead-modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; z-index: 200; overflow: auto; padding: 40px 16px; }
+.lead-modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; width: min(720px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.lead-modal-card h3 { margin: 0 0 14px; }
+.lead-form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.lead-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+.lead-form-grid input, .lead-form-grid select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; }
+.lead-form-wide { grid-column: 1 / -1; }
+.lead-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+@media (max-width: 640px) { .lead-form-grid { grid-template-columns: 1fr 1fr; } }

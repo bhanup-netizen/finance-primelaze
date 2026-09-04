@@ -111,6 +111,7 @@
   const TABS = [
     { id: "overview", label: "Overview", group: "", render: renderOverview },
     { id: "team", label: "Team Roster", group: "People", render: renderTeam },
+    { id: "leads", label: "Leads", group: "Sales", render: renderLeads },
     { id: "targets", label: "HQ Targets", group: "Sales", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Sales", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Catalog", render: renderPricing },
@@ -3278,6 +3279,421 @@
       </table></div>`;
   }
 
+  /* ================= LEADS · SALES PIPELINE ================= */
+  // A lightweight CRM: capture a lead → track it through the pipeline →
+  // push it to "Sold" when it converts. Base data is seeded from the uploaded
+  // Salon lead workbook (window.LEADS_SEED); new leads and every edit persist
+  // in the shared edits doc so the whole team sees the same board.
+  const LEAD_STAGES = [
+    { key: "new", label: "New" },
+    { key: "contacted", label: "Contacted" },
+    { key: "demo", label: "Demo done" },
+    { key: "negotiation", label: "Negotiation" },
+    { key: "sold", label: "Sold ✓" },
+    { key: "lost", label: "Lost" },
+  ];
+  const LEAD_STAGE_LABEL = {}; LEAD_STAGES.forEach((s) => (LEAD_STAGE_LABEL[s.key] = s.label));
+  const LEAD_OPEN = ["new", "contacted", "demo", "negotiation"]; // still in play
+  const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
+  const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
+  const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
+    "product", "owner", "notes", "link", "amount", "stage", "nextAction", "nextDate",
+    "soldAmount", "soldDate", "lostReason", "updatedAt"];
+
+  const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
+  const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
+  const leadRemovals = []; // ids hidden from the board
+  let leadSeq = 0;
+  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "" };
+  const canEditLeads = () => isAdmin();
+  const leadToday = () => new Date().toISOString().slice(0, 10);
+
+  // Combined board = seed (with edit overlay) + adds − removals.
+  function leadAll() {
+    const rm = new Set(leadRemovals);
+    const seed = (window.LEADS_SEED || []).map((l, i) => {
+      const o = Object.assign({ _seed: true, id: "L" + i }, l);
+      LEAD_FIELDS.forEach((f) => { const k = o.id + "#" + f; if (k in leadEdits) o[f] = leadEdits[k]; });
+      o.stage = o.stage || "new";
+      return o;
+    });
+    const adds = leadAdds.map((a) => Object.assign({ _seed: false, stage: "new" }, a));
+    return seed.concat(adds).filter((r) => !rm.has(r.id));
+  }
+  function leadUpdate(id, field, value) {
+    if (String(id).charAt(0) === "L") {
+      leadEdits[id + "#" + field] = value;
+      leadEdits[id + "#updatedAt"] = Date.now();
+    } else {
+      const a = leadAdds.find((x) => x.id === id);
+      if (a) { a[field] = value; a.updatedAt = Date.now(); }
+    }
+    saveEdits("Lead updated (" + field + ")");
+  }
+  function leadRemove(id) {
+    if (String(id).charAt(0) === "L") { if (!leadRemovals.includes(id)) leadRemovals.push(id); }
+    else { const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) leadAdds.splice(i, 1); }
+    saveEdits("Removed a lead");
+  }
+  function leadAddNew(obj) {
+    const id = "u" + (leadSeq++);
+    leadAdds.push(Object.assign({ id, stage: "new", updatedAt: Date.now() }, obj));
+    saveEdits("Added lead " + (obj.name || obj.company || ""));
+    return id;
+  }
+
+  // Owners = sales roster + anyone already assigned on a lead.
+  function leadOwners() {
+    const s = new Set(salesStaffList());
+    leadAll().forEach((l) => { const o = (l.owner || "").trim(); if (o) s.add(o); });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }
+  function leadUniq(rows, field) {
+    const s = new Set();
+    rows.forEach((r) => { const v = (r[field] || "").trim(); if (v) s.add(v); });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }
+  function leadFiltered(rows) {
+    const q = (leadFilter.q || "").toLowerCase();
+    return rows.filter((r) => {
+      if (leadFilter.source && r.source !== leadFilter.source) return false;
+      if (leadFilter.stage && (r.stage || "new") !== leadFilter.stage) return false;
+      if (leadFilter.owner && r.owner !== leadFilter.owner) return false;
+      if (leadFilter.state && r.state !== leadFilter.state) return false;
+      if (leadFilter.product && !(String(r.product || "").indexOf(leadFilter.product) >= 0)) return false;
+      if (q) {
+        const hay = [r.name, r.company, r.mobile, r.city, r.state, r.owner, r.notes, r.source, r.product].join(" ").toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+  }
+  const leadIsOverdue = (r) => r.nextDate && LEAD_OPEN.indexOf(r.stage || "new") >= 0 && String(r.nextDate).slice(0, 10) < leadToday();
+
+  function leadKpis(rows) {
+    const total = rows.length;
+    const open = rows.filter((r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0).length;
+    const sold = rows.filter((r) => r.stage === "sold");
+    const lost = rows.filter((r) => r.stage === "lost").length;
+    const wonVal = sold.reduce((a, r) => a + (Number(r.soldAmount) || Number(r.amount) || 0), 0);
+    const pipeVal = rows.filter((r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0).reduce((a, r) => a + (Number(r.amount) || 0), 0);
+    const overdue = rows.filter(leadIsOverdue).length;
+    const conv = total ? Math.round((sold.length / total) * 100) : 0;
+    const card = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
+    return card("", total, "Total leads", open + " still open")
+      + card("k-teal", sold.length, "Sold / won", conv + "% conversion")
+      + card("k-good", rupeeShort(wonVal), "Won value", "closed deals")
+      + card("k-warn", rupeeShort(pipeVal), "Open pipeline", overdue + " follow-ups overdue")
+      + card("k-warn", lost, "Lost", "marked lost");
+  }
+  // Pipeline funnel = clickable stage chips that also filter the board.
+  function leadChips(rows) {
+    const counts = {}; LEAD_STAGES.forEach((s) => (counts[s.key] = 0));
+    rows.forEach((r) => { counts[r.stage || "new"] = (counts[r.stage || "new"] || 0) + 1; });
+    const chip = (key, label, n) => `<button type="button" class="pay-chip lead-chip lch-${key}${leadFilter.stage === key ? " active" : ""}" data-leadstage="${key}"><span class="lead-chip-dot"></span>${esc(label)}<span class="pay-chip-n">${n}</span></button>`;
+    return `<div class="pay-chips lead-chips">
+      <button type="button" class="pay-chip${leadFilter.stage === "" ? " active" : ""}" data-leadstage="">All stages<span class="pay-chip-n">${rows.length}</span></button>
+      ${LEAD_STAGES.map((s) => chip(s.key, s.label, counts[s.key] || 0)).join("")}
+    </div>`;
+  }
+
+  function leadStageCell(r, admin) {
+    if (!admin) return `<span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>`;
+    return `<select class="select lead-edit lead-stage-sel lst-${r.stage || "new"}" data-id="${esc(r.id)}" data-field="stage">
+      ${LEAD_STAGES.map((s) => `<option value="${s.key}"${(r.stage || "new") === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}
+    </select>`;
+  }
+  function leadOwnerCell(r, admin) {
+    if (!admin) return esc(r.owner || "—");
+    const owners = leadOwners();
+    const cur = r.owner || "";
+    const extra = cur && owners.indexOf(cur) < 0 ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : "";
+    return `<select class="select lead-edit" data-id="${esc(r.id)}" data-field="owner">
+      <option value="">— Unassigned —</option>${extra}
+      ${owners.map((o) => `<option value="${esc(o)}"${cur === o ? " selected" : ""}>${esc(spLabel(o))}</option>`).join("")}
+    </select>`;
+  }
+  function leadRows(rows, admin) {
+    if (!rows.length) return `<tr><td colspan="11" class="empty">No leads match these filters.</td></tr>`;
+    return rows.map((r) => {
+      const loc = [r.city, r.state].filter(Boolean).join(", ");
+      const sold = r.stage === "sold";
+      const val = sold ? (Number(r.soldAmount) || Number(r.amount) || 0) : (Number(r.amount) || 0);
+      const followInput = admin
+        ? `<input type="text" class="lead-edit lead-next" data-id="${esc(r.id)}" data-field="nextAction" value="${esc(r.nextAction || "")}" placeholder="next step">
+           <input type="date" class="lead-edit lead-nextd" data-id="${esc(r.id)}" data-field="nextDate" value="${esc(r.nextDate || "")}">`
+        : (r.nextAction || r.nextDate ? `${esc(r.nextAction || "")}${r.nextDate ? ` <span class="t-muted">(${esc(r.nextDate)})</span>` : ""}` : "—");
+      const valCell = admin && !sold
+        ? `<input type="number" class="lead-edit num-input lead-amt" data-id="${esc(r.id)}" data-field="amount" value="${r.amount != null && r.amount !== 0 ? esc(r.amount) : ""}" placeholder="₹">`
+        : (val ? "₹" + inr(val) : "—");
+      const doc = r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener" title="Open attachment">📎</a>` : "";
+      const actions = admin ? `
+        ${!sold ? `<button type="button" class="mini-btn lead-sold" data-id="${esc(r.id)}" title="Mark as sold / won">✓ Sold</button>` : `<span class="t-muted" title="Sold on ${esc(r.soldDate || "")}">✓ ${esc(r.soldDate || "sold")}</span>`}
+        <button type="button" class="mini-btn danger lead-del" data-id="${esc(r.id)}" title="Delete lead">✕</button>` : "";
+      return `<tr class="${leadIsOverdue(r) ? "lead-overdue" : ""}${sold ? " lead-won" : ""}">
+        <td><div class="lead-name">${esc(r.name || "—")}</div><div class="t-muted">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</div></td>
+        <td>${r.mobile ? `<a href="tel:${esc(r.mobile)}">${esc(r.mobile)}</a>` : "—"}</td>
+        <td>${esc(loc || "—")}</td>
+        <td><span class="tag lead-src">${esc(r.source || "—")}</span></td>
+        <td>${esc(r.product || "—")}</td>
+        <td>${leadOwnerCell(r, admin)}</td>
+        <td>${leadStageCell(r, admin)}</td>
+        <td class="num">${valCell}</td>
+        <td class="lead-followcell">${followInput}</td>
+        <td class="lead-notecell">${esc(r.notes || "")} ${doc}</td>
+        ${admin ? `<td class="lead-actions">${actions}</td>` : ""}
+      </tr>`;
+    }).join("");
+  }
+
+  function leadRepaint() {
+    const rows0 = leadAll();
+    const filtered = leadFiltered(rows0);
+    const k = document.getElementById("leadKpis"); if (k) k.innerHTML = leadKpis(rows0);
+    const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(rows0); wireLeadChips(); }
+    const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
+    const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + " leads";
+    wireLeadRowEdits();
+  }
+  function wireLeadChips() {
+    document.querySelectorAll("[data-leadstage]").forEach((el) => {
+      el.onclick = () => { leadFilter.stage = el.dataset.leadstage; leadRepaint(); };
+    });
+  }
+  function wireLeadRowEdits() {
+    document.querySelectorAll(".lead-edit").forEach((el) => {
+      const handler = () => {
+        leadUpdate(el.dataset.id, el.dataset.field, el.dataset.field === "amount" ? (parseFloat(el.value) || 0) : el.value);
+        if (el.dataset.field === "stage") leadRepaint(); // stage change moves KPIs & colours
+        else if (el.dataset.field === "amount") { const kk = document.getElementById("leadKpis"); if (kk) kk.innerHTML = leadKpis(leadAll()); }
+        else if (el.classList.contains("lead-stage-sel")) { /* handled above */ }
+      };
+      if (el.tagName === "SELECT" || el.type === "date") el.onchange = handler; else el.onchange = handler;
+    });
+    document.querySelectorAll(".lead-sold").forEach((b) => (b.onclick = () => leadMarkSold(b.dataset.id)));
+    document.querySelectorAll(".lead-del").forEach((b) => (b.onclick = () => {
+      const l = leadAll().find((x) => x.id === b.dataset.id);
+      if (window.confirm('Delete lead "' + ((l && l.name) || "") + '"? This removes it for everyone.')) { leadRemove(b.dataset.id); leadRepaint(); }
+    }));
+  }
+  function leadMarkSold(id) {
+    const l = leadAll().find((x) => x.id === id); if (!l) return;
+    const amt = window.prompt("🎉 Mark as SOLD — enter the deal value (₹):", l.amount || l.soldAmount || "");
+    if (amt === null) return;
+    const n = parseFloat(String(amt).replace(/[^0-9.]/g, "")) || 0;
+    let date = window.prompt("Sold on (YYYY-MM-DD):", l.soldDate || leadToday());
+    if (date === null) return;
+    date = (date || "").trim() || leadToday();
+    leadUpdate(id, "soldAmount", n);
+    leadUpdate(id, "soldDate", date);
+    leadUpdate(id, "stage", "sold");
+    leadRepaint();
+  }
+
+  // ---- Add-lead modal ----
+  function leadAddDialog() {
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    const owners = leadOwners();
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>Add a new lead</h3>
+      <div class="lead-form-grid">
+        <label>Name<input id="lfName" type="text" placeholder="Contact name"></label>
+        <label>Mobile<input id="lfMobile" type="text" placeholder="10-digit"></label>
+        <label>Salon / company<input id="lfCompany" type="text"></label>
+        <label>City<input id="lfCity" type="text"></label>
+        <label>State<input id="lfState" type="text"></label>
+        <label>Source<select id="lfSource">${LEAD_SOURCES.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
+        <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
+        <label>Owner (rep)<select id="lfOwner"><option value="">— Unassigned —</option>${owners.map((o) => `<option value="${esc(o)}">${esc(spLabel(o))}</option>`).join("")}</select></label>
+        <label>Expected value ₹<input id="lfAmount" type="number" placeholder="0"></label>
+        <label>Next step<input id="lfNext" type="text" placeholder="e.g. call back"></label>
+        <label>Follow-up date<input id="lfNextD" type="date"></label>
+        <label class="lead-form-wide">Notes<input id="lfNotes" type="text" placeholder="context, requirement…"></label>
+      </div>
+      <div class="lead-modal-actions">
+        <button type="button" class="ghost-btn" id="lfCancel">Cancel</button>
+        <button type="button" class="dl-btn" id="lfSave">Add lead</button>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("lfCancel").onclick = close;
+    document.getElementById("lfSave").onclick = () => {
+      const v = (id) => (document.getElementById(id).value || "").trim();
+      const name = v("lfName"), company = v("lfCompany"), mobile = v("lfMobile");
+      if (!name && !company && !mobile) { window.alert("Enter at least a name, company or mobile."); return; }
+      leadAddNew({
+        name, mobile, company, city: v("lfCity"), state: v("lfState"),
+        source: v("lfSource"), product: v("lfProduct"), owner: v("lfOwner"),
+        amount: parseFloat(v("lfAmount")) || 0, nextAction: v("lfNext"), nextDate: v("lfNextD"),
+        notes: v("lfNotes"), occ: "Salon",
+      });
+      close(); leadRepaint();
+    };
+    setTimeout(() => { const n = document.getElementById("lfName"); if (n) n.focus(); }, 0);
+  }
+
+  // ---- Excel import / export ----
+  const LEAD_TPL_HEADERS = ["Name", "Mobile", "Company", "City", "State", "Source", "Product", "Owner", "Stage", "Expected Value", "Next Step", "Follow-up Date", "Notes", "Attachment link"];
+  function leadDownloadTemplate() {
+    const sample = ["Priya Sharma", "9876543210", "Glow Salon", "Pune", "Maharashtra", "Instagram", "Esthemax", "Lubdha", "new", 250000, "Book demo", "", "Wants pricing", ""];
+    if (window.XLSX) {
+      const ws = window.XLSX.utils.aoa_to_sheet([LEAD_TPL_HEADERS, sample]);
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      window.XLSX.writeFile(wb, "lead_import_template.xlsx");
+    } else {
+      const csv = LEAD_TPL_HEADERS.join(",") + "\n" + sample.join(",");
+      const a = document.createElement("a");
+      a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      a.download = "lead_import_template.csv"; a.click();
+    }
+  }
+  function leadMapImportRow(o) {
+    const g = (...keys) => { for (const k of keys) { const kk = Object.keys(o).find((x) => x.toLowerCase().replace(/[^a-z]/g, "") === k); if (kk != null && o[kk] !== "") return o[kk]; } return ""; };
+    const c = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
+    const stageRaw = c(g("stage")).toLowerCase();
+    const stage = LEAD_STAGES.find((s) => s.key === stageRaw || s.label.toLowerCase().indexOf(stageRaw) === 0) ;
+    const first = c(g("firstname")), last = c(g("lastname"));
+    const name = c(g("name", "contactname")) || [first, last].filter(Boolean).join(" ");
+    return {
+      name,
+      mobile: c(g("mobile", "phone", "contact")).replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, ""),
+      company: c(g("company", "companyname", "salon")),
+      city: c(g("city")), state: c(g("state")),
+      source: c(g("source", "leadsource")) || "Other",
+      product: c(g("product", "productinterest", "interest")),
+      owner: c(g("owner", "rep", "salesperson")),
+      amount: (function () { const n = parseFloat(String(g("expectedvalue", "value", "amount", "dealvalue")).replace(/[^0-9.]/g, "")); return isNaN(n) ? 0 : n; })(),
+      nextAction: c(g("nextstep", "nextaction", "followup")),
+      nextDate: (function () { const d = g("followupdate", "nextdate"); const s = c(d); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : ""; })(),
+      notes: c(g("notes", "description", "remark", "remarks")),
+      link: c(g("attachmentlink", "attachment", "link", "drivelink")),
+      stage: stage ? stage.key : "new",
+      occ: c(g("occupation", "occupaction")) || "Salon",
+    };
+  }
+  function leadImport(file) {
+    const isCsv = /\.csv$/i.test(file.name) || !window.XLSX;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      let rows = [];
+      try {
+        if (isCsv) {
+          const text = e.target.result;
+          const lines = String(text).split(/\r?\n/).filter((l) => l.trim());
+          const hdr = lines.shift().split(",").map((h) => h.trim());
+          rows = lines.map((l) => { const cells = l.split(","); const o = {}; hdr.forEach((h, i) => (o[h] = (cells[i] || "").trim())); return o; });
+        } else {
+          const wb = window.XLSX.read(e.target.result, { type: "array", cellDates: true });
+          wb.SheetNames.forEach((sn) => {
+            const ws = wb.Sheets[sn];
+            window.XLSX.utils.sheet_to_json(ws, { defval: "" }).forEach((r) => rows.push(r));
+          });
+        }
+      } catch (err) { window.alert("Could not read that file: " + err.message); return; }
+      // De-dupe against what's already on the board (by name+mobile).
+      const seen = new Set(leadAll().map((l) => (String(l.name || "").toLowerCase() + "|" + String(l.mobile || ""))));
+      let added = 0, skipped = 0;
+      rows.forEach((raw) => {
+        const m = leadMapImportRow(raw);
+        if (!m.name && !m.mobile && !m.company) return;
+        const key = String(m.name || "").toLowerCase() + "|" + String(m.mobile || "");
+        if (seen.has(key)) { skipped++; return; }
+        seen.add(key);
+        leadAdds.push(Object.assign({ id: "u" + (leadSeq++), stage: m.stage || "new", updatedAt: Date.now() }, m));
+        added++;
+      });
+      saveEdits("Imported " + added + " leads");
+      leadRepaint();
+      window.alert("Imported " + added + " new lead" + (added === 1 ? "" : "s") + (skipped ? " · " + skipped + " skipped as duplicates" : "") + ".");
+    };
+    if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+  }
+  function leadExport() {
+    const rows = leadFiltered(leadAll());
+    const aoa = [LEAD_TPL_HEADERS];
+    rows.forEach((r) => aoa.push([
+      r.name || "", r.mobile || "", r.company || "", r.city || "", r.state || "",
+      r.source || "", r.product || "", r.owner || "", LEAD_STAGE_LABEL[r.stage || "new"],
+      r.stage === "sold" ? (Number(r.soldAmount) || Number(r.amount) || 0) : (Number(r.amount) || 0),
+      r.nextAction || "", r.nextDate || "", r.notes || "", r.link || "",
+    ]));
+    const fname = "primelaze_leads_" + leadToday() + ".xlsx";
+    if (window.XLSX) {
+      const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      window.XLSX.writeFile(wb, fname);
+    } else {
+      const csv = aoa.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const a = document.createElement("a");
+      a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      a.download = fname.replace(/\.xlsx$/, ".csv"); a.click();
+    }
+  }
+
+  function renderLeads() {
+    // keep leadSeq ahead of any restored adds
+    const ids = leadAdds.map((a) => +String(a.id).replace(/^u/, "")).filter((n) => !isNaN(n));
+    leadSeq = Math.max(leadSeq, ids.length ? Math.max(...ids) + 1 : 0);
+    const admin = canEditLeads();
+    const rows0 = leadAll();
+    setTimeout(() => {
+      wireLeadChips();
+      wireLeadRowEdits();
+      const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onchange = fn; };
+      wire("leadSource", (e) => { leadFilter.source = e.target.value; leadRepaint(); });
+      wire("leadOwner", (e) => { leadFilter.owner = e.target.value; leadRepaint(); });
+      wire("leadState", (e) => { leadFilter.state = e.target.value; leadRepaint(); });
+      wire("leadProduct", (e) => { leadFilter.product = e.target.value; leadRepaint(); });
+      const s = document.getElementById("leadSearch");
+      if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
+      const clr = document.getElementById("leadClear");
+      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "" }; renderTab("leads"); };
+      const addB = document.getElementById("leadAddBtn"); if (addB) addB.onclick = leadAddDialog;
+      const tpl = document.getElementById("leadTpl"); if (tpl) tpl.onclick = leadDownloadTemplate;
+      const exp = document.getElementById("leadExport"); if (exp) exp.onclick = leadExport;
+      const up = document.getElementById("leadUpload");
+      if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) leadImport(f); e.target.value = ""; };
+    }, 0);
+    const sel = (id, cur, values, label) => `<label class="ord-field"><span>${esc(label)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>`;
+    return `
+      <div class="section-head">
+        <h1>Leads &amp; Sales Pipeline</h1>
+        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. ${admin ? "Add leads manually or import your lead sheet — duplicates (same name &amp; mobile) are skipped." : "Read-only view."} Seeded from the Beauty Expo &amp; Instagram lead workbook.</p>
+      </div>
+      <div id="leadKpis" class="grid kpi-grid">${leadKpis(rows0)}</div>
+      <div id="leadChips">${leadChips(rows0)}</div>
+      <div class="controls" style="margin-top:14px">
+        <input id="leadSearch" class="search" type="search" placeholder="Search name, salon, mobile, city, rep…" value="${esc(leadFilter.q)}">
+        ${sel("leadSource", leadFilter.source, leadUniq(rows0, "source"), "Source")}
+        ${sel("leadOwner", leadFilter.owner, leadOwners(), "Owner")}
+        ${sel("leadState", leadFilter.state, leadUniq(rows0, "state"), "State")}
+        ${sel("leadProduct", leadFilter.product, LEAD_PRODUCTS, "Product")}
+        <button id="leadClear" class="ghost-btn" type="button">Clear</button>
+        <div class="hq-actions">
+          ${admin ? `<button id="leadAddBtn" class="dl-btn" type="button">＋ Add lead</button>` : ""}
+          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Import leads from Excel/CSV — duplicates are skipped">⬆ Import<input id="leadUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          <button id="leadTpl" class="ghost-btn" type="button">⬇ Template</button>
+          <button id="leadExport" class="ghost-btn" type="button">⬇ Export view</button>
+        </div>
+      </div>
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
+        <h2 style="margin:0">Lead board</h2>
+        <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length} leads</span>
+      </div>
+      <div class="table-wrap"><table class="lead-table">
+        <thead><tr>
+          <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
+          <th>Owner</th><th>Stage</th><th class="num">Value</th><th>Follow-up</th><th>Notes</th>${admin ? "<th></th>" : ""}
+        </tr></thead>
+        <tbody id="leadBody">${leadRows(leadFiltered(rows0), admin)}</tbody>
+      </table></div>`;
+  }
+
   /* ================= DELIVERY CHALLAN ================= */
   const DEFAULT_FROM = {
     name: "Leeford Healthcare Ltd (Primelaze)",
@@ -4541,6 +4957,13 @@
       if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager", empId: e.orgNsm.empId || "" };
       if (Array.isArray(e.termsOverride)) termsOverride = e.termsOverride;
       if (e.ovEdits && typeof e.ovEdits === "object") { Object.keys(ovEdits).forEach((k) => delete ovEdits[k]); Object.assign(ovEdits, e.ovEdits); }
+      if (e.leadEdits && typeof e.leadEdits === "object") { Object.keys(leadEdits).forEach((k) => delete leadEdits[k]); Object.assign(leadEdits, e.leadEdits); }
+      if (Array.isArray(e.leadAdds)) {
+        leadAdds.length = 0; e.leadAdds.forEach((l) => leadAdds.push(l));
+        const ids = leadAdds.map((a) => +String(a.id).replace(/^u/, "")).filter((n) => !isNaN(n));
+        leadSeq = ids.length ? Math.max(...ids) + 1 : 0;
+      }
+      if (Array.isArray(e.leadRemovals)) { leadRemovals.length = 0; e.leadRemovals.forEach((id) => leadRemovals.push(id)); }
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -4573,7 +4996,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, ordered, orderedOn, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, ordered, orderedOn, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
