@@ -3297,8 +3297,8 @@
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
-    "product", "owner", "notes", "link", "amount", "stage", "nextAction", "nextDate",
-    "soldAmount", "soldDate", "lostReason", "updatedAt"];
+    "product", "owner", "notes", "link", "stage", "history",
+    "soldAmount", "soldDate", "updatedAt"];
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
   const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
@@ -3315,6 +3315,9 @@
       const o = Object.assign({ _seed: true, id: "L" + i }, l);
       LEAD_FIELDS.forEach((f) => { const k = o.id + "#" + f; if (k in leadEdits) o[f] = leadEdits[k]; });
       o.stage = o.stage || "new";
+      // Preserve the original lead-sheet note as the first (undated) remark so
+      // it stays visible under the Remark column even before anyone updates it.
+      if (!Array.isArray(o.history)) o.history = o.notes ? [{ at: 0, stage: "new", by: "", text: o.notes }] : [];
       return o;
     });
     const adds = leadAdds.map((a) => Object.assign({ _seed: false, stage: "new" }, a));
@@ -3368,8 +3371,6 @@
       return true;
     });
   }
-  const leadIsOverdue = (r) => r.nextDate && LEAD_OPEN.indexOf(r.stage || "new") >= 0 && String(r.nextDate).slice(0, 10) < leadToday();
-
   // Rows that match every ACTIVE filter except the one named — used so each
   // filter dropdown only offers values that actually exist under the other
   // filters (e.g. picking a source narrows the Owner list to that source).
@@ -3396,15 +3397,13 @@
     const open = rows.filter((r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0).length;
     const sold = rows.filter((r) => r.stage === "sold");
     const lost = rows.filter((r) => r.stage === "lost").length;
-    const wonVal = sold.reduce((a, r) => a + (Number(r.soldAmount) || Number(r.amount) || 0), 0);
-    const pipeVal = rows.filter((r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0).reduce((a, r) => a + (Number(r.amount) || 0), 0);
-    const overdue = rows.filter(leadIsOverdue).length;
+    const wonVal = sold.reduce((a, r) => a + (Number(r.soldAmount) || 0), 0);
     const conv = total ? Math.round((sold.length / total) * 100) : 0;
     const card = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
     return card("", total, "Total leads", open + " still open")
       + card("k-teal", sold.length, "Sold / won", conv + "% conversion")
       + card("k-good", rupeeShort(wonVal), "Won value", "closed deals")
-      + card("k-warn", rupeeShort(pipeVal), "Open pipeline", overdue + " follow-ups overdue")
+      + card("k-warn", open, "In pipeline", "being worked")
       + card("k-warn", lost, "Lost", "marked lost");
   }
   // Pipeline funnel = clickable stage chips that also filter the board.
@@ -3420,7 +3419,7 @@
 
   function leadStageCell(r, admin) {
     if (!admin) return `<span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>`;
-    return `<select class="select lead-edit lead-stage-sel lst-${r.stage || "new"}" data-id="${esc(r.id)}" data-field="stage">
+    return `<select class="select lead-stage-sel lst-${r.stage || "new"}" data-id="${esc(r.id)}" title="Change stage — you'll be asked for a remark">
       ${LEAD_STAGES.map((s) => `<option value="${s.key}"${(r.stage || "new") === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}
     </select>`;
   }
@@ -3434,24 +3433,32 @@
       ${owners.map((o) => `<option value="${esc(o)}"${cur === o ? " selected" : ""}>${esc(spLabel(o))}</option>`).join("")}
     </select>`;
   }
+  // Remark cell = latest remark + timestamped history + "add remark" control.
+  function leadHistory(r) { return Array.isArray(r.history) ? r.history : []; }
+  function leadRemarkCell(r, admin) {
+    const hist = leadHistory(r);
+    const last = hist.length ? hist[hist.length - 1] : null;
+    const when = (h) => h.at ? fmtWhen(h.at) : "from lead sheet";
+    const meta = (h) => `${esc(when(h))} · <span class="lead-stage-tag lst-${h.stage || "new"}">${esc(LEAD_STAGE_LABEL[h.stage || "new"] || "")}</span>${h.by ? " · " + esc(h.by) : ""}`;
+    const lastHtml = last
+      ? `<div class="lead-remark-last">${esc(last.text)}</div><div class="t-muted lead-remark-meta">${meta(last)}</div>`
+      : `<span class="t-muted">No remarks yet</span>`;
+    const doc = r.link ? ` <a href="${esc(r.link)}" target="_blank" rel="noopener" title="Open attachment">📎</a>` : "";
+    const sold = r.stage === "sold" && (Number(r.soldAmount) || r.soldDate)
+      ? `<div class="lead-sold-note">✓ Sold ${r.soldAmount ? "₹" + inr(Number(r.soldAmount)) : ""}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
+    const histBtn = hist.length > 1 ? `<button type="button" class="linkish lead-hist-toggle" data-id="${esc(r.id)}">History (${hist.length})</button>` : "";
+    const addBtn = admin ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Log an activity / add a remark">＋ Remark</button>` : "";
+    const delBtn = admin ? `<button type="button" class="linkish lead-del" data-id="${esc(r.id)}" title="Delete this lead">Delete</button>` : "";
+    const histList = hist.length ? `<ul class="lead-hist" hidden>${hist.slice().reverse().map((h) =>
+      `<li><span class="lead-hist-when">${esc(when(h))}</span> · <span class="lead-stage-tag lst-${h.stage || "new"}">${esc(LEAD_STAGE_LABEL[h.stage || "new"] || "")}</span>${h.by ? ` · <b>${esc(h.by)}</b>` : ""}<div>${esc(h.text)}</div></li>`).join("")}</ul>` : "";
+    return `${sold}${lastHtml}${doc}<div class="lead-remark-tools">${addBtn}${histBtn}${delBtn}</div>${histList}`;
+  }
   function leadRows(rows, admin) {
-    if (!rows.length) return `<tr><td colspan="11" class="empty">No leads match these filters.</td></tr>`;
+    if (!rows.length) return `<tr><td colspan="8" class="empty">No leads match these filters.</td></tr>`;
     return rows.map((r) => {
       const loc = [r.city, r.state].filter(Boolean).join(", ");
       const sold = r.stage === "sold";
-      const val = sold ? (Number(r.soldAmount) || Number(r.amount) || 0) : (Number(r.amount) || 0);
-      const followInput = admin
-        ? `<input type="text" class="lead-edit lead-next" data-id="${esc(r.id)}" data-field="nextAction" value="${esc(r.nextAction || "")}" placeholder="next step">
-           <input type="date" class="lead-edit lead-nextd" data-id="${esc(r.id)}" data-field="nextDate" value="${esc(r.nextDate || "")}">`
-        : (r.nextAction || r.nextDate ? `${esc(r.nextAction || "")}${r.nextDate ? ` <span class="t-muted">(${esc(r.nextDate)})</span>` : ""}` : "—");
-      const valCell = admin && !sold
-        ? `<input type="number" class="lead-edit num-input lead-amt" data-id="${esc(r.id)}" data-field="amount" value="${r.amount != null && r.amount !== 0 ? esc(r.amount) : ""}" placeholder="₹">`
-        : (val ? "₹" + inr(val) : "—");
-      const doc = r.link ? `<a href="${esc(r.link)}" target="_blank" rel="noopener" title="Open attachment">📎</a>` : "";
-      const actions = admin ? `
-        ${!sold ? `<button type="button" class="mini-btn lead-sold" data-id="${esc(r.id)}" title="Mark as sold / won">✓ Sold</button>` : `<span class="t-muted" title="Sold on ${esc(r.soldDate || "")}">✓ ${esc(r.soldDate || "sold")}</span>`}
-        <button type="button" class="mini-btn danger lead-del" data-id="${esc(r.id)}" title="Delete lead">✕</button>` : "";
-      return `<tr class="${leadIsOverdue(r) ? "lead-overdue" : ""}${sold ? " lead-won" : ""}">
+      return `<tr class="${sold ? "lead-won" : ""}">
         <td><div class="lead-name">${esc(r.name || "—")}</div><div class="t-muted">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</div></td>
         <td>${r.mobile ? `<a href="tel:${esc(r.mobile)}">${esc(r.mobile)}</a>` : "—"}</td>
         <td>${esc(loc || "—")}</td>
@@ -3459,10 +3466,7 @@
         <td>${esc(r.product || "—")}</td>
         <td>${leadOwnerCell(r, admin)}</td>
         <td>${leadStageCell(r, admin)}</td>
-        <td class="num">${valCell}</td>
-        <td class="lead-followcell">${followInput}</td>
-        <td class="lead-notecell">${esc(r.notes || "")} ${doc}</td>
-        ${admin ? `<td class="lead-actions">${actions}</td>` : ""}
+        <td class="lead-remarkcell">${leadRemarkCell(r, admin)}</td>
       </tr>`;
     }).join("");
   }
@@ -3502,33 +3506,81 @@
     });
   }
   function wireLeadRowEdits() {
+    // Owner is the only free inline edit (no remark needed).
     document.querySelectorAll(".lead-edit").forEach((el) => {
-      const handler = () => {
-        leadUpdate(el.dataset.id, el.dataset.field, el.dataset.field === "amount" ? (parseFloat(el.value) || 0) : el.value);
-        if (el.dataset.field === "stage") leadRepaint(); // stage change moves KPIs & colours
-        else if (el.dataset.field === "amount") { const kk = document.getElementById("leadKpis"); if (kk) kk.innerHTML = leadKpis(leadAll()); }
-        else if (el.classList.contains("lead-stage-sel")) { /* handled above */ }
-      };
-      if (el.tagName === "SELECT" || el.type === "date") el.onchange = handler; else el.onchange = handler;
+      el.onchange = () => { leadUpdate(el.dataset.id, el.dataset.field, el.value); };
     });
-    document.querySelectorAll(".lead-sold").forEach((b) => (b.onclick = () => leadMarkSold(b.dataset.id)));
+    // Stage change → ask for a remark (and deal value/date when moving to Sold).
+    document.querySelectorAll(".lead-stage-sel").forEach((el) => {
+      el.onchange = () => {
+        const id = el.dataset.id, newStage = el.value;
+        const l = leadAll().find((x) => x.id === id); const oldStage = (l && l.stage) || "new";
+        if (newStage === oldStage) return;
+        leadRemarkDialog({ id, newStage, oldStage, selEl: el });
+      };
+    });
+    // "＋ Remark" = log an activity in the CURRENT stage.
+    document.querySelectorAll(".lead-remark-add").forEach((b) => (b.onclick = () => leadRemarkDialog({ id: b.dataset.id })));
+    // History expander.
+    document.querySelectorAll(".lead-hist-toggle").forEach((b) => (b.onclick = () => {
+      const ul = b.closest("td").querySelector(".lead-hist"); if (ul) ul.hidden = !ul.hidden;
+    }));
+    // Delete (moved into the remark cell as a small link).
     document.querySelectorAll(".lead-del").forEach((b) => (b.onclick = () => {
       const l = leadAll().find((x) => x.id === b.dataset.id);
       if (window.confirm('Delete lead "' + ((l && l.name) || "") + '"? This removes it for everyone.')) { leadRemove(b.dataset.id); leadRepaint(); }
     }));
   }
-  function leadMarkSold(id) {
+  // Append a timestamped remark to a lead's history.
+  function leadAddHistory(id, stage, text) {
     const l = leadAll().find((x) => x.id === id); if (!l) return;
-    const amt = window.prompt("🎉 Mark as SOLD — enter the deal value (₹):", l.amount || l.soldAmount || "");
-    if (amt === null) return;
-    const n = parseFloat(String(amt).replace(/[^0-9.]/g, "")) || 0;
-    let date = window.prompt("Sold on (YYYY-MM-DD):", l.soldDate || leadToday());
-    if (date === null) return;
-    date = (date || "").trim() || leadToday();
-    leadUpdate(id, "soldAmount", n);
-    leadUpdate(id, "soldDate", date);
-    leadUpdate(id, "stage", "sold");
-    leadRepaint();
+    const hist = leadHistory(l).slice();
+    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text });
+    leadUpdate(id, "history", hist);
+  }
+  // Unified remark popup. With newStage → it's a stage move (and the Sold move
+  // also collects deal value + date). Without → it's an activity log in place.
+  function leadRemarkDialog(opts) {
+    const { id, newStage, oldStage, selEl } = opts;
+    const l = leadAll().find((x) => x.id === id); if (!l) { if (selEl && oldStage) selEl.value = oldStage; return; }
+    const moving = !!newStage;
+    const isSold = newStage === "sold";
+    const title = moving
+      ? `Move “${esc(l.name || l.company || "lead")}” to ${esc(LEAD_STAGE_LABEL[newStage])}`
+      : `Add remark — ${esc(l.name || l.company || "lead")}`;
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>${title}</h3>
+      ${isSold ? `<div class="lead-form-grid">
+        <label>Deal value ₹<input id="lrAmt" type="number" placeholder="0" value="${l.soldAmount ? esc(l.soldAmount) : ""}"></label>
+        <label>Sold on<input id="lrDate" type="date" value="${esc(l.soldDate || leadToday())}"></label>
+      </div>` : ""}
+      <label class="lead-remark-label">Remark ${moving ? "(what happened at this step)" : "(activity update)"}
+        <textarea id="lrText" rows="3" placeholder="e.g. Called, shared brochure, asked to follow up next week"></textarea></label>
+      <div class="lead-modal-actions">
+        <button type="button" class="ghost-btn" id="lrCancel">Cancel</button>
+        <button type="button" class="dl-btn" id="lrSave">Save</button>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const revert = () => { if (moving && selEl && oldStage) selEl.value = oldStage; };
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
+    document.getElementById("lrCancel").onclick = () => { revert(); close(); };
+    document.getElementById("lrSave").onclick = () => {
+      const text = (document.getElementById("lrText").value || "").trim();
+      if (!text) { window.alert("Please enter a remark."); return; }
+      if (isSold) {
+        const n = parseFloat(String(document.getElementById("lrAmt").value).replace(/[^0-9.]/g, "")) || 0;
+        const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
+        leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
+      }
+      if (moving) leadUpdate(id, "stage", newStage);
+      leadAddHistory(id, moving ? newStage : (l.stage || "new"), text);
+      close(); leadRepaint();
+    };
+    setTimeout(() => { const t = document.getElementById("lrText"); if (t) t.focus(); }, 0);
   }
 
   // ---- Add-lead modal ----
@@ -3547,10 +3599,7 @@
         <label>Source<select id="lfSource">${LEAD_SOURCES.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
         <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
         <label>Owner (rep)<select id="lfOwner"><option value="">— Unassigned —</option>${owners.map((o) => `<option value="${esc(o)}">${esc(spLabel(o))}</option>`).join("")}</select></label>
-        <label>Expected value ₹<input id="lfAmount" type="number" placeholder="0"></label>
-        <label>Next step<input id="lfNext" type="text" placeholder="e.g. call back"></label>
-        <label>Follow-up date<input id="lfNextD" type="date"></label>
-        <label class="lead-form-wide">Notes<input id="lfNotes" type="text" placeholder="context, requirement…"></label>
+        <label class="lead-form-wide">Opening remark<input id="lfRemark" type="text" placeholder="how the lead came in / first note"></label>
       </div>
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="lfCancel">Cancel</button>
@@ -3565,11 +3614,12 @@
       const v = (id) => (document.getElementById(id).value || "").trim();
       const name = v("lfName"), company = v("lfCompany"), mobile = v("lfMobile");
       if (!name && !company && !mobile) { window.alert("Enter at least a name, company or mobile."); return; }
-      leadAddNew({
+      const remark = v("lfRemark");
+      const id = leadAddNew({
         name, mobile, company, city: v("lfCity"), state: v("lfState"),
         source: v("lfSource"), product: v("lfProduct"), owner: v("lfOwner"),
-        amount: parseFloat(v("lfAmount")) || 0, nextAction: v("lfNext"), nextDate: v("lfNextD"),
-        notes: v("lfNotes"), occ: "Salon",
+        occ: "Salon",
+        history: remark ? [{ at: Date.now(), stage: "new", by: (sessionUser && sessionUser.email) || "", text: remark }] : [],
       });
       close(); leadRepaint();
     };
@@ -3577,9 +3627,9 @@
   }
 
   // ---- Excel import / export ----
-  const LEAD_TPL_HEADERS = ["Name", "Mobile", "Company", "City", "State", "Source", "Product", "Owner", "Stage", "Expected Value", "Next Step", "Follow-up Date", "Notes", "Attachment link"];
+  const LEAD_TPL_HEADERS = ["Name", "Mobile", "Company", "City", "State", "Source", "Product", "Owner", "Stage", "Remark", "Attachment link"];
   function leadDownloadTemplate() {
-    const sample = ["Priya Sharma", "9876543210", "Glow Salon", "Pune", "Maharashtra", "Instagram", "Esthemax", "Lubdha", "new", 250000, "Book demo", "", "Wants pricing", ""];
+    const sample = ["Priya Sharma", "9876543210", "Glow Salon", "Pune", "Maharashtra", "Instagram", "Esthemax", "Lubdha", "new", "Enquired on Instagram — wants pricing", ""];
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet([LEAD_TPL_HEADERS, sample]);
       const wb = window.XLSX.utils.book_new();
@@ -3599,6 +3649,8 @@
     const stage = LEAD_STAGES.find((s) => s.key === stageRaw || s.label.toLowerCase().indexOf(stageRaw) === 0) ;
     const first = c(g("firstname")), last = c(g("lastname"));
     const name = c(g("name", "contactname")) || [first, last].filter(Boolean).join(" ");
+    const stageKey = stage ? stage.key : "new";
+    const remark = c(g("remark", "remarks", "notes", "description"));
     return {
       name,
       mobile: c(g("mobile", "phone", "contact")).replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, ""),
@@ -3607,13 +3659,10 @@
       source: c(g("source", "leadsource")) || "Other",
       product: c(g("product", "productinterest", "interest")),
       owner: c(g("owner", "rep", "salesperson")),
-      amount: (function () { const n = parseFloat(String(g("expectedvalue", "value", "amount", "dealvalue")).replace(/[^0-9.]/g, "")); return isNaN(n) ? 0 : n; })(),
-      nextAction: c(g("nextstep", "nextaction", "followup")),
-      nextDate: (function () { const d = g("followupdate", "nextdate"); const s = c(d); return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : ""; })(),
-      notes: c(g("notes", "description", "remark", "remarks")),
       link: c(g("attachmentlink", "attachment", "link", "drivelink")),
-      stage: stage ? stage.key : "new",
+      stage: stageKey,
       occ: c(g("occupation", "occupaction")) || "Salon",
+      history: remark ? [{ at: Date.now(), stage: stageKey, by: (sessionUser && sessionUser.email) || "", text: remark }] : [],
     };
   }
   function leadImport(file) {
@@ -3655,13 +3704,18 @@
   }
   function leadExport() {
     const rows = leadFiltered(leadAll());
-    const aoa = [LEAD_TPL_HEADERS];
-    rows.forEach((r) => aoa.push([
-      r.name || "", r.mobile || "", r.company || "", r.city || "", r.state || "",
-      r.source || "", r.product || "", r.owner || "", LEAD_STAGE_LABEL[r.stage || "new"],
-      r.stage === "sold" ? (Number(r.soldAmount) || Number(r.amount) || 0) : (Number(r.amount) || 0),
-      r.nextAction || "", r.nextDate || "", r.notes || "", r.link || "",
-    ]));
+    const EXPORT_HEADERS = ["Name", "Mobile", "Company", "City", "State", "Source", "Product", "Owner", "Stage", "Latest Remark", "Sold Value", "Sold Date", "Remarks history", "Attachment link"];
+    const aoa = [EXPORT_HEADERS];
+    rows.forEach((r) => {
+      const hist = leadHistory(r);
+      const last = hist.length ? hist[hist.length - 1].text : "";
+      const histStr = hist.map((h) => `[${h.at ? fmtWhen(h.at) : "lead sheet"} · ${LEAD_STAGE_LABEL[h.stage || "new"] || ""}] ${h.text}`).join(" | ");
+      aoa.push([
+        r.name || "", r.mobile || "", r.company || "", r.city || "", r.state || "",
+        r.source || "", r.product || "", r.owner || "", LEAD_STAGE_LABEL[r.stage || "new"],
+        last, r.stage === "sold" ? (Number(r.soldAmount) || 0) : "", r.soldDate || "", histStr, r.link || "",
+      ]);
+    });
     const fname = "primelaze_leads_" + leadToday() + ".xlsx";
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet(aoa);
@@ -3729,7 +3783,7 @@
       <div class="table-wrap"><table class="lead-table">
         <thead><tr>
           <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
-          <th>Owner</th><th>Stage</th><th class="num">Value</th><th>Follow-up</th><th>Notes</th>${admin ? "<th></th>" : ""}
+          <th>Owner</th><th>Stage</th><th>Remark &amp; history</th>
         </tr></thead>
         <tbody id="leadBody">${leadRows(leadFiltered(rows0), admin)}</tbody>
       </table></div>`;
