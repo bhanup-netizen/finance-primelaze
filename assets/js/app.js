@@ -3504,10 +3504,9 @@
     const tlBtn = `<button type="button" class="linkish lead-timeline-btn" data-id="${esc(r.id)}">🕘 Timeline${hist.length ? " (" + hist.length + ")" : ""}</button>`;
     const addBtn = admin ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Add an update to the timeline">＋ Update</button>` : "";
     const archBtn = admin ? (archived
-      ? `<button type="button" class="linkish lead-unarchive" data-id="${esc(r.id)}" title="Restore to the active board">Restore</button>`
-      : `<button type="button" class="linkish lead-archive" data-id="${esc(r.id)}" title="Archive — hides it but keeps it in the database">Archive</button>`) : "";
-    const delBtn = canDeleteLeads() ? `<button type="button" class="linkish lead-del" data-id="${esc(r.id)}" title="Permanently delete (super-admin only)">Delete</button>` : "";
-    return `${archTag}${leadStepper(r)}${ageHtml}${sold}${lastHtml}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}${delBtn}</div>`;
+      ? `<button type="button" class="linkish lead-unarchive" data-id="${esc(r.id)}" title="Restore to the active board">↩ Restore</button>`
+      : `<button type="button" class="linkish lead-archive" data-id="${esc(r.id)}" title="Archive — hides it but keeps it in the database">🗄 Archive</button>`) : "";
+    return `${archTag}${leadStepper(r)}${ageHtml}${sold}${lastHtml}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}</div>`;
   }
   // Full lifecycle timeline in a modal — entered-by, source, then every move.
   function leadTimelineDialog(id) {
