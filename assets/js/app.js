@@ -2961,14 +2961,19 @@
     if (!col) {
       summary = `<p class="muted-note">This shows how much outstanding was <b>collected</b> and <b>when</b>. Import your sheet now, then again after payments come in — the drop per customer will appear here. Snapshots so far: <b>${paySnapshots.length}</b>.</p>`;
     } else {
-      const body = col.rows.slice(0, 100).map((r) => `<tr>
+      // Look up salesperson + state (HQ) for each customer from the current data.
+      const meta = {};
+      payAll().forEach((r) => { const c = (r.customer || "—").trim(); if (c && !meta[c]) meta[c] = { sp: r.salesPerson || "", hq: r.hq || "" }; });
+      const body = col.rows.slice(0, 100).map((r) => { const mm = meta[r.customer] || {}; return `<tr>
         <td class="t-name">${esc(r.customer)}</td>
+        <td>${esc(mm.sp ? spLabel(mm.sp) : "—")}</td>
+        <td>${esc(mm.hq || "—")}</td>
         <td class="num">${rupeeShort(r.before)}</td>
         <td class="num">${rupeeShort(r.after)}</td>
-        <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td></tr>`).join("")
-        || `<tr><td colspan="4" class="empty">No outstanding decreased since the previous import.</td></tr>`;
+        <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td></tr>`; }).join("")
+        || `<tr><td colspan="6" class="empty">No outstanding decreased since the previous import.</td></tr>`;
       summary = `<p>Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s).</p>
-        <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th></tr></thead><tbody>${body}</tbody></table></div>`;
+        <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th>Sales Person</th><th>State</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th></tr></thead><tbody>${body}</tbody></table></div>`;
     }
     const trendRows = trend.map((s, i) => {
       const older = trend[i + 1];
@@ -2993,8 +2998,6 @@
     const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
     setHtml("payKpis", payKpis(rep));
     setHtml("payChips", payStatusChips(rep));
-    setHtml("payBreakCat", payBreakdown(rep, "category", "Category"));
-    setHtml("payBreakHq", payBreakdown(rep, "hq", "HQ"));
     setHtml("payBody", payTableRows(rep));
     setHtml("payTotals", payTotalsRow(rep));
     const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rep.length + " records";
@@ -3227,17 +3230,13 @@
       ${payHideAll ? `<div class="muted-note" style="margin:2px 0 8px">⚠ All commitment data is cleared (hidden).${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>`
         : payClearBefore ? `<div class="muted-note" style="margin:2px 0 8px">Old data hidden — showing commitments committed on/after <b>${esc(payClearBefore)}</b>.${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>` : ""}
       ${(!payHideAll && payHideBase) ? `<div class="muted-note" style="margin:2px 0 8px">Showing <b>imported data only</b> — the built-in sample rows are hidden.${admin ? ` <button id="payShowBase" class="linkish" type="button">Show built-in data too</button>` : ""}</div>` : ""}
-      <div class="two-col" style="margin:6px 0 4px">
-        <div class="card"><h2 style="margin-top:0">Pending by category</h2><div id="payBreakCat">${payBreakdown(payFiltered(rows0), "category", "Category")}</div></div>
-        <div class="card"><h2 style="margin-top:0">Pending by HQ</h2><div id="payBreakHq">${payBreakdown(payFiltered(rows0), "hq", "HQ")}</div></div>
-      </div>
       ${payCollectionsCard()}
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
         <h2 style="margin:0">Detailed commitment report</h2>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table class="pay-report">
-        <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th><th>Received date</th><th>EMI</th></tr>${payColFilterRow(rows0)}</thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th><th>Received date</th><th>EMI</th></tr></thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
