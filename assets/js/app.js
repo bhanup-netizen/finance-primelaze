@@ -3265,7 +3265,6 @@
       ${payHideAll ? `<div class="muted-note" style="margin:2px 0 8px">⚠ All commitment data is cleared (hidden).${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>`
         : payClearBefore ? `<div class="muted-note" style="margin:2px 0 8px">Old data hidden — showing commitments committed on/after <b>${esc(payClearBefore)}</b>.${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>` : ""}
       ${(!payHideAll && payHideBase) ? `<div class="muted-note" style="margin:2px 0 8px">Showing <b>imported data only</b> — the built-in sample rows are hidden.${admin ? ` <button id="payShowBase" class="linkish" type="button">Show built-in data too</button>` : ""}</div>` : ""}
-      ${payCollectionsCard()}
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
         <h2 style="margin:0">Detailed commitment report</h2>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
