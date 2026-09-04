@@ -3236,7 +3236,7 @@
         <h2 style="margin:0">Detailed commitment report</h2>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
-      <div class="table-wrap" data-colfilter="1"><table>
+      <div class="table-wrap" data-colfilter="1"><table class="pay-report">
         <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th><th>Received date</th><th>EMI</th></tr>${payColFilterRow(rows0)}</thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>

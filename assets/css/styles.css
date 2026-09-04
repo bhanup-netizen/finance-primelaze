@@ -121,6 +121,15 @@ a { color: var(--accent); text-decoration: none; }
 .inv-table input[type="number"] { max-width: 60px; }
 .inv-table input[type="date"] { max-width: 138px; font-size: 12px; padding: 3px 6px; }
 .inv-table .ghost-btn { padding: 4px 8px; font-size: 12px; }
+/* Outstanding Payment report — compact columns to reduce horizontal scroll. */
+.pay-report { font-size: 12px; }
+.pay-report th, .pay-report td { padding: 5px 6px; }
+.pay-report td, .pay-report th { white-space: nowrap; }
+.pay-report td.t-name { white-space: normal; max-width: 150px; word-break: break-word; }
+.pay-report td:nth-child(2), .pay-report th:nth-child(2) { white-space: normal; max-width: 120px; } /* Product */
+.pay-report td:nth-child(16), .pay-report th:nth-child(16) { white-space: normal; max-width: 130px; } /* Remark */
+.pay-report td:nth-child(18), .pay-report th:nth-child(18) { white-space: normal; max-width: 110px; } /* EMI */
+.pay-report .pay-cf input, .pay-report .pay-cf.select, .pay-report select.pay-cf { min-width: 60px; font-size: 11px; padding: 2px 4px; }
 .topbar-meta { display: flex; align-items: center; gap: 12px; }
 .fy-pill {
   font-size: 12px; font-weight: 600; color: var(--accent);
