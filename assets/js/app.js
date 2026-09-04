@@ -3785,7 +3785,10 @@
     const stageRaw = c(g("stage")).toLowerCase();
     const stage = LEAD_STAGES.find((s) => s.key === stageRaw || s.label.toLowerCase().indexOf(stageRaw) === 0) ;
     const first = c(g("firstname")), last = c(g("lastname"));
-    const name = c(g("name", "contactname")) || [first, last].filter(Boolean).join(" ");
+    let name = c(g("name", "contactname")) || [first, last].filter(Boolean).join(" ");
+    // Some sheets (e.g. the Instagram tab) carry the name in "Record Type 2/3".
+    if (!name) { const n2 = c(o["Record Type 2"]), n3 = c(o["Record Type 3"]); name = [n2, n3].filter((x) => x && !/^na$/i.test(x)).join(" "); }
+    if (/^lead$/i.test(name)) name = "";
     const stageKey = stage ? stage.key : "new";
     const remark = c(g("remark", "remarks", "notes", "description"));
     return {
@@ -3821,21 +3824,31 @@
           });
         }
       } catch (err) { window.alert("Could not read that file: " + err.message); return; }
-      // De-dupe against what's already on the board (by name+mobile).
-      const seen = new Set(leadAll().map((l) => (String(l.name || "").toLowerCase() + "|" + String(l.mobile || ""))));
-      let added = 0, skipped = 0;
+      // Mobile number is the unique key. Existing mobiles are never overwritten;
+      // rows without a mobile are rejected and reported.
+      const mobKey = (s) => String(s || "").replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
+      const seen = new Set(leadAll().map((l) => mobKey(l.mobile)).filter(Boolean));
+      let added = 0, dup = 0;
+      const noMobile = [];
       rows.forEach((raw) => {
         const m = leadMapImportRow(raw);
-        if (!m.name && !m.mobile && !m.company) return;
-        const key = String(m.name || "").toLowerCase() + "|" + String(m.mobile || "");
-        if (seen.has(key)) { skipped++; return; }
+        if (!m.name && !m.mobile && !m.company) return; // blank row
+        const key = mobKey(m.mobile);
+        if (!key) { noMobile.push(m.name || m.company || "(unnamed row)"); return; } // no mobile → reject
+        if (seen.has(key)) { dup++; return; } // already on the board → keep existing, don't override
         seen.add(key);
         leadAdds.push(Object.assign({ id: "u" + (leadSeq++), stage: m.stage || "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, m));
         added++;
       });
       saveEdits("Imported " + added + " leads");
       leadRepaint();
-      window.alert("Imported " + added + " new lead" + (added === 1 ? "" : "s") + (skipped ? " · " + skipped + " skipped as duplicates" : "") + ".");
+      let msg = "✅ Imported " + added + " new lead" + (added === 1 ? "" : "s") + ".";
+      if (dup) msg += "\n⏭ " + dup + " already existed (matched by mobile) — kept as-is, not overwritten.";
+      if (noMobile.length) {
+        msg += "\n\n⚠ " + noMobile.length + " row" + (noMobile.length === 1 ? "" : "s") + " skipped — NO mobile number:\n" +
+          noMobile.slice(0, 12).map((n) => "• " + n).join("\n") + (noMobile.length > 12 ? "\n…and " + (noMobile.length - 12) + " more" : "");
+      }
+      window.alert(msg);
     };
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
@@ -3898,7 +3911,7 @@
     return `
       <div class="section-head">
         <h1>Casovil Leads</h1>
-        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually or import your lead sheet — duplicates (same name &amp; mobile) are skipped." : "Read-only view."}</p>
+        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually or <b>import your lead sheet (Excel/CSV)</b>. The <b>mobile number is the unique key</b> — existing leads are never overwritten, and rows without a mobile are skipped with a warning. Use ⬇ Template for the format." : "Read-only view."}</p>
       </div>
       ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
       <div id="leadKpis" class="grid kpi-grid">${leadKpis(rows0)}</div>
