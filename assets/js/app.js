@@ -3547,6 +3547,16 @@
       ${LEAD_STAGES.map((s) => chip(s.key, s.label, counts[s.key] || 0)).join("")}
     </div>`;
   }
+  // Top-level product filter (Esthemax / Celluma / Devices) as clickable chips.
+  function leadProductChips(rows) {
+    const prods = ["Esthemax", "Celluma", "Devices"];
+    const count = (p) => rows.filter((r) => String(r.product || "").indexOf(p) >= 0).length;
+    const chip = (val, label, n) => `<button type="button" class="pay-chip lead-prod-chip${leadFilter.product === val ? " active" : ""}" data-leadprod="${esc(val)}">${esc(label)}<span class="pay-chip-n">${n}</span></button>`;
+    return `<div class="pay-chips lead-prod-chips">
+      <button type="button" class="pay-chip${leadFilter.product === "" ? " active" : ""}" data-leadprod="">All products<span class="pay-chip-n">${rows.length}</span></button>
+      ${prods.map((p) => chip(p, p, count(p))).join("")}
+    </div>`;
+  }
 
   function leadStageCell(r, admin) {
     if (!admin) return `<span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>`;
@@ -3735,7 +3745,6 @@
     leadFillSelect("leadSource", "source", leadUniq(leadRowsExcept(rows0, "source"), "source"));
     leadFillSelect("leadOwner", "owner", leadOwnersPresent(leadRowsExcept(rows0, "owner")), true);
     leadFillSelect("leadState", "state", leadUniq(leadRowsExcept(rows0, "state"), "state"));
-    leadFillSelect("leadProduct", "product", leadProductsPresent(leadRowsExcept(rows0, "product")));
   }
 
   // Active board excludes archived leads; the Archived view shows only them.
@@ -3746,7 +3755,9 @@
     const rows0 = leadBoardRows();
     const filtered = leadFiltered(rows0);
     const k = document.getElementById("leadKpis"); if (k) k.innerHTML = leadKpis(rows0);
-    const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(rows0); wireLeadChips(); }
+    const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(rows0); }
+    const pc = document.getElementById("leadProdChips"); if (pc) { pc.innerHTML = leadProductChips(rows0); }
+    wireLeadChips();
     const sc = document.getElementById("leadScore"); if (sc) sc.innerHTML = leadScoreboard(rows0);
     leadSyncFilters(rows0);
     const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
@@ -3757,6 +3768,9 @@
   function wireLeadChips() {
     document.querySelectorAll("[data-leadstage]").forEach((el) => {
       el.onclick = () => { leadFilter.stage = el.dataset.leadstage; leadRepaint(); };
+    });
+    document.querySelectorAll("[data-leadprod]").forEach((el) => {
+      el.onclick = () => { leadFilter.product = el.dataset.leadprod; leadRepaint(); };
     });
   }
   function wireLeadRowEdits() {
@@ -4025,7 +4039,6 @@
       wire("leadSource", (e) => { leadFilter.source = e.target.value; leadRepaint(); });
       wire("leadOwner", (e) => { leadFilter.owner = e.target.value; leadRepaint(); });
       wire("leadState", (e) => { leadFilter.state = e.target.value; leadRepaint(); });
-      wire("leadProduct", (e) => { leadFilter.product = e.target.value; leadRepaint(); });
       const s = document.getElementById("leadSearch");
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
@@ -4055,13 +4068,13 @@
       ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
       <div id="leadKpis" class="grid kpi-grid">${leadKpis(rows0)}</div>
       <div id="leadChips">${leadChips(rows0)}</div>
+      <div id="leadProdChips">${leadProductChips(rows0)}</div>
       <div id="leadScore">${leadScoreboard(rows0)}</div>
       <div class="controls" style="margin-top:14px">
         <input id="leadSearch" class="search" type="search" placeholder="Search name, salon, mobile, city, rep…" value="${esc(leadFilter.q)}">
         ${sel("leadSource", leadFilter.source, leadUniq(leadRowsExcept(rows0, "source"), "source"), "Source")}
         ${sel("leadOwner", leadFilter.owner, leadOwnersPresent(leadRowsExcept(rows0, "owner")), "Owner")}
         ${sel("leadState", leadFilter.state, leadUniq(leadRowsExcept(rows0, "state"), "state"), "State")}
-        ${sel("leadProduct", leadFilter.product, leadProductsPresent(leadRowsExcept(rows0, "product")), "Product")}
         ${me ? `<button id="leadMine" class="ghost-btn${leadFilter.owner === me ? " active" : ""}" type="button" title="Show only leads assigned to you">👤 My leads</button>` : ""}
         <button id="leadStuck" class="ghost-btn${leadFilter.stuck ? " active" : ""}" type="button" title="Leads sitting over ${LEAD_STUCK_DAYS} days in one stage">⚠ Stuck (${stuckN})</button>
         <button id="leadClear" class="ghost-btn" type="button">Clear</button>

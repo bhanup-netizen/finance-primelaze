@@ -880,14 +880,14 @@ tr.total-row:hover td { background: var(--surface-3); }
 .lead-table { width: 100%; font-size: 12px; table-layout: fixed; }
 .lead-table th, .lead-table td { padding: 6px 8px; vertical-align: middle; overflow: hidden; }
 .lead-table td { white-space: normal; word-break: break-word; }
-.lead-table th:nth-child(1), .lead-table td:nth-child(1) { width: 17%; }  /* Lead */
-.lead-table th:nth-child(2), .lead-table td:nth-child(2) { width: 10%; }  /* Mobile */
-.lead-table th:nth-child(3), .lead-table td:nth-child(3) { width: 13%; }  /* Location */
-.lead-table th:nth-child(4), .lead-table td:nth-child(4) { width: 11%; }  /* Source */
-.lead-table th:nth-child(5), .lead-table td:nth-child(5) { width: 9%; }   /* Product */
-.lead-table th:nth-child(6), .lead-table td:nth-child(6) { width: 12%; }  /* Owner */
+.lead-table th:nth-child(1), .lead-table td:nth-child(1) { width: 14%; }  /* Lead */
+.lead-table th:nth-child(2), .lead-table td:nth-child(2) { width: 9%; }   /* Mobile */
+.lead-table th:nth-child(3), .lead-table td:nth-child(3) { width: 11%; }  /* Location */
+.lead-table th:nth-child(4), .lead-table td:nth-child(4) { width: 9%; }   /* Source */
+.lead-table th:nth-child(5), .lead-table td:nth-child(5) { width: 8%; }   /* Product */
+.lead-table th:nth-child(6), .lead-table td:nth-child(6) { width: 11%; }  /* Owner */
 .lead-table th:nth-child(7), .lead-table td:nth-child(7) { width: 8%; }   /* Stage */
-.lead-table th:nth-child(8), .lead-table td:nth-child(8) { width: 20%; }  /* Remark */
+.lead-table th:nth-child(8), .lead-table td:nth-child(8) { width: 30%; }  /* Lead journey */
 .lead-name { font-weight: 700; }
 .lead-table .t-muted { font-size: 11px; }
 .lead-src { font-size: 11px; }
@@ -1041,3 +1041,5 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
     background: var(--accent); color: #fff; font-size: 30px; line-height: 1;
     box-shadow: 0 6px 20px rgba(20,25,45,.35); }
 }
+.lead-prod-chips { margin-top: 6px; }
+.lead-prod-chip.active { border-color: var(--accent); background: var(--accent-soft); }
