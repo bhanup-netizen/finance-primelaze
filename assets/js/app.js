@@ -2734,7 +2734,9 @@
   };
   const payUniq = (arr, key) => Array.from(new Set(arr.map((x) => x[key]).filter(Boolean))).sort();
 
-  const payCd = (r) => (r.committedDate ? String(r.committedDate).slice(0, 10) : "");
+  // Date used by the top date-range filter & period note = payment RECEIVED date
+  // (committed dates in finance's sheet are unreliable).
+  const payCd = (r) => (r.receivedDate ? String(r.receivedDate).slice(0, 10) : "");
   function payFiltered(rows) {
     return rows.filter((d) => {
       if (payFilter.cat && d.category !== payFilter.cat) return false;
@@ -2839,8 +2841,8 @@
   function payDateRangeNote(rows) {
     const dated = rows.map((r) => payCd(r)).filter(Boolean).sort();
     const noDate = rows.length - dated.length;
-    if (!dated.length) return `No committed dates in view${noDate ? ` · ${noDate} with no date` : ""}`;
-    return `Committed dates: <b>${esc(fmtDate(dated[0]))}</b> → <b>${esc(fmtDate(dated[dated.length - 1]))}</b>${noDate ? ` · ${noDate} with no date` : ""}`;
+    if (!dated.length) return `No received dates in view${noDate ? ` · ${noDate} with no received date` : ""}`;
+    return `Received dates: <b>${esc(fmtDate(dated[0]))}</b> → <b>${esc(fmtDate(dated[dated.length - 1]))}</b>${noDate ? ` · ${noDate} not yet received` : ""}`;
   }
 
   // Text shown in each report column, used by the per-column filters.
@@ -3252,8 +3254,8 @@
         <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Due period</span><select id="payDueSel" class="select"><option value="">All</option><option value="below30"${payFilter.due === "below30" ? " selected" : ""}>Below 30 days / Pending machines</option><option value="above30"${payFilter.due === "above30" ? " selected" : ""}>Above 30 days / Installed machines</option></select></label>
-        <label class="ord-field"><span>Date from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}" title="Filters the report by committed date and the collections table by payment received date"></label>
-        <label class="ord-field"><span>Date to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}" title="Filters the report by committed date and the collections table by payment received date"></label>
+        <label class="ord-field"><span>Received from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}" title="Filters by payment received date"></label>
+        <label class="ord-field"><span>Received to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}" title="Filters by payment received date"></label>
         <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
