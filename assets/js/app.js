@@ -3307,7 +3307,7 @@
   const leadArchive = [];  // ids archived — kept in the database, hidden from the active board
   let leadSeq = 0;
   let leadViewArchived = false; // board showing the archived leads instead of active
-  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "" };
+  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false };
   const canEditLeads = () => isAdmin();
   const leadToday = () => new Date().toISOString().slice(0, 10);
   const leadIsArchived = (id) => leadArchive.indexOf(id) >= 0;
@@ -3341,6 +3341,27 @@
     if (stageD != null) parts.push(`${stageD}d in stage`);
     if (ageD != null) parts.push(`${ageD}d total`);
     return parts.length ? "⏱ " + parts.join(" · ") : "";
+  }
+  // A lead is "stuck" when it's still open and has sat in its stage too long.
+  const LEAD_STUCK_DAYS = 14;
+  const leadIsStuck = (r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0 && (daysSince(leadStageSince(r)) || 0) >= LEAD_STUCK_DAYS;
+  // Best-effort match of the logged-in user to a sales owner name (by email).
+  function myLeadOwner() {
+    const email = ((sessionUser && sessionUser.email) || "").toLowerCase();
+    const nme = (email.split("@")[0] || "").replace(/[^a-z0-9]/g, "");
+    if (!nme) return null;
+    const nz = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const arr = Array.from(new Set(leadOwners().concat(salesStaffList())));
+    return arr.find((n) => nz(n) === nme) || arr.find((n) => nz(n) && (nme.indexOf(nz(n)) >= 0 || nz(n).indexOf(nme) >= 0)) || null;
+  }
+  // Match a free-text candidate (e.g. the middle token of a Deal Name) to a
+  // known rep — used to auto-assign an owner on import. Conservative on purpose.
+  function leadMatchRep(candidate) {
+    const cz = String(candidate || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!cz || cz.length < 3) return "";
+    const nz = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const reps = salesStaffList().concat(leadOwners());
+    return reps.find((n) => nz(n) === cz) || reps.find((n) => { const z = nz(n); return z.length >= 3 && (z.indexOf(cz) === 0 || cz.indexOf(z) === 0); }) || "";
   }
 
   // Combined board = seed (with edit overlay) + adds − removals.
@@ -3391,6 +3412,40 @@
     return id;
   }
 
+  // Find leads that share a mobile number and merge each set into one: combine
+  // their timelines, fill blank fields, and archive the extra copies (kept in DB).
+  function leadMergeDuplicates() {
+    const active = leadAll().filter((r) => !leadIsArchived(r.id));
+    const groups = {};
+    active.forEach((r) => { const k = String(r.mobile || "").replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, ""); if (k) (groups[k] = groups[k] || []).push(r); });
+    const dupGroups = Object.keys(groups).map((k) => groups[k]).filter((g) => g.length > 1);
+    if (!dupGroups.length) { window.alert("No duplicate mobile numbers found on the active board."); return; }
+    const extra = dupGroups.reduce((a, g) => a + (g.length - 1), 0);
+    if (!window.confirm("Found " + dupGroups.length + " mobile number(s) with duplicates (" + extra + " extra record" + (extra === 1 ? "" : "s") + ").\n\nMerge each set into one lead? Timelines are combined, blank fields filled in, and the extra copies are archived (kept in the database).")) return;
+    let merged = 0;
+    dupGroups.forEach((g) => {
+      g.sort((a, b) => (leadCreatedAt(a) || Infinity) - (leadCreatedAt(b) || Infinity) || leadHistory(b).length - leadHistory(a).length);
+      const primary = g[0], others = g.slice(1);
+      const pName = primary.name || primary.mobile || "another lead";
+      let hist = leadHistory(primary).slice();
+      const seen = new Set(hist.map((h) => (h.at || 0) + "|" + h.text));
+      others.forEach((o) => leadHistory(o).forEach((h) => { const key = (h.at || 0) + "|" + h.text; if (!seen.has(key)) { seen.add(key); hist.push(h); } }));
+      hist.sort((a, b) => (a.at || 0) - (b.at || 0));
+      ["name", "company", "city", "state", "source", "product", "owner", "link", "occ"].forEach((f) => {
+        if (!primary[f]) { const src = others.find((o) => o[f]); if (src) leadUpdate(primary.id, f, src[f]); }
+      });
+      leadUpdate(primary.id, "history", hist);
+      others.forEach((o) => {
+        leadAddHistory(o.id, null, "Merged into “" + pName + "”", "archive");
+        if (!leadArchive.includes(o.id)) leadArchive.push(o.id);
+        merged++;
+      });
+    });
+    saveEdits("Merged " + merged + " duplicate leads");
+    leadRepaint();
+    window.alert("Merged " + merged + " duplicate record" + (merged === 1 ? "" : "s") + ". The extra copies were archived and can be restored if needed.");
+  }
+
   // Owners = sales roster + anyone already assigned on a lead.
   function leadOwners() {
     const s = new Set(salesStaffList());
@@ -3410,6 +3465,7 @@
       if (leadFilter.owner && r.owner !== leadFilter.owner) return false;
       if (leadFilter.state && r.state !== leadFilter.state) return false;
       if (leadFilter.product && !(String(r.product || "").indexOf(leadFilter.product) >= 0)) return false;
+      if (leadFilter.stuck && !leadIsStuck(r)) return false;
       if (q) {
         const hay = [r.name, r.company, r.mobile, r.city, r.state, r.owner, r.notes, r.source, r.product].join(" ").toLowerCase();
         if (hay.indexOf(q) < 0) return false;
@@ -3444,13 +3500,38 @@
     const sold = rows.filter((r) => r.stage === "sold");
     const lost = rows.filter((r) => r.stage === "lost").length;
     const wonVal = sold.reduce((a, r) => a + (Number(r.soldAmount) || 0), 0);
+    const stuck = rows.filter(leadIsStuck).length;
     const conv = total ? Math.round((sold.length / total) * 100) : 0;
     const card = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
     return card("", total, "Total leads", open + " still open")
       + card("k-teal", sold.length, "Sold / won", conv + "% conversion")
       + card("k-good", rupeeShort(wonVal), "Won value", "closed deals")
       + card("k-warn", open, "In pipeline", "being worked")
+      + card(stuck ? "k-bad" : "", stuck, "Stuck", "> " + LEAD_STUCK_DAYS + " days in stage")
       + card("k-warn", lost, "Lost", "marked lost");
+  }
+  // Per-rep scoreboard: leads / open / sold / conversion — collapsible.
+  function leadScoreboard(rows) {
+    const by = {};
+    rows.forEach((r) => {
+      const o = (r.owner || "Unassigned").trim() || "Unassigned";
+      const s = by[o] || (by[o] = { total: 0, open: 0, sold: 0, stuck: 0 });
+      s.total++;
+      if (r.stage === "sold") s.sold++; else if (r.stage !== "lost") s.open++;
+      if (leadIsStuck(r)) s.stuck++;
+    });
+    const list = Object.keys(by).map((o) => Object.assign({ owner: o }, by[o]))
+      .sort((a, b) => b.sold - a.sold || b.total - a.total);
+    if (!list.length) return "";
+    const body = list.map((x) => `<tr>
+      <td>${esc(spLabel(x.owner))}</td>
+      <td class="num">${x.total}</td><td class="num">${x.open}</td>
+      <td class="num">${x.sold}</td><td class="num">${x.total ? Math.round(x.sold / x.total * 100) : 0}%</td>
+      <td class="num">${x.stuck ? `<span class="lead-stuck">${x.stuck}</span>` : "0"}</td></tr>`).join("");
+    return `<details class="lead-score"><summary>📊 Rep scoreboard — who's converting (${list.length})</summary>
+      <div class="mini-wrap"><table class="mini-table">
+        <thead><tr><th>Owner</th><th class="num">Leads</th><th class="num">Open</th><th class="num">Sold</th><th class="num">Conv%</th><th class="num">Stuck</th></tr></thead>
+        <tbody>${body}</tbody></table></div></details>`;
   }
   // Pipeline funnel = clickable stage chips that also filter the board.
   function leadChips(rows) {
@@ -3493,8 +3574,9 @@
     const hist = leadHistory(r);
     const last = hist.length ? hist[hist.length - 1] : null;
     const archived = leadIsArchived(r.id);
+    const stuck = leadIsStuck(r);
     const age = leadAgeLabel(r);
-    const ageHtml = age ? `<div class="t-muted lead-age">${esc(age)}</div>` : "";
+    const ageHtml = age ? `<div class="t-muted lead-age${stuck ? " lead-stuck-age" : ""}">${esc(age)}${stuck ? ' <span class="lead-stuck">⚠ stuck</span>' : ""}</div>` : "";
     const lastHtml = last
       ? `<div class="lead-remark-last">${esc(last.text)}</div><div class="t-muted lead-remark-meta">${last.by ? esc(last.by) : "—"} · ${esc(leadWhen(last))}</div>`
       : `<span class="t-muted lead-remark-empty">No updates yet</span>`;
@@ -3572,6 +3654,7 @@
       <ol class="lead-tl">${items}</ol>
       <div class="lead-modal-actions ld-actions">
         ${admin ? `<button type="button" class="dl-btn" id="ldAdd">＋ Add update / move stage</button>` : ""}
+        ${admin && !r.owner && myLeadOwner() ? `<button type="button" class="ghost-btn" id="ldMine">🙋 Assign to me</button>` : ""}
         ${admin ? (archived ? `<button type="button" class="ghost-btn" id="ldArch">↩ Restore</button>` : `<button type="button" class="ghost-btn" id="ldArch">🗄 Archive</button>`) : ""}
         ${admin ? `<button type="button" class="ghost-btn" id="ldSave">💾 Save details</button>` : ""}
         <button type="button" class="ghost-btn" id="ldClose">Close</button>
@@ -3583,6 +3666,8 @@
     document.getElementById("ldClose").onclick = close;
     const addB = document.getElementById("ldAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
+    const mineB = document.getElementById("ldMine");
+    if (mineB) mineB.onclick = () => { const me = myLeadOwner(); if (!me) return; leadUpdate(id, "owner", me); leadAddHistory(id, null, "Assigned to " + me); close(); leadRepaint(); };
     const archB = document.getElementById("ldArch");
     if (archB) archB.onclick = () => {
       if (archived) { leadArchiveSet(id, false); close(); leadRepaint(); return; }
@@ -3662,6 +3747,7 @@
     const filtered = leadFiltered(rows0);
     const k = document.getElementById("leadKpis"); if (k) k.innerHTML = leadKpis(rows0);
     const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(rows0); wireLeadChips(); }
+    const sc = document.getElementById("leadScore"); if (sc) sc.innerHTML = leadScoreboard(rows0);
     leadSyncFilters(rows0);
     const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
     const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + (leadViewArchived ? " archived" : " leads");
@@ -3831,6 +3917,10 @@
     if (/^lead$/i.test(name)) name = "";
     const stageKey = stage ? stage.key : "new";
     const remark = c(g("remark", "remarks", "notes", "description"));
+    // Owner: explicit column, else the middle token of a "X - Rep - Product"
+    // deal name if it matches a known rep.
+    let owner = c(g("owner", "rep", "salesperson"));
+    if (!owner) { const parts = c(g("dealname", "deal")).split(/\s*-\s*/); if (parts.length >= 3) owner = leadMatchRep(parts[1]); }
     return {
       name,
       mobile: c(g("mobile", "phone", "contact")).replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, ""),
@@ -3838,7 +3928,7 @@
       city: c(g("city")), state: c(g("state")),
       source: c(g("source", "leadsource")) || "Other",
       product: c(g("product", "productinterest", "interest")),
-      owner: c(g("owner", "rep", "salesperson")),
+      owner: owner,
       link: c(g("attachmentlink", "attachment", "link", "drivelink")),
       stage: stageKey,
       occ: c(g("occupation", "occupaction")) || "Salon",
@@ -3938,15 +4028,23 @@
       const s = document.getElementById("leadSearch");
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
-      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "" }; renderTab("leads"); };
+      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false }; renderTab("leads"); };
       const arch = document.getElementById("leadArchBtn");
-      if (arch) arch.onclick = () => { leadViewArchived = !leadViewArchived; leadFilter.stage = ""; renderTab("leads"); };
+      if (arch) arch.onclick = () => { leadViewArchived = !leadViewArchived; leadFilter.stage = ""; leadFilter.stuck = false; renderTab("leads"); };
+      const mine = document.getElementById("leadMine");
+      if (mine) mine.onclick = () => { const me = myLeadOwner(); leadFilter.owner = (leadFilter.owner === me ? "" : me); renderTab("leads"); };
+      const stuckB = document.getElementById("leadStuck");
+      if (stuckB) stuckB.onclick = () => { leadFilter.stuck = !leadFilter.stuck; renderTab("leads"); };
+      const merge = document.getElementById("leadMerge"); if (merge) merge.onclick = leadMergeDuplicates;
       const addB = document.getElementById("leadAddBtn"); if (addB) addB.onclick = leadAddDialog;
+      const fab = document.getElementById("leadFab"); if (fab) fab.onclick = leadAddDialog;
       const tpl = document.getElementById("leadTpl"); if (tpl) tpl.onclick = leadDownloadTemplate;
       const exp = document.getElementById("leadExport"); if (exp) exp.onclick = leadExport;
       const up = document.getElementById("leadUpload");
       if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) leadImport(f); e.target.value = ""; };
     }, 0);
+    const me = myLeadOwner();
+    const stuckN = rows0.filter(leadIsStuck).length;
     const sel = (id, cur, values, label) => `<label class="ord-field"><span>${esc(label)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>`;
     return `
       <div class="section-head">
@@ -3956,16 +4054,20 @@
       ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
       <div id="leadKpis" class="grid kpi-grid">${leadKpis(rows0)}</div>
       <div id="leadChips">${leadChips(rows0)}</div>
+      <div id="leadScore">${leadScoreboard(rows0)}</div>
       <div class="controls" style="margin-top:14px">
         <input id="leadSearch" class="search" type="search" placeholder="Search name, salon, mobile, city, rep…" value="${esc(leadFilter.q)}">
         ${sel("leadSource", leadFilter.source, leadUniq(leadRowsExcept(rows0, "source"), "source"), "Source")}
         ${sel("leadOwner", leadFilter.owner, leadOwnersPresent(leadRowsExcept(rows0, "owner")), "Owner")}
         ${sel("leadState", leadFilter.state, leadUniq(leadRowsExcept(rows0, "state"), "state"), "State")}
         ${sel("leadProduct", leadFilter.product, leadProductsPresent(leadRowsExcept(rows0, "product")), "Product")}
+        ${me ? `<button id="leadMine" class="ghost-btn${leadFilter.owner === me ? " active" : ""}" type="button" title="Show only leads assigned to you">👤 My leads</button>` : ""}
+        <button id="leadStuck" class="ghost-btn${leadFilter.stuck ? " active" : ""}" type="button" title="Leads sitting over ${LEAD_STUCK_DAYS} days in one stage">⚠ Stuck (${stuckN})</button>
         <button id="leadClear" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
           ${admin ? `<button id="leadAddBtn" class="dl-btn" type="button">＋ Add lead</button>` : ""}
-          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Import leads from Excel/CSV — duplicates are skipped">⬆ Import<input id="leadUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Import leads from Excel/CSV — matched by mobile, never overwritten">⬆ Import<input id="leadUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<button id="leadMerge" class="ghost-btn" type="button" title="Find leads with the same mobile and merge them">🔀 Merge duplicates</button>` : ""}
           <button id="leadArchBtn" class="ghost-btn${leadViewArchived ? " active" : ""}" type="button" title="Show/hide archived leads">🗄 ${leadViewArchived ? "Back to active" : "Archived (" + archN + ")"}</button>
           <button id="leadTpl" class="ghost-btn" type="button">⬇ Template</button>
           <button id="leadExport" class="ghost-btn" type="button">⬇ Export view</button>
@@ -3981,7 +4083,8 @@
           <th>Owner</th><th>Stage</th><th>Lead journey</th>
         </tr></thead>
         <tbody id="leadBody">${leadRows(leadFiltered(rows0), admin)}</tbody>
-      </table></div>`;
+      </table></div>
+      ${admin ? `<button type="button" class="lead-fab" id="leadFab" title="Add a lead" aria-label="Add a lead">＋</button>` : ""}`;
   }
 
   /* ================= DELIVERY CHALLAN ================= */

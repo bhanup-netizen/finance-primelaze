@@ -1021,3 +1021,23 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .ld-h { margin: 10px 0 6px; font-size: 13px; }
 .ld-actions { flex-wrap: wrap; }
 @media (max-width: 640px) { .ld-grid { grid-template-columns: 1fr; } .ld-actions button { flex: 1 1 auto; } }
+
+/* Leads — scoreboard, stuck flag, merge, mobile FAB */
+.lead-score { margin: 12px 0 2px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.lead-score summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 13px; }
+.lead-score[open] summary { border-bottom: 1px solid var(--border); }
+.lead-score .mini-wrap { padding: 4px 10px 10px; overflow-x: auto; }
+.mini-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.mini-table th, .mini-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.mini-table th.num, .mini-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.mini-table tbody tr:last-child td { border-bottom: none; }
+.lead-stuck { color: var(--bad); font-weight: 800; }
+.lead-stuck-age { color: var(--bad); }
+/* Floating add button (phones) */
+.lead-fab { display: none; }
+@media (max-width: 760px) {
+  .lead-fab { display: grid; place-items: center; position: fixed; right: 16px; bottom: 18px; z-index: 60;
+    width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--accent); color: #fff; font-size: 30px; line-height: 1;
+    box-shadow: 0 6px 20px rgba(20,25,45,.35); }
+}
