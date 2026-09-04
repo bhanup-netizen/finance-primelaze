@@ -3297,17 +3297,51 @@
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
-    "product", "owner", "notes", "link", "stage", "history",
+    "product", "owner", "notes", "link", "stage", "history", "stageSince",
     "soldAmount", "soldDate", "createdBy", "createdAt", "updatedAt"];
   const LEAD_STEP_KEYS = ["new", "contacted", "demo", "negotiation", "sold"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
   const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
-  const leadRemovals = []; // ids hidden from the board
+  const leadRemovals = []; // ids permanently removed (super-admin only)
+  const leadArchive = [];  // ids archived — kept in the database, hidden from the active board
   let leadSeq = 0;
+  let leadViewArchived = false; // board showing the archived leads instead of active
   let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "" };
   const canEditLeads = () => isAdmin();
   const leadToday = () => new Date().toISOString().slice(0, 10);
+  const leadIsArchived = (id) => leadArchive.indexOf(id) >= 0;
+  // Only a super-admin can ever hard-delete a lead; page admins archive instead.
+  const canDeleteLeads = () => isSuperAdmin() && appMode === "admin";
+
+  // ---- Lead ageing: days in current stage + total age ----
+  const DAY_MS = 86400000;
+  function leadStageSince(r) {
+    if (r.stageSince) return r.stageSince;
+    // Fall back: walk history back over the contiguous run of the current stage.
+    const hist = leadHistory(r); const cur = r.stage || "new";
+    let since = 0;
+    for (let i = hist.length - 1; i >= 0; i--) {
+      if ((hist[i].stage || "new") !== cur) break;
+      if (hist[i].at) since = hist[i].at;
+    }
+    return since || r.createdAt || 0;
+  }
+  function leadCreatedAt(r) {
+    if (r.createdAt) return r.createdAt;
+    const hist = leadHistory(r);
+    const firstDated = hist.find((h) => h.at);
+    return firstDated ? firstDated.at : 0;
+  }
+  const daysSince = (ts) => (ts ? Math.max(0, Math.floor((Date.now() - ts) / DAY_MS)) : null);
+  function leadAgeLabel(r) {
+    const stageD = daysSince(leadStageSince(r));
+    const ageD = daysSince(leadCreatedAt(r));
+    const parts = [];
+    if (stageD != null) parts.push(`${stageD}d in stage`);
+    if (ageD != null) parts.push(`${ageD}d total`);
+    return parts.length ? "⏱ " + parts.join(" · ") : "";
+  }
 
   // Combined board = seed (with edit overlay) + adds − removals.
   function leadAll() {
@@ -3334,14 +3368,25 @@
     }
     saveEdits("Lead updated (" + field + ")");
   }
+  // Archive keeps the lead in the database — it is only hidden from the active
+  // board. This is what page admins use for a lead that is not meaningful.
+  function leadArchiveSet(id, on) {
+    const i = leadArchive.indexOf(id);
+    if (on && i < 0) { leadArchive.push(id); leadAddHistory(id, null, "Lead archived", "archive"); }
+    else if (!on && i >= 0) { leadArchive.splice(i, 1); leadAddHistory(id, null, "Lead restored from archive", "restore"); }
+    saveEdits(on ? "Archived a lead" : "Restored a lead");
+  }
+  // Hard delete — super-admin only. Everything else is preserved forever.
   function leadRemove(id) {
+    if (!canDeleteLeads()) { window.alert("Only a super-admin can permanently delete a lead. Use Archive instead."); return; }
     if (String(id).charAt(0) === "L") { if (!leadRemovals.includes(id)) leadRemovals.push(id); }
     else { const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) leadAdds.splice(i, 1); }
-    saveEdits("Removed a lead");
+    saveEdits("Deleted a lead (super-admin)");
   }
   function leadAddNew(obj) {
     const id = "u" + (leadSeq++);
-    leadAdds.push(Object.assign({ id, stage: "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, obj));
+    const now = Date.now();
+    leadAdds.push(Object.assign({ id, stage: "new", stageSince: now, createdBy: (sessionUser && sessionUser.email) || "", createdAt: now, updatedAt: now }, obj));
     saveEdits("Added lead " + (obj.name || obj.company || ""));
     return id;
   }
@@ -3447,15 +3492,22 @@
   function leadRemarkCell(r, admin) {
     const hist = leadHistory(r);
     const last = hist.length ? hist[hist.length - 1] : null;
+    const archived = leadIsArchived(r.id);
+    const age = leadAgeLabel(r);
+    const ageHtml = age ? `<div class="t-muted lead-age">${esc(age)}</div>` : "";
     const lastHtml = last
       ? `<div class="lead-remark-last">${esc(last.text)}</div><div class="t-muted lead-remark-meta">${last.by ? esc(last.by) : "—"} · ${esc(leadWhen(last))}</div>`
-      : `<span class="t-muted lead-remark-empty">No remark yet</span>`;
+      : `<span class="t-muted lead-remark-empty">No updates yet</span>`;
     const sold = r.stage === "sold" && (Number(r.soldAmount) || r.soldDate)
       ? `<div class="lead-sold-note">✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
+    const archTag = archived ? `<div class="lead-arch-tag">🗄 Archived</div>` : "";
     const tlBtn = `<button type="button" class="linkish lead-timeline-btn" data-id="${esc(r.id)}">🕘 Timeline${hist.length ? " (" + hist.length + ")" : ""}</button>`;
-    const addBtn = admin ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Log an activity / add a remark">＋ Remark</button>` : "";
-    const delBtn = admin ? `<button type="button" class="linkish lead-del" data-id="${esc(r.id)}" title="Delete this lead">Delete</button>` : "";
-    return `${leadStepper(r)}${sold}${lastHtml}<div class="lead-remark-tools">${tlBtn}${addBtn}${delBtn}</div>`;
+    const addBtn = admin ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Add an update to the timeline">＋ Update</button>` : "";
+    const archBtn = admin ? (archived
+      ? `<button type="button" class="linkish lead-unarchive" data-id="${esc(r.id)}" title="Restore to the active board">Restore</button>`
+      : `<button type="button" class="linkish lead-archive" data-id="${esc(r.id)}" title="Archive — hides it but keeps it in the database">Archive</button>`) : "";
+    const delBtn = canDeleteLeads() ? `<button type="button" class="linkish lead-del" data-id="${esc(r.id)}" title="Permanently delete (super-admin only)">Delete</button>` : "";
+    return `${archTag}${leadStepper(r)}${ageHtml}${sold}${lastHtml}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}${delBtn}</div>`;
   }
   // Full lifecycle timeline in a modal — entered-by, source, then every move.
   function leadTimelineDialog(id) {
@@ -3465,14 +3517,20 @@
     const enteredBy = r.createdBy ? esc(r.createdBy) : "Lead sheet import";
     const enteredWhen = r.createdAt ? esc(fmtWhen(r.createdAt)) : "—";
     const events = [{ kind: "created", at: r.createdAt || 0, by: r.createdBy || "", stage: "new", text: "Lead entered into the system" }]
-      .concat(hist.map((h) => ({ kind: "stage", at: h.at, by: h.by, stage: h.stage, text: h.text })));
-    const dot = (e) => e.kind === "created" ? "lead-tl-created" : "lst-" + (e.stage || "new");
+      .concat(hist.map((h) => ({ kind: h.kind || "stage", at: h.at, by: h.by, stage: h.stage, text: h.text })));
+    const dot = (e) => (e.kind === "created" || e.kind === "archive" || e.kind === "restore") ? "lead-tl-created" : "lst-" + (e.stage || "new");
+    const tag = (e) => {
+      if (e.kind === "created") return `<span class="lead-stage-tag lead-tl-created">Entered</span>`;
+      if (e.kind === "archive") return `<span class="lead-stage-tag lead-tl-created">🗄 Archived</span>`;
+      if (e.kind === "restore") return `<span class="lead-stage-tag lead-tl-created">Restored</span>`;
+      return `<span class="lead-stage-tag lst-${e.stage || "new"}">${esc(LEAD_STAGE_LABEL[e.stage || "new"] || "")}</span>`;
+    };
     const items = events.map((e) => `
       <li class="lead-tl-item">
         <span class="lead-tl-dot ${dot(e)}"></span>
         <div class="lead-tl-body">
           <div class="lead-tl-head">
-            ${e.kind === "created" ? `<span class="lead-stage-tag lead-tl-created">Entered</span>` : `<span class="lead-stage-tag lst-${e.stage || "new"}">${esc(LEAD_STAGE_LABEL[e.stage || "new"] || "")}</span>`}
+            ${tag(e)}
             <span class="lead-tl-when">${esc(leadWhen(e))}</span>
           </div>
           <div class="lead-tl-text">${esc(e.text)}</div>
@@ -3494,7 +3552,7 @@
       </div>
       <ol class="lead-tl">${items}</ol>
       <div class="lead-modal-actions">
-        ${admin ? `<button type="button" class="ghost-btn" id="ltlAdd">＋ Add remark</button>` : ""}
+        ${admin ? `<button type="button" class="ghost-btn" id="ltlAdd">＋ Add to timeline</button>` : ""}
         <button type="button" class="dl-btn" id="ltlClose">Close</button>
       </div>
     </div>`;
@@ -3542,14 +3600,19 @@
     leadFillSelect("leadProduct", "product", leadProductsPresent(leadRowsExcept(rows0, "product")));
   }
 
+  // Active board excludes archived leads; the Archived view shows only them.
+  function leadBoardRows() {
+    return leadAll().filter((r) => leadViewArchived ? leadIsArchived(r.id) : !leadIsArchived(r.id));
+  }
   function leadRepaint() {
-    const rows0 = leadAll();
+    const rows0 = leadBoardRows();
     const filtered = leadFiltered(rows0);
     const k = document.getElementById("leadKpis"); if (k) k.innerHTML = leadKpis(rows0);
     const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(rows0); wireLeadChips(); }
     leadSyncFilters(rows0);
     const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
-    const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + " leads";
+    const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + (leadViewArchived ? " archived" : " leads");
+    const at = document.getElementById("leadArchBtn"); if (at) at.textContent = `🗄 Archived (${leadAll().filter((r) => leadIsArchived(r.id)).length})`;
     wireLeadRowEdits();
   }
   function wireLeadChips() {
@@ -3575,59 +3638,70 @@
     document.querySelectorAll(".lead-remark-add").forEach((b) => (b.onclick = () => leadRemarkDialog({ id: b.dataset.id })));
     // Open the full lifecycle timeline.
     document.querySelectorAll(".lead-timeline-btn").forEach((b) => (b.onclick = () => leadTimelineDialog(b.dataset.id)));
-    // Delete (moved into the remark cell as a small link).
+    // Archive / restore — keeps the record in the database.
+    document.querySelectorAll(".lead-archive").forEach((b) => (b.onclick = () => {
+      const l = leadAll().find((x) => x.id === b.dataset.id);
+      if (window.confirm('Archive lead "' + ((l && l.name) || "") + '"?\n\nIt is hidden from the active board but kept in the database — you can restore it any time from the Archived view.')) { leadArchiveSet(b.dataset.id, true); leadRepaint(); }
+    }));
+    document.querySelectorAll(".lead-unarchive").forEach((b) => (b.onclick = () => { leadArchiveSet(b.dataset.id, false); leadRepaint(); }));
+    // Permanent delete — super-admin only.
     document.querySelectorAll(".lead-del").forEach((b) => (b.onclick = () => {
       const l = leadAll().find((x) => x.id === b.dataset.id);
-      if (window.confirm('Delete lead "' + ((l && l.name) || "") + '"? This removes it for everyone.')) { leadRemove(b.dataset.id); leadRepaint(); }
+      if (window.confirm('PERMANENTLY delete lead "' + ((l && l.name) || "") + '"?\n\nThis cannot be undone. Prefer Archive unless you are sure.')) { leadRemove(b.dataset.id); leadRepaint(); }
     }));
   }
-  // Append a timestamped remark to a lead's history.
-  function leadAddHistory(id, stage, text) {
+  // Append a timestamped entry to a lead's journey. `kind` marks special events
+  // (archive/restore/created); a normal update leaves it blank.
+  function leadAddHistory(id, stage, text, kind) {
     const l = leadAll().find((x) => x.id === id); if (!l) return;
     const hist = leadHistory(l).slice();
-    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text });
+    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text, kind: kind || "" });
     leadUpdate(id, "history", hist);
   }
-  // Unified remark popup. With newStage → it's a stage move (and the Sold move
-  // also collects deal value + date). Without → it's an activity log in place.
+  // "Add to timeline" popup — always lets you record an update and, in the same
+  // step, set the stage (defaults to the current stage). Choosing Sold reveals
+  // the deal value + date. Opened from the row stage dropdown or the ＋ button.
   function leadRemarkDialog(opts) {
     const { id, newStage, oldStage, selEl } = opts;
     const l = leadAll().find((x) => x.id === id); if (!l) { if (selEl && oldStage) selEl.value = oldStage; return; }
-    const moving = !!newStage;
-    const isSold = newStage === "sold";
-    const title = moving
-      ? `Move “${esc(l.name || l.company || "lead")}” to ${esc(LEAD_STAGE_LABEL[newStage])}`
-      : `Add remark — ${esc(l.name || l.company || "lead")}`;
+    const curStage = l.stage || "new";
+    const preStage = newStage || curStage;
     const wrap = document.createElement("div");
     wrap.className = "lead-modal";
     wrap.innerHTML = `<div class="lead-modal-card">
-      <h3>${title}</h3>
-      ${isSold ? `<div class="lead-form-grid">
+      <h3>Add to timeline — ${esc(l.name || l.company || "lead")}</h3>
+      <label class="lead-remark-label">Update / note
+        <textarea id="lrText" rows="3" placeholder="e.g. Called, shared brochure, asked to follow up next week"></textarea></label>
+      <label class="lead-remark-label">Stage (leave as current, or move it)
+        <select id="lrStage" class="select">${LEAD_STAGES.map((s) => `<option value="${s.key}"${preStage === s.key ? " selected" : ""}>${esc(s.label)}${s.key === curStage ? " · current" : ""}</option>`).join("")}</select></label>
+      <div class="lead-form-grid" id="lrSoldBox"${preStage === "sold" ? "" : " hidden"}>
         <label>Deal value ₹<input id="lrAmt" type="number" placeholder="0" value="${l.soldAmount ? esc(l.soldAmount) : ""}"></label>
         <label>Sold on<input id="lrDate" type="date" value="${esc(l.soldDate || leadToday())}"></label>
-      </div>` : ""}
-      <label class="lead-remark-label">Remark ${moving ? "(what happened at this step)" : "(activity update)"}
-        <textarea id="lrText" rows="3" placeholder="e.g. Called, shared brochure, asked to follow up next week"></textarea></label>
+      </div>
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="lrCancel">Cancel</button>
-        <button type="button" class="dl-btn" id="lrSave">Save</button>
+        <button type="button" class="dl-btn" id="lrSave">Save to timeline</button>
       </div>
     </div>`;
     document.body.appendChild(wrap);
-    const revert = () => { if (moving && selEl && oldStage) selEl.value = oldStage; };
+    const revert = () => { if (selEl && oldStage) selEl.value = oldStage; };
     const close = () => wrap.remove();
+    const stageSel = document.getElementById("lrStage");
+    stageSel.onchange = () => { document.getElementById("lrSoldBox").hidden = stageSel.value !== "sold"; };
     wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
     document.getElementById("lrCancel").onclick = () => { revert(); close(); };
     document.getElementById("lrSave").onclick = () => {
       const text = (document.getElementById("lrText").value || "").trim();
-      if (!text) { window.alert("Please enter a remark."); return; }
-      if (isSold) {
+      if (!text) { window.alert("Please enter an update / note."); return; }
+      const chosen = stageSel.value;
+      const moved = chosen !== curStage;
+      if (chosen === "sold") {
         const n = parseFloat(String(document.getElementById("lrAmt").value).replace(/[^0-9.]/g, "")) || 0;
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
         leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
       }
-      if (moving) leadUpdate(id, "stage", newStage);
-      leadAddHistory(id, moving ? newStage : (l.stage || "new"), text);
+      if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
+      leadAddHistory(id, chosen, text);
       close(); leadRepaint();
     };
     setTimeout(() => { const t = document.getElementById("lrText"); if (t) t.focus(); }, 0);
@@ -3785,7 +3859,8 @@
     const ids = leadAdds.map((a) => +String(a.id).replace(/^u/, "")).filter((n) => !isNaN(n));
     leadSeq = Math.max(leadSeq, ids.length ? Math.max(...ids) + 1 : 0);
     const admin = canEditLeads();
-    const rows0 = leadAll();
+    const rows0 = leadBoardRows();
+    const archN = leadAll().filter((r) => leadIsArchived(r.id)).length;
     setTimeout(() => {
       wireLeadChips();
       wireLeadRowEdits();
@@ -3798,6 +3873,8 @@
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
       if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "" }; renderTab("leads"); };
+      const arch = document.getElementById("leadArchBtn");
+      if (arch) arch.onclick = () => { leadViewArchived = !leadViewArchived; leadFilter.stage = ""; renderTab("leads"); };
       const addB = document.getElementById("leadAddBtn"); if (addB) addB.onclick = leadAddDialog;
       const tpl = document.getElementById("leadTpl"); if (tpl) tpl.onclick = leadDownloadTemplate;
       const exp = document.getElementById("leadExport"); if (exp) exp.onclick = leadExport;
@@ -3808,8 +3885,9 @@
     return `
       <div class="section-head">
         <h1>Leads &amp; Sales Pipeline</h1>
-        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. ${admin ? "Add leads manually or import your lead sheet — duplicates (same name &amp; mobile) are skipped." : "Read-only view."} Seeded from the Beauty Expo &amp; Instagram lead workbook.</p>
+        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually or import your lead sheet — duplicates (same name &amp; mobile) are skipped." : "Read-only view."}</p>
       </div>
+      ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
       <div id="leadKpis" class="grid kpi-grid">${leadKpis(rows0)}</div>
       <div id="leadChips">${leadChips(rows0)}</div>
       <div class="controls" style="margin-top:14px">
@@ -3822,18 +3900,19 @@
         <div class="hq-actions">
           ${admin ? `<button id="leadAddBtn" class="dl-btn" type="button">＋ Add lead</button>` : ""}
           ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Import leads from Excel/CSV — duplicates are skipped">⬆ Import<input id="leadUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          <button id="leadArchBtn" class="ghost-btn${leadViewArchived ? " active" : ""}" type="button" title="Show/hide archived leads">🗄 ${leadViewArchived ? "Back to active" : "Archived (" + archN + ")"}</button>
           <button id="leadTpl" class="ghost-btn" type="button">⬇ Template</button>
           <button id="leadExport" class="ghost-btn" type="button">⬇ Export view</button>
         </div>
       </div>
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
-        <h2 style="margin:0">Lead board</h2>
-        <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length} leads</span>
+        <h2 style="margin:0">${leadViewArchived ? "Archived leads" : "Lead board"}</h2>
+        <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length}${leadViewArchived ? " archived" : " leads"}</span>
       </div>
       <div class="table-wrap"><table class="lead-table">
         <thead><tr>
           <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
-          <th>Owner</th><th>Stage</th><th>Remark &amp; history</th>
+          <th>Owner</th><th>Stage</th><th>Lead journey</th>
         </tr></thead>
         <tbody id="leadBody">${leadRows(leadFiltered(rows0), admin)}</tbody>
       </table></div>`;
@@ -5109,6 +5188,7 @@
         leadSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (Array.isArray(e.leadRemovals)) { leadRemovals.length = 0; e.leadRemovals.forEach((id) => leadRemovals.push(id)); }
+      if (Array.isArray(e.leadArchive)) { leadArchive.length = 0; e.leadArchive.forEach((id) => leadArchive.push(id)); }
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -5141,7 +5221,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, ordered, orderedOn, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, eta, ordered, orderedOn, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {

@@ -963,3 +963,9 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-tl-when { font-size: 11px; color: var(--text-3); }
 .lead-tl-text { font-size: 13px; margin-top: 3px; line-height: 1.4; }
 .lead-tl-by { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* Leads — ageing + archive */
+.lead-age { font-size: 11px; margin: 2px 0 4px; font-variant-numeric: tabular-nums; }
+.lead-arch-tag { display: inline-block; font-size: 10px; font-weight: 700; color: var(--text-2); background: var(--border); padding: 1px 8px; border-radius: 999px; margin-bottom: 4px; }
+.lead-table tr:has(.lead-arch-tag) { opacity: .78; }
+.ghost-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
