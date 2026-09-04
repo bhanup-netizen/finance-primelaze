@@ -2670,6 +2670,7 @@
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
   let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" };
+  let payColFrom = "", payColTo = ""; // collections table: filter by collected (received) date
   let payColFilters = {}; // Excel-style per-column filters on the detailed report
   let paySnapshots = [];  // [{at, by, total, rows, cust:{name:outstanding}}] — one per import, for collection tracking
   let payClearBefore = ""; // admin: hide commitments committed before this date
@@ -2971,16 +2972,29 @@
         const rd = r.receivedDate ? String(r.receivedDate).slice(0, 10) : "";
         if (rd && rd > m.rd) m.rd = rd; // keep the most recent received date
       });
-      const body = col.rows.slice(0, 100).map((r) => { const mm = meta[r.customer] || {}; return `<tr>
+      // Attach the collected-on date, then filter by the chosen date range.
+      let crows = col.rows.map((r) => ({ ...r, rd: (meta[r.customer] || {}).rd || "" }));
+      const ranged = payColFrom || payColTo;
+      if (ranged) crows = crows.filter((r) => r.rd && (!payColFrom || r.rd >= payColFrom) && (!payColTo || r.rd <= payColTo));
+      const rangedTotal = crows.reduce((a, r) => a + r.collected, 0);
+      const body = crows.slice(0, 200).map((r) => { const mm = meta[r.customer] || {}; return `<tr>
         <td class="t-name">${esc(r.customer)}</td>
         <td>${esc(mm.sp ? spLabel(mm.sp) : "—")}</td>
         <td>${esc(mm.hq || "—")}</td>
         <td class="num">${rupeeShort(r.before)}</td>
         <td class="num">${rupeeShort(r.after)}</td>
         <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td>
-        <td>${mm.rd ? esc(fmtDate(mm.rd)) : "—"}</td></tr>`; }).join("")
-        || `<tr><td colspan="7" class="empty">No outstanding decreased since the previous import.</td></tr>`;
-      summary = `<p>Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s).</p>
+        <td>${r.rd ? esc(fmtDate(r.rd)) : "—"}</td></tr>`; }).join("")
+        || `<tr><td colspan="7" class="empty">No collections${ranged ? " in this date range" : " since the previous import"}.</td></tr>`;
+      const rangeBar = `<div class="controls" style="margin:4px 0 10px">
+        <label class="ord-field"><span>Collected from</span><input id="payColFrom" type="date" class="select" value="${esc(payColFrom)}"></label>
+        <label class="ord-field"><span>Collected to</span><input id="payColTo" type="date" class="select" value="${esc(payColTo)}"></label>
+        ${(payColFrom || payColTo) ? `<button id="payColClear" class="ghost-btn" type="button">Clear dates</button>` : ""}
+      </div>`;
+      summary = `<p>${ranged
+        ? `Collected <b style="color:var(--good)">${rupeeShort(rangedTotal)}</b> across <b>${crows.length}</b> customer(s)${payColFrom ? " from <b>" + esc(payColFrom) + "</b>" : ""}${payColTo ? " to <b>" + esc(payColTo) + "</b>" : ""} (by payment received date).`
+        : `Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s).`}</p>
+        ${rangeBar}
         <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th>Sales Person</th><th>State</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th><th>Collected on</th></tr></thead><tbody>${body}</tbody></table></div>`;
     }
     const trendRows = trend.map((s, i) => {
@@ -3178,6 +3192,13 @@
       });
       const clr = document.getElementById("payClearFilters");
       if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" }; payColFilters = {}; renderTab("payments"); };
+      // Collections table — filter by collected (payment received) date range.
+      const cf = document.getElementById("payColFrom");
+      if (cf) cf.onchange = (e) => { payColFrom = e.target.value; renderTab("payments"); };
+      const cto = document.getElementById("payColTo");
+      if (cto) cto.onchange = (e) => { payColTo = e.target.value; renderTab("payments"); };
+      const cclr = document.getElementById("payColClear");
+      if (cclr) cclr.onclick = () => { payColFrom = ""; payColTo = ""; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
