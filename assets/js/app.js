@@ -3572,14 +3572,10 @@
   }
   function leadRemarkCell(r, admin) {
     const hist = leadHistory(r);
-    const last = hist.length ? hist[hist.length - 1] : null;
     const archived = leadIsArchived(r.id);
     const stuck = leadIsStuck(r);
     const age = leadAgeLabel(r);
     const ageHtml = age ? `<div class="t-muted lead-age${stuck ? " lead-stuck-age" : ""}">${esc(age)}${stuck ? ' <span class="lead-stuck">⚠ stuck</span>' : ""}</div>` : "";
-    const lastHtml = last
-      ? `<div class="lead-remark-last">${esc(last.text)}</div><div class="t-muted lead-remark-meta">${last.by ? esc(last.by) : "—"} · ${esc(leadWhen(last))}</div>`
-      : `<span class="t-muted lead-remark-empty">No updates yet</span>`;
     const sold = r.stage === "sold" && (Number(r.soldAmount) || r.soldDate)
       ? `<div class="lead-sold-note">✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
     const archTag = archived ? `<div class="lead-arch-tag">🗄 Archived</div>` : "";
@@ -3588,7 +3584,7 @@
     const archBtn = admin ? (archived
       ? `<button type="button" class="linkish lead-unarchive" data-id="${esc(r.id)}" title="Restore to the active board">↩ Restore</button>`
       : `<button type="button" class="linkish lead-archive" data-id="${esc(r.id)}" title="Archive — hides it but keeps it in the database">🗄 Archive</button>`) : "";
-    return `${archTag}${leadStepper(r)}${ageHtml}${sold}${lastHtml}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}</div>`;
+    return `${archTag}${leadStepper(r)}${ageHtml}${sold}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}</div>`;
   }
   // Full lead detail popup — editable fields (admin), contact actions, ageing,
   // and the complete lifecycle timeline. This is the primary way to open a lead.
@@ -5584,18 +5580,18 @@
     // Super admin: default No access, options depend on chosen role (JS-driven).
     // Page admin: only grants View / No-access for their own pages.
     const accessRows = scope.map((t) =>
-      `<label class="chk perm-access-row"><span style="flex:1">${esc(t.label)}</span><select class="perm-access select" data-page="${t.id}">${superMode ? `<option value="edit">Admin</option><option value="view">View</option><option value="none" selected>No access</option>` : `<option value="view" selected>View</option><option value="none">No access</option>`}</select></label>`).join("");
+      `<label class="chk perm-access-row"><span style="flex:1">${esc(t.label)}</span><select class="perm-access select" data-page="${t.id}">${superMode ? `<option value="none" selected>No access</option><option value="view">View</option><option value="edit">Edit (admin)</option>` : `<option value="view" selected>View</option><option value="none">No access</option>`}</select></label>`).join("");
     const hqChecks = D.hqTargets.map((h) => {
       const n = h.title.split("—")[0].trim();
       return `<label class="chk"><input type="checkbox" class="perm-hq" value="${esc(n)}" checked> ${esc(n)}</label>`;
     }).join("");
     const roleField = superMode
       ? `<label class="ord-field"><span>Role</span>
-           <select id="auRole" class="select"><option value="view">Viewer — read-only</option><option value="admin">Admin — manages the page(s) you pick</option><option value="superadmin">Super Admin — full access &amp; users</option></select>
+           <select id="auRole" class="select"><option value="view">Standard — set access per page below</option><option value="superadmin">Super Admin — full access &amp; users</option></select>
          </label>`
       : `<input type="hidden" id="auRole" value="view">`;
     const scopeNote = superMode
-      ? `<b>Admin</b> = can edit that page and grant view access to others for it. <b>Viewer</b> = read-only.`
+      ? `Per page: <b>Edit</b> = can change it · <b>View</b> = read-only · <b>No access</b> = hidden. Mix freely — e.g. Edit on Casovil Leads, View on the rest.`
       : `Grant <b>View</b> on the page(s) you administer, or <b>No access</b> to hide it.`;
     return `
       <div class="section-head">
@@ -5663,17 +5659,12 @@
     if (roleVal === "superadmin" && isSuperAdmin()) {
       return { role: "superadmin", landing: true, managerInc: true, pages: "all", hqs: "all", editPages: "all" };
     }
-    if (roleVal === "admin" && isSuperAdmin()) {
-      const adminPages = PERMISSION_PAGES.filter((t) => access[t.id] === "edit").map((t) => t.id);
-      const all = adminPages.length === N;
-      return { role: "view", landing: gc("auLanding"), managerInc: gc("auMgrInc"),
-        pages: all ? "all" : adminPages, hqs: hqVal, editPages: all ? "all" : adminPages };
-    }
-    // Viewer (also the only role a page admin can create)
+    // Standard user — per-page access. "Edit" implies the page is also visible.
+    const editPages = PERMISSION_PAGES.filter((t) => access[t.id] === "edit").map((t) => t.id);
     const viewPages = PERMISSION_PAGES.filter((t) => access[t.id] === "view" || access[t.id] === "edit").map((t) => t.id);
-    const all = viewPages.length === N;
+    const vAll = viewPages.length === N, eAll = editPages.length === N;
     return { role: "view", landing: gc("auLanding"), managerInc: gc("auMgrInc"),
-      pages: all ? "all" : viewPages, hqs: hqVal, editPages: [] };
+      pages: vAll ? "all" : viewPages, hqs: hqVal, editPages: eAll ? "all" : editPages };
   }
 
   // Show/hide + relabel the page grid to match the chosen role.
@@ -5686,18 +5677,12 @@
     show("permPageGroup", !isSuperSel);
     show("permExtras", !isSuperSel);
     show("permHqGroup", !isSuperSel);
-    document.querySelectorAll(".perm-access").forEach((sel) => {
-      const cur = sel.value;
-      const opts = role === "admin" ? [["edit", "Admin"], ["none", "No access"]] : [["view", "View"], ["none", "No access"]];
-      const keep = opts.some(([v]) => v === cur) ? cur : "none";
-      sel.innerHTML = opts.map(([v, l]) => `<option value="${v}"${v === keep ? " selected" : ""}>${l}</option>`).join("");
-    });
+    // Per-page selectors keep their 3-way options (No access / View / Edit) —
+    // no rewriting needed now that access is chosen per page, not by role.
     const note = document.getElementById("permPageNote");
-    if (note) note.innerHTML = isSuperSel
+    if (note && isSuperAdmin()) note.innerHTML = isSuperSel
       ? "<b>Super Admin</b> has full access to every page and manages users — no page selection needed."
-      : (role === "admin"
-        ? "Tick the page(s) this admin manages — they can edit those pages and grant view access to others for them."
-        : "Tick the page(s) this viewer can see (read-only).");
+      : "For each page pick <b>Edit</b> (can change it), <b>View</b> (read-only) or <b>No access</b>. Mix freely.";
   }
 
   // Merge a page admin's edits (only their scoped pages) onto a viewer's
@@ -5732,18 +5717,16 @@
     if (emailEl) { emailEl.value = u.email || ""; emailEl.readOnly = true; }
     const pagesAll = u.pages === "all", editAll = u.editPages === "all";
     const pagesList = Array.isArray(u.pages) ? u.pages : [], editList = Array.isArray(u.editPages) ? u.editPages : [];
-    // Map stored perms → one of the 3 UI roles.
-    const uiRole = u.role === "superadmin" ? "superadmin"
-      : (u.role === "admin" || editAll || editList.length) ? "admin"
-      : "view";
+    // Map stored perms → Super Admin, or Standard with a per-page level.
+    const uiRole = u.role === "superadmin" ? "superadmin" : "view";
     set("auRole", uiRole);
-    updateAddUserRoleUI(); // rebuild grid options for this role BEFORE setting values
+    updateAddUserRoleUI();
     chk("auLanding", u.landing); chk("auMgrInc", u.managerInc);
     document.querySelectorAll(".perm-access").forEach((s) => {
       const id = s.dataset.page;
       let val = "none";
-      if (uiRole === "admin") val = (editAll || editList.includes(id)) ? "edit" : "none";
-      else if (uiRole === "view") val = (pagesAll || pagesList.includes(id)) ? "view" : "none";
+      if (editAll || editList.includes(id)) val = "edit";
+      else if (pagesAll || pagesList.includes(id)) val = "view";
       if (Array.from(s.options).some((o) => o.value === val)) s.value = val;
     });
     const hqsAll = u.hqs === "all", hqList = Array.isArray(u.hqs) ? u.hqs : [];
@@ -5797,8 +5780,8 @@
     });
     document.querySelectorAll("[data-access]").forEach((b) => {
       b.onclick = () => {
-        const role = (document.getElementById("auRole") || {}).value || "view";
-        const val = b.dataset.access === "all" ? (role === "admin" ? "edit" : "view") : "none";
+        // "all" grants View to every page (upgrade individual ones to Edit as needed); "none" clears.
+        const val = b.dataset.access === "all" ? "view" : "none";
         document.querySelectorAll(".perm-access").forEach((s) => { if (Array.from(s.options).some((o) => o.value === val)) s.value = val; });
       };
     });
@@ -5843,7 +5826,7 @@
         msg.style.color = "var(--good)"; msg.textContent = "User created ✓";
         form.reset();
         document.querySelectorAll(".perm-hq").forEach((c) => (c.checked = true));
-        document.querySelectorAll(".perm-access").forEach((s) => (s.value = "view"));
+        document.querySelectorAll(".perm-access").forEach((s) => { s.value = Array.from(s.options).some((o) => o.value === "none") ? "none" : s.options[0].value; });
         loadUserList();
       } catch (err) {
         msg.style.color = "var(--bad)"; msg.textContent = authErr(err);
