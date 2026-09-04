@@ -4527,7 +4527,7 @@
   //   money   = toBuy × landing
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
-  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, eta: {}, ordered: {}, orderedOn: {}, cat: "All", status: "all", q: "", lineData: {} };
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, received: {}, issued: {}, cat: "All", status: "all", q: "", lineData: {} };
   // Esthemax has the full reorder plan; Devices & Celluma are simple stock logs.
   const INVENTORY_LINES = [
     { id: "esthemax", label: "Esthemax", ready: true },
@@ -4558,20 +4558,19 @@
     (invAdds.esthemax || []).forEach((ci) => items.push(ci));
     D.esthemaxOrder.items = items;
   }
-  // Keep index-keyed stock/eta aligned to item names across an item-list change.
+  // Keep index-keyed stock/received/issued aligned to item names across a list change.
   function remapEsthStateByName(mutate) {
     const byName = {};
-    (D.esthemaxOrder.items || []).forEach((it, i) => { byName[it.name] = { stock: orderState.stock[i], eta: orderState.eta[i], ordered: orderState.ordered[i], orderedOn: orderState.orderedOn[i] }; });
+    (D.esthemaxOrder.items || []).forEach((it, i) => { byName[it.name] = { stock: orderState.stock[i], received: orderState.received[i], issued: orderState.issued[i] }; });
     mutate();
-    const ns = {}, ne = {}, no = {}, nod = {};
+    const ns = {}, nr = {}, ni = {};
     (D.esthemaxOrder.items || []).forEach((it, i) => {
       const s = byName[it.name]; if (!s) return;
       if (s.stock != null) ns[i] = s.stock;
-      if (s.eta) ne[i] = s.eta;
-      if (s.ordered != null && s.ordered !== "") no[i] = s.ordered;
-      if (s.orderedOn) nod[i] = s.orderedOn;
+      if (s.received != null && s.received !== "") nr[i] = s.received;
+      if (s.issued != null && s.issued !== "") ni[i] = s.issued;
     });
-    orderState.stock = ns; orderState.eta = ne; orderState.ordered = no; orderState.orderedOn = nod;
+    orderState.stock = ns; orderState.received = nr; orderState.issued = ni;
   }
   // Base item-name list for a simple line (Celluma / Devices).
   function invSimpleBase(lineId) {
@@ -4797,13 +4796,15 @@
       if (reset) reset.onclick = () => {
         const p = D.esthemaxOrder.params;
         orderState.usdInr = p.usdInr; orderState.customs = p.customsRate;
-        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.eta = {}; orderState.ordered = {}; orderState.orderedOn = {};
+        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.received = {}; orderState.issued = {};
         saveEdits(); renderTab("order");
       };
       const addBtn = document.getElementById("ordAddBtn");
       if (addBtn) addBtn.onclick = () => esthAddItem();
       const lowBtn = document.getElementById("ordLowStock");
       if (lowBtn) lowBtn.onclick = () => downloadLowStockReport();
+      const xdl = document.getElementById("ordXlsDl"); if (xdl) xdl.onclick = invExportExcel;
+      const xup = document.getElementById("ordXlsUp"); if (xup) xup.onchange = (e) => { const f = e.target.files[0]; if (f) invImportExcel(f); e.target.value = ""; };
       orderPaint();
     }, 0);
 
@@ -4835,7 +4836,7 @@
     return `
       <div class="section-head">
         <h1>Inventory — Esthemax</h1>
-        <p>Stock &amp; reorder plan from 15 months of sales (Apr-25 → Jun-26). Required stock covers ${esc(p.dermaMonths)} Primelaze + ${esc(p.salonMonths)} Casovil months. Items with stock ≥ required are marked <b>Saleable</b>; others <b>On hold</b>. Buy quantities round to the minimum order lot — JAR ${orderState.moqJar}, Retail ${orderState.moqRetail}. Adjust FX, customs, lot sizes and current stock live.</p>
+        <p>Track stock movement — how much comes <b>In</b> (received) and goes <b>Out</b> (issued/sold) against each item's <b>Current</b> stock and <b>Required</b> level. Items at or above required are <b>Saleable</b>; others <b>On hold</b>. ${isAdmin() ? "Update stock directly here, or <b>⬇ Download Excel</b>, fill In/Out/Current, and <b>⬆ Upload Excel</b> back — matched by item name." : "Read-only view."}</p>
       </div>
       ${lineSelector}
 
@@ -4861,7 +4862,9 @@
           <button data-ostatus="reorder" class="${orderState.status === "reorder" ? "active" : ""}">On hold</button>
         </div>
         ${isAdmin() ? `<button id="ordAddBtn" class="dl-btn" type="button">＋ Add Esthemax item</button>` : ""}
-        ${isAdmin() ? `<button id="ordLowStock" class="dl-btn" type="button" title="Download a PDF report of everything below required stock">⬇ Low-stock report (PDF)</button>` : ""}
+        ${isAdmin() ? `<button id="ordXlsDl" class="ghost-btn" type="button" title="Download the stock sheet as Excel">⬇ Download Excel</button>` : ""}
+        ${isAdmin() ? `<label class="ghost-btn" style="cursor:pointer" title="Upload the updated Excel — In/Out/Current are matched by item name">⬆ Upload Excel<input id="ordXlsUp" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+        ${isAdmin() ? `<button id="ordLowStock" class="ghost-btn" type="button" title="Download a PDF report of everything below required stock">⬇ Low-stock report (PDF)</button>` : ""}
       </div>
 
       <div class="table-wrap">
@@ -4869,13 +4872,13 @@
           <thead><tr>
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th>
-                 <th class="num">Required</th><th class="num">Current</th>${isAdmin() ? `<th class="num">To Buy</th>` : ""}<th class="num">On order</th><th>Ordered on</th><th>ETA (arrival)</th><th></th>`
-              : `<th>Product</th><th class="num">Current stock</th><th>Status</th><th class="num">On order</th><th>Ordered on</th><th>ETA (arrival)</th>`}
+                 <th class="num">Required</th><th class="num">In (received)</th><th class="num">Out (issued)</th><th class="num">Current</th><th class="num">To Buy</th><th></th>`
+              : `<th>Product</th><th class="num">Current stock</th><th class="num">In</th><th class="num">Out</th><th>Status</th>`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      ${isAdmin() ? `<div class="muted-note">Current stock is editable — type a new value to re-plan. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Use <b>⬇ Low-stock report (PDF)</b> to download a report of everything that needs buying.</div>` : ""}`;
+      ${isAdmin() ? `<div class="muted-note"><b>In</b> = total received, <b>Out</b> = total issued/sold, <b>Current</b> = stock in hand (all editable — type to update, saved for everyone). To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Prefer Excel? <b>⬇ Download Excel</b>, fill it, <b>⬆ Upload Excel</b> back.</div>` : ""}`;
   }
 
   function orderPaint() {
@@ -4891,11 +4894,15 @@
     const units = filtered.reduce((s, r) => s + r.toBuy, 0);
     const money = filtered.reduce((s, r) => s + r.money, 0);
     const canSell = filtered.filter((r) => r.canSell).length;
+    const totalIn = filtered.reduce((s, r) => s + (Number(orderState.received[r.i]) || 0), 0);
+    const totalOut = filtered.reduce((s, r) => s + (Number(orderState.issued[r.i]) || 0), 0);
     const admin = isAdmin();
     const kpis = [
+      { cls: "k-teal", label: "Total In (received)", value: inr(Math.round(totalIn)), note: "units received" },
+      { cls: "k-warn", label: "Total Out (issued)", value: inr(Math.round(totalOut)), note: "units gone out" },
       { cls: "k-good", label: "Saleable", value: inr(canSell), note: `of ${filtered.length} shown` },
       { cls: "", label: "On hold", value: inr(toOrder), note: "stock below required" },
-    ].concat(isAdmin() ? [{ cls: "k-teal", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
+    ].concat(admin ? [{ cls: "", label: "Units to buy", value: inr(Math.round(units)), note: "min-order rounded" }] : [])
       .map((x) => `<div class="card kpi ${x.cls}"><div class="kpi-label">${x.label}</div><div class="kpi-value">${x.value}</div><div class="kpi-note">${esc(x.note)}</div></div>`).join("");
     const kEl = document.getElementById("orderKpis");
     if (kEl) kEl.innerHTML = kpis;
@@ -4905,15 +4912,15 @@
       const status = r.canSell
         ? `<span class="badge b-good">Saleable</span>`
         : `<span class="badge b-warn">On hold</span>`;
+      const inV = orderState.received[r.i], outV = orderState.issued[r.i];
       if (!admin) {
-        // View: Product · Current stock · Status (arrival is super-admin only).
+        // View: Product · Current · In · Out · Status.
         return `<tr>
           <td class="t-name">${esc(r.it.name)}</td>
           <td class="num">${inr(r.current)}</td>
+          <td class="num">${inV == null || inV === "" ? "—" : esc(inV)}</td>
+          <td class="num">${outV == null || outV === "" ? "—" : esc(outV)}</td>
           <td>${status}</td>
-          <td class="num">${orderState.ordered[r.i] == null || orderState.ordered[r.i] === "" ? "—" : esc(orderState.ordered[r.i])}</td>
-          <td>${orderState.orderedOn[r.i] ? esc(fmtDate(orderState.orderedOn[r.i])) : "—"}</td>
-          <td>${orderState.eta[r.i] ? esc(fmtDate(orderState.eta[r.i])) : "—"}</td>
         </tr>`;
       }
       const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
@@ -4923,14 +4930,13 @@
         <td>${status}</td>
         <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
+        <td class="num"><input class="received-input" type="number" min="0" data-idx="${r.i}" value="${esc(inV ?? "")}" style="max-width:64px" placeholder="in"></td>
+        <td class="num"><input class="issued-input" type="number" min="0" data-idx="${r.i}" value="${esc(outV ?? "")}" style="max-width:64px" placeholder="out"></td>
         <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
-        ${isAdmin() ? `<td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>` : ""}
-        <td class="num"><input class="ordered-input" type="number" min="0" data-idx="${r.i}" value="${esc(orderState.ordered[r.i] ?? "")}" style="max-width:60px" placeholder="qty"></td>
-        <td><input class="orderedon-input" type="date" data-idx="${r.i}" value="${esc(orderState.orderedOn[r.i] || "")}"></td>
-        <td><input class="eta-input" type="date" data-idx="${r.i}" value="${esc(orderState.eta[r.i] || "")}"></td>
+        <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
         <td style="white-space:nowrap"><button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? 11 : 6}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? 10 : 5}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) {
       bEl.innerHTML = body; orderBindStockInputs();
@@ -4951,19 +4957,16 @@
       const statusCell = admin
         ? `<select class="inv-simple demo-select" data-item="${esc(name)}" data-f="status" style="max-width:160px"><option value="">—</option>${INV_STATUS.map((s) => `<option${d.status === s ? " selected" : ""}>${s}</option>`).join("")}</select>`
         : (d.status || "—");
-      // Order placed (qty) + expected arrival (ETA) — visible to everyone.
-      const orderedCell = admin
-        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="ordered" type="number" min="0" value="${esc(d.ordered == null ? "" : d.ordered)}" style="max-width:60px" placeholder="qty">`
-        : (d.ordered == null || d.ordered === "" ? "—" : esc(d.ordered));
-      const orderedOnCell = admin
-        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="orderedOn" type="date" value="${esc(d.orderedOn || "")}">`
-        : (d.orderedOn ? esc(fmtDate(d.orderedOn)) : "—");
-      const etaCell = admin
-        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="eta" type="date" value="${esc(d.eta || "")}">`
-        : (d.eta ? esc(fmtDate(d.eta)) : "—");
+      // In (received) + Out (issued) — stock movement, visible to everyone.
+      const inCell = admin
+        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="received" type="number" min="0" value="${esc(d.received == null ? "" : d.received)}" style="max-width:64px" placeholder="in">`
+        : (d.received == null || d.received === "" ? "—" : esc(d.received));
+      const outCell = admin
+        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="issued" type="number" min="0" value="${esc(d.issued == null ? "" : d.issued)}" style="max-width:64px" placeholder="out">`
+        : (d.issued == null || d.issued === "" ? "—" : esc(d.issued));
       const actionTd = admin ? `<td style="white-space:nowrap"><button class="ghost-btn inv-edit" data-item="${esc(name)}">Edit</button> <button class="ghost-btn danger inv-del" data-item="${esc(name)}">Delete</button></td>` : "";
-      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td>${statusCell}</td><td class="num">${orderedCell}</td><td>${orderedOnCell}</td><td>${etaCell}</td>${actionTd}</tr>`;
-    }).join("") || `<tr><td colspan="${6 + (admin ? 1 : 0)}" class="empty">No items.</td></tr>`;
+      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td class="num">${inCell}</td><td class="num">${outCell}</td><td>${statusCell}</td>${actionTd}</tr>`;
+    }).join("") || `<tr><td colspan="${5 + (admin ? 1 : 0)}" class="empty">No items.</td></tr>`;
   }
 
   function wireSimpleInv(lineId) {
@@ -4972,7 +4975,7 @@
     document.querySelectorAll(".inv-simple").forEach((el) => {
       el.onchange = () => {
         const rec = data[el.dataset.item] = data[el.dataset.item] || {};
-        const numF = el.dataset.f === "stock" || el.dataset.f === "ordered";
+        const numF = el.dataset.f === "stock" || el.dataset.f === "received" || el.dataset.f === "issued";
         rec[el.dataset.f] = numF ? (el.value === "" ? "" : Math.max(0, parseFloat(el.value) || 0)) : el.value;
         saveEdits(`${el.dataset.item} · ${el.dataset.f} → ${el.value || "—"}`);
       };
@@ -5008,10 +5011,10 @@
       </div>
       <div class="controls"><input id="ordSearch" class="search" type="search" placeholder="Search ${line.id === "celluma" ? "variant" : "machine"}…" value="${esc(orderState.q)}">${admin ? `<button id="invAddBtn" class="dl-btn" type="button">＋ Add ${line.id === "celluma" ? "variant" : "device"}</button>` : ""}</div>
       <div class="table-wrap"><table class="inv-table">
-        <thead><tr><th>Item</th><th class="num">Current stock</th><th>Status</th><th class="num">On order</th><th>Ordered on</th><th>ETA (arrival)</th>${admin ? `<th></th>` : ""}</tr></thead>
+        <thead><tr><th>Item</th><th class="num">Current stock</th><th class="num">In (received)</th><th class="num">Out (issued)</th><th>Status</th>${admin ? `<th></th>` : ""}</tr></thead>
         <tbody id="simpleInvBody">${simpleInvRows(items, data, orderState.q, admin)}</tbody>
       </table></div>
-      ${admin ? `<div class="muted-note">Enter current stock, status, <b>On order</b> (qty placed) and <b>ETA</b> (expected arrival) for each ${line.id === "celluma" ? "Celluma variant" : "machine"}. Use <b>＋ Add</b>, or <b>Edit</b> / <b>Delete</b> per row. Saved for everyone.</div>` : ""}`;
+      ${admin ? `<div class="muted-note">Track stock movement — <b>In</b> (received), <b>Out</b> (issued/sold) and the <b>Current stock</b> for each ${line.id === "celluma" ? "Celluma variant" : "machine"}. Use <b>＋ Add</b>, or <b>Edit</b> / <b>Delete</b> per row. Saved for everyone.</div>` : ""}`;
   }
 
   function orderBindStockInputs() {
@@ -5025,21 +5028,86 @@
         saveEdits(`Stock · ${(it && it.name) || "item"} → ${orderState.stock[idx]}`);
       };
     });
-    // ETA (expected arrival at Primelaze) — informational, no recompute needed.
-    document.querySelectorAll(".eta-input").forEach((inp) => {
-      inp.onchange = (e) => { orderState.eta[+e.target.dataset.idx] = e.target.value; saveEdits("Updated expected arrival"); };
-    });
-    document.querySelectorAll(".orderedon-input").forEach((inp) => {
-      inp.onchange = (e) => { orderState.orderedOn[+e.target.dataset.idx] = e.target.value; saveEdits("Updated order date"); };
-    });
-    // On-order quantity (units already ordered from the supplier).
-    document.querySelectorAll(".ordered-input").forEach((inp) => {
+    // In (received) — total units received into stock.
+    document.querySelectorAll(".received-input").forEach((inp) => {
       inp.onchange = (e) => {
         const v = parseFloat(e.target.value);
-        orderState.ordered[+e.target.dataset.idx] = e.target.value === "" ? "" : (isNaN(v) ? "" : Math.max(0, v));
-        saveEdits("Updated on-order qty");
+        orderState.received[+e.target.dataset.idx] = e.target.value === "" ? "" : (isNaN(v) ? "" : Math.max(0, v));
+        orderPaint();
+        saveEdits("Updated received (in)");
       };
     });
+    // Out (issued) — total units issued / sold out of stock.
+    document.querySelectorAll(".issued-input").forEach((inp) => {
+      inp.onchange = (e) => {
+        const v = parseFloat(e.target.value);
+        orderState.issued[+e.target.dataset.idx] = e.target.value === "" ? "" : (isNaN(v) ? "" : Math.max(0, v));
+        orderPaint();
+        saveEdits("Updated issued (out)");
+      };
+    });
+  }
+  // ---- Esthemax stock Excel: download the sheet / upload the filled sheet ----
+  const INV_XLS_HEADERS = ["Item", "Category", "Status", "6-mo avg", "Required", "In (received)", "Out (issued)", "Current", "To Buy"];
+  function invExportExcel() {
+    const rows = orderCompute();
+    const aoa = [INV_XLS_HEADERS];
+    rows.forEach((r) => aoa.push([
+      r.it.name, r.it.category, r.canSell ? "Saleable" : "On hold",
+      isNum(r.it.sixMoAvg) ? +r.it.sixMoAvg.toFixed(1) : "", r.it.requiredStock,
+      orderState.received[r.i] === "" || orderState.received[r.i] == null ? "" : Number(orderState.received[r.i]),
+      orderState.issued[r.i] === "" || orderState.issued[r.i] == null ? "" : Number(orderState.issued[r.i]),
+      r.current, Math.round(r.toBuy),
+    ]));
+    const fname = "esthemax_stock_" + new Date().toISOString().slice(0, 10) + ".xlsx";
+    if (window.XLSX) {
+      const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Esthemax stock");
+      window.XLSX.writeFile(wb, fname);
+    } else {
+      const csv = aoa.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const a = document.createElement("a"); a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      a.download = fname.replace(/\.xlsx$/, ".csv"); a.click();
+    }
+  }
+  function invImportExcel(file) {
+    const isCsv = /\.csv$/i.test(file.name) || !window.XLSX;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      let rows = [];
+      try {
+        if (isCsv) {
+          const lines = String(e.target.result).split(/\r?\n/).filter((l) => l.trim());
+          const hdr = lines.shift().split(",").map((h) => h.replace(/^"|"$/g, "").trim());
+          rows = lines.map((l) => { const c = l.split(","); const o = {}; hdr.forEach((h, i) => (o[h] = (c[i] || "").replace(/^"|"$/g, "").trim())); return o; });
+        } else {
+          const wb = window.XLSX.read(e.target.result, { type: "array" });
+          rows = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+        }
+      } catch (err) { window.alert("Could not read that file: " + err.message); return; }
+      const g = (o, ...keys) => { for (const k of keys) { const kk = Object.keys(o).find((x) => x.toLowerCase().replace(/[^a-z]/g, "") === k); if (kk != null && o[kk] !== "") return o[kk]; } return ""; };
+      const idxByName = {}; D.esthemaxOrder.items.forEach((it, i) => { idxByName[String(it.name).toLowerCase().trim()] = i; });
+      const num = (v) => { const n = parseFloat(String(v).replace(/[^0-9.]/g, "")); return isNaN(n) ? null : n; };
+      let updated = 0, unknown = 0;
+      rows.forEach((o) => {
+        const nm = String(g(o, "item", "product", "name")).toLowerCase().trim();
+        if (!nm) return;
+        const i = idxByName[nm];
+        if (i == null) { unknown++; return; }
+        const inV = num(g(o, "inreceived", "in", "received"));
+        const outV = num(g(o, "outissued", "out", "issued"));
+        const cur = num(g(o, "current", "currentstock", "stock"));
+        if (inV != null) orderState.received[i] = inV;
+        if (outV != null) orderState.issued[i] = outV;
+        if (cur != null) orderState.stock[i] = cur;
+        updated++;
+      });
+      saveEdits("Imported Esthemax stock sheet");
+      orderPaint();
+      window.alert("Updated " + updated + " item" + (updated === 1 ? "" : "s") + " from the sheet." + (unknown ? "\n" + unknown + " row(s) had item names not found and were skipped." : ""));
+    };
+    if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
 
   /* ---------------- shell / routing ---------------- */
@@ -5289,12 +5357,11 @@
       });
       if (e.esthOverrides && typeof e.esthOverrides === "object") Object.keys(e.esthOverrides).forEach((k) => { esthOverrides[k] = e.esthOverrides[k]; });
       rebuildEsthItems();
-      if (e.stock || e.eta || e.ordered || e.orderedOn) {
+      if (e.stock || e.received || e.issued) {
         D.esthemaxOrder.items.forEach((it, i) => {
           if (e.stock && e.stock[it.name] != null) orderState.stock[i] = e.stock[it.name];
-          if (e.eta && e.eta[it.name] != null) orderState.eta[i] = e.eta[it.name];
-          if (e.ordered && e.ordered[it.name] != null) orderState.ordered[i] = e.ordered[it.name];
-          if (e.orderedOn && e.orderedOn[it.name] != null) orderState.orderedOn[i] = e.orderedOn[it.name];
+          if (e.received && e.received[it.name] != null) orderState.received[i] = e.received[it.name];
+          if (e.issued && e.issued[it.name] != null) orderState.issued[i] = e.issued[it.name];
         });
       }
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
@@ -5375,12 +5442,11 @@
     clearTimeout(saveTimer);
     const desc = (what == null ? "" : String(what)).slice(0, 120);
     saveTimer = setTimeout(async () => {
-      const stock = {}, eta = {}, ordered = {}, orderedOn = {};
+      const stock = {}, received = {}, issued = {};
       D.esthemaxOrder.items.forEach((it, i) => {
         if (orderState.stock[i] != null) stock[it.name] = orderState.stock[i];
-        if (orderState.eta[i]) eta[it.name] = orderState.eta[i];
-        if (orderState.ordered[i] != null && orderState.ordered[i] !== "") ordered[it.name] = orderState.ordered[i];
-        if (orderState.orderedOn[i]) orderedOn[it.name] = orderState.orderedOn[i];
+        if (orderState.received[i] != null && orderState.received[i] !== "") received[it.name] = orderState.received[i];
+        if (orderState.issued[i] != null && orderState.issued[i] !== "") issued[it.name] = orderState.issued[i];
       });
       const by = (sessionUser && sessionUser.email) || "";
       const at = Date.now();
@@ -5391,7 +5457,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, eta, ordered, orderedOn, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
