@@ -111,7 +111,7 @@
   const TABS = [
     { id: "overview", label: "Overview", group: "", render: renderOverview },
     { id: "team", label: "Team Roster", group: "People", render: renderTeam },
-    { id: "leads", label: "Leads", group: "Sales", render: renderLeads },
+    { id: "leads", label: "Casovil Leads", group: "Sales", render: renderLeads },
     { id: "targets", label: "HQ Targets", group: "Sales", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Sales", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Catalog", render: renderPricing },
