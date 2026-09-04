@@ -1005,3 +1005,19 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-tl-contact .lead-contact { flex-direction: row; align-items: center; gap: 10px; }
 .lead-tl-contact .cbtn span { display: inline; }
 .lead-tl-contact .cbtn { font-size: 13px; padding: 7px 14px; }
+
+/* Leads — clickable name + detail popup */
+.lead-open { background: none; border: none; padding: 0; margin: 0; text-align: left; cursor: pointer; font: inherit; color: inherit; display: block; width: 100%; }
+.lead-open .lead-name { display: block; color: var(--accent); }
+.lead-open:hover .lead-name { text-decoration: underline; }
+.lead-open-sub { display: block; }
+.lead-detail-card { width: min(640px, 100%); }
+.ld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 12px; }
+.ld-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+.ld-field > span { font-weight: 600; }
+.ld-field input, .ld-field select { padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; }
+.ld-val { font-size: 14px; color: var(--text); padding: 2px 0; }
+.ld-meta { font-size: 12px; color: var(--text-3); margin: 2px 0 10px; }
+.ld-h { margin: 10px 0 6px; font-size: 13px; }
+.ld-actions { flex-wrap: wrap; }
+@media (max-width: 640px) { .ld-grid { grid-template-columns: 1fr; } .ld-actions button { flex: 1 1 auto; } }

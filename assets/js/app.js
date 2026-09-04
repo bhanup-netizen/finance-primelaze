@@ -3501,17 +3501,19 @@
     const sold = r.stage === "sold" && (Number(r.soldAmount) || r.soldDate)
       ? `<div class="lead-sold-note">✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
     const archTag = archived ? `<div class="lead-arch-tag">🗄 Archived</div>` : "";
-    const tlBtn = `<button type="button" class="linkish lead-timeline-btn" data-id="${esc(r.id)}">🕘 Timeline${hist.length ? " (" + hist.length + ")" : ""}</button>`;
+    const tlBtn = `<button type="button" class="linkish lead-timeline-btn" data-id="${esc(r.id)}">🔍 Open${hist.length ? " (" + hist.length + ")" : ""}</button>`;
     const addBtn = admin ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Add an update to the timeline">＋ Update</button>` : "";
     const archBtn = admin ? (archived
       ? `<button type="button" class="linkish lead-unarchive" data-id="${esc(r.id)}" title="Restore to the active board">↩ Restore</button>`
       : `<button type="button" class="linkish lead-archive" data-id="${esc(r.id)}" title="Archive — hides it but keeps it in the database">🗄 Archive</button>`) : "";
     return `${archTag}${leadStepper(r)}${ageHtml}${sold}${lastHtml}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}</div>`;
   }
-  // Full lifecycle timeline in a modal — entered-by, source, then every move.
-  function leadTimelineDialog(id) {
+  // Full lead detail popup — editable fields (admin), contact actions, ageing,
+  // and the complete lifecycle timeline. This is the primary way to open a lead.
+  function leadDetailDialog(id) {
     const r = leadAll().find((x) => x.id === id); if (!r) return;
     const admin = canEditLeads();
+    const archived = leadIsArchived(id);
     const hist = leadHistory(r);
     const enteredBy = r.createdBy ? esc(r.createdBy) : "Lead sheet import";
     const enteredWhen = r.createdAt ? esc(fmtWhen(r.createdAt)) : "—";
@@ -3524,45 +3526,83 @@
       if (e.kind === "restore") return `<span class="lead-stage-tag lead-tl-created">Restored</span>`;
       return `<span class="lead-stage-tag lst-${e.stage || "new"}">${esc(LEAD_STAGE_LABEL[e.stage || "new"] || "")}</span>`;
     };
-    const items = events.map((e) => `
+    const items = events.slice().reverse().map((e) => `
       <li class="lead-tl-item">
         <span class="lead-tl-dot ${dot(e)}"></span>
         <div class="lead-tl-body">
-          <div class="lead-tl-head">
-            ${tag(e)}
-            <span class="lead-tl-when">${esc(leadWhen(e))}</span>
-          </div>
+          <div class="lead-tl-head">${tag(e)}<span class="lead-tl-when">${esc(leadWhen(e))}</span></div>
           <div class="lead-tl-text">${esc(e.text)}</div>
           <div class="lead-tl-by">${e.by ? "— " + esc(e.by) : (e.kind === "created" ? "— " + enteredBy : "")}</div>
         </div>
       </li>`).join("");
-    const doc = r.link ? ` · <a href="${esc(r.link)}" target="_blank" rel="noopener">📎 Attachment</a>` : "";
+    const owners = leadOwners();
+    const val = (v) => esc(v || "");
+    // Field rendered as an input (admin) or plain text (viewer).
+    const fText = (f, label, ph) => admin
+      ? `<label class="ld-field"><span>${label}</span><input id="ld_${f}" type="text" value="${val(r[f])}" placeholder="${ph || ""}"></label>`
+      : `<div class="ld-field"><span>${label}</span><div class="ld-val">${r[f] ? esc(r[f]) : "—"}</div></div>`;
+    const fSelect = (f, label, list, blank) => {
+      if (!admin) return `<div class="ld-field"><span>${label}</span><div class="ld-val">${r[f] ? esc(f === "owner" ? spLabel(r[f]) : r[f]) : "—"}</div></div>`;
+      const cur = r[f] || "";
+      const extra = cur && list.indexOf(cur) < 0 ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : "";
+      return `<label class="ld-field"><span>${label}</span><select id="ld_${f}">${blank ? `<option value="">${esc(blank)}</option>` : ""}${extra}${list.map((o) => `<option value="${esc(o)}"${cur === o ? " selected" : ""}>${esc(f === "owner" ? spLabel(o) : o)}</option>`).join("")}</select></label>`;
+    };
     const wrap = document.createElement("div");
     wrap.className = "lead-modal";
-    wrap.innerHTML = `<div class="lead-modal-card lead-tl-card">
+    wrap.innerHTML = `<div class="lead-modal-card lead-detail-card">
       <div class="lead-tl-topline">
-        <h3>${esc(r.name || r.company || "Lead")}</h3>
+        <h3>${esc(r.name || r.company || "Lead")}${archived ? ` <span class="lead-arch-tag">🗄 Archived</span>` : ""}</h3>
         <span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>
       </div>
-      <div class="lead-tl-sub">
-        ${esc(r.company || "")}${r.city || r.state ? " · " + esc([r.city, r.state].filter(Boolean).join(", ")) : ""}<br>
-        <b>Source:</b> ${esc(r.source || "—")} · <b>Product:</b> ${esc(r.product || "—")} · <b>Owner:</b> ${esc(spLabel(r.owner) || "Unassigned")}${doc}<br>
-        <b>Entered by:</b> ${enteredBy} · ${enteredWhen}
-      </div>
+      ${leadAgeLabel(r) ? `<div class="t-muted lead-age" style="margin:-4px 0 10px">${esc(leadAgeLabel(r))}</div>` : ""}
       ${r.mobile ? `<div class="lead-tl-contact">${leadContactCell(r)}</div>` : ""}
+      <div class="ld-grid">
+        ${fText("name", "Name", "Contact name")}
+        ${fText("mobile", "Mobile", "10-digit")}
+        ${fText("company", "Salon / company")}
+        ${fText("city", "City")}
+        ${fText("state", "State")}
+        ${fSelect("source", "Source", LEAD_SOURCES, "")}
+        ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
+        ${fSelect("owner", "Owner (rep)", owners, "— Unassigned —")}
+        ${fText("link", "Attachment link", "https://…")}
+      </div>
+      <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
+      <h4 class="ld-h">Journey</h4>
       <ol class="lead-tl">${items}</ol>
-      <div class="lead-modal-actions">
-        ${admin ? `<button type="button" class="ghost-btn" id="ltlAdd">＋ Add to timeline</button>` : ""}
-        <button type="button" class="dl-btn" id="ltlClose">Close</button>
+      <div class="lead-modal-actions ld-actions">
+        ${admin ? `<button type="button" class="dl-btn" id="ldAdd">＋ Add update / move stage</button>` : ""}
+        ${admin ? (archived ? `<button type="button" class="ghost-btn" id="ldArch">↩ Restore</button>` : `<button type="button" class="ghost-btn" id="ldArch">🗄 Archive</button>`) : ""}
+        ${admin ? `<button type="button" class="ghost-btn" id="ldSave">💾 Save details</button>` : ""}
+        <button type="button" class="ghost-btn" id="ldClose">Close</button>
       </div>
     </div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
-    document.getElementById("ltlClose").onclick = close;
-    const addB = document.getElementById("ltlAdd");
+    document.getElementById("ldClose").onclick = close;
+    const addB = document.getElementById("ldAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
+    const archB = document.getElementById("ldArch");
+    if (archB) archB.onclick = () => {
+      if (archived) { leadArchiveSet(id, false); close(); leadRepaint(); return; }
+      if (window.confirm("Archive this lead? It stays in the database and can be restored from the Archived view.")) { leadArchiveSet(id, true); close(); leadRepaint(); }
+    };
+    const saveB = document.getElementById("ldSave");
+    if (saveB) saveB.onclick = () => {
+      let changed = 0;
+      ["name", "mobile", "company", "city", "state", "source", "product", "owner", "link"].forEach((f) => {
+        const el = document.getElementById("ld_" + f); if (!el) return;
+        let v = (el.value || "").trim();
+        if (f === "mobile") v = v.replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
+        if (v !== (r[f] || "")) { leadUpdate(id, f, v); changed++; }
+      });
+      close(); leadRepaint();
+      if (!changed) { /* nothing changed */ }
+    };
   }
+  // Back-compat alias (older call sites).
+  function leadTimelineDialog(id) { leadDetailDialog(id); }
   // Contact cell — the number plus separate Call and WhatsApp actions.
   function leadContactCell(r) {
     const digits = String(r.mobile || "").replace(/[^0-9]/g, "");
@@ -3582,7 +3622,7 @@
       const loc = [r.city, r.state].filter(Boolean).join(", ");
       const sold = r.stage === "sold";
       return `<tr class="${sold ? "lead-won" : ""}">
-        <td data-label="Lead"><div class="lead-name">${esc(r.name || "—")}</div><div class="t-muted">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</div></td>
+        <td data-label="Lead"><button type="button" class="lead-open" data-id="${esc(r.id)}"><span class="lead-name">${esc(r.name || "—")}</span><span class="t-muted lead-open-sub">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</span></button></td>
         <td data-label="Contact">${leadContactCell(r)}</td>
         <td data-label="Location">${esc(loc || "—")}</td>
         <td data-label="Source"><span class="tag lead-src">${esc(r.source || "—")}</span></td>
@@ -3649,8 +3689,8 @@
     });
     // "＋ Remark" = log an activity in the CURRENT stage.
     document.querySelectorAll(".lead-remark-add").forEach((b) => (b.onclick = () => leadRemarkDialog({ id: b.dataset.id })));
-    // Open the full lifecycle timeline.
-    document.querySelectorAll(".lead-timeline-btn").forEach((b) => (b.onclick = () => leadTimelineDialog(b.dataset.id)));
+    // Open the full lead detail popup (name click or the Open button).
+    document.querySelectorAll(".lead-open, .lead-timeline-btn").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.id)));
     // Archive / restore — keeps the record in the database.
     document.querySelectorAll(".lead-archive").forEach((b) => (b.onclick = () => {
       const l = leadAll().find((x) => x.id === b.dataset.id);
