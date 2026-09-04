@@ -3898,7 +3898,7 @@
     const sel = (id, cur, values, label) => `<label class="ord-field"><span>${esc(label)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>`;
     return `
       <div class="section-head">
-        <h1>Leads &amp; Sales Pipeline</h1>
+        <h1>Casovil Leads</h1>
         <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually or import your lead sheet — duplicates (same name &amp; mobile) are skipped." : "Read-only view."}</p>
       </div>
       ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
