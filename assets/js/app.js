@@ -2961,19 +2961,27 @@
     if (!col) {
       summary = `<p class="muted-note">This shows how much outstanding was <b>collected</b> and <b>when</b>. Import your sheet now, then again after payments come in — the drop per customer will appear here. Snapshots so far: <b>${paySnapshots.length}</b>.</p>`;
     } else {
-      // Look up salesperson + state (HQ) for each customer from the current data.
+      // Look up salesperson, state (HQ) + latest received date per customer.
       const meta = {};
-      payAll().forEach((r) => { const c = (r.customer || "—").trim(); if (c && !meta[c]) meta[c] = { sp: r.salesPerson || "", hq: r.hq || "" }; });
+      payAll().forEach((r) => {
+        const c = (r.customer || "—").trim(); if (!c) return;
+        const m = meta[c] || (meta[c] = { sp: r.salesPerson || "", hq: r.hq || "", rd: "" });
+        if (!m.sp && r.salesPerson) m.sp = r.salesPerson;
+        if (!m.hq && r.hq) m.hq = r.hq;
+        const rd = r.receivedDate ? String(r.receivedDate).slice(0, 10) : "";
+        if (rd && rd > m.rd) m.rd = rd; // keep the most recent received date
+      });
       const body = col.rows.slice(0, 100).map((r) => { const mm = meta[r.customer] || {}; return `<tr>
         <td class="t-name">${esc(r.customer)}</td>
         <td>${esc(mm.sp ? spLabel(mm.sp) : "—")}</td>
         <td>${esc(mm.hq || "—")}</td>
         <td class="num">${rupeeShort(r.before)}</td>
         <td class="num">${rupeeShort(r.after)}</td>
-        <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td></tr>`; }).join("")
-        || `<tr><td colspan="6" class="empty">No outstanding decreased since the previous import.</td></tr>`;
+        <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td>
+        <td>${mm.rd ? esc(fmtDate(mm.rd)) : "—"}</td></tr>`; }).join("")
+        || `<tr><td colspan="7" class="empty">No outstanding decreased since the previous import.</td></tr>`;
       summary = `<p>Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s).</p>
-        <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th>Sales Person</th><th>State</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th></tr></thead><tbody>${body}</tbody></table></div>`;
+        <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th>Sales Person</th><th>State</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th><th>Collected on</th></tr></thead><tbody>${body}</tbody></table></div>`;
     }
     const trendRows = trend.map((s, i) => {
       const older = trend[i + 1];
