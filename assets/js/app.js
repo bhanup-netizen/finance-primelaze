@@ -3313,6 +3313,10 @@
   const leadIsArchived = (id) => leadArchive.indexOf(id) >= 0;
   // Only a super-admin can ever hard-delete a lead; page admins archive instead.
   const canDeleteLeads = () => isSuperAdmin() && appMode === "admin";
+  // Anyone who can open the Leads page may add a timeline remark on ANY lead
+  // (even view-only users, e.g. a verifier). Editing fields, moving stages,
+  // archiving etc. still require edit access (canEditLeads).
+  const canRemarkLeads = () => canSeePage("leads");
 
   // ---- Lead ageing: days in current stage + total age ----
   const DAY_MS = 86400000;
@@ -3580,7 +3584,7 @@
       ? `<div class="lead-sold-note">✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
     const archTag = archived ? `<div class="lead-arch-tag">🗄 Archived</div>` : "";
     const tlBtn = `<button type="button" class="linkish lead-timeline-btn" data-id="${esc(r.id)}">🔍 Open${hist.length ? " (" + hist.length + ")" : ""}</button>`;
-    const addBtn = admin ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Add an update to the timeline">＋ Update</button>` : "";
+    const addBtn = canRemarkLeads() ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Add an update to the timeline">＋ Update</button>` : "";
     const archBtn = admin ? (archived
       ? `<button type="button" class="linkish lead-unarchive" data-id="${esc(r.id)}" title="Restore to the active board">↩ Restore</button>`
       : `<button type="button" class="linkish lead-archive" data-id="${esc(r.id)}" title="Archive — hides it but keeps it in the database">🗄 Archive</button>`) : "";
@@ -3649,7 +3653,7 @@
       <h4 class="ld-h">Journey</h4>
       <ol class="lead-tl">${items}</ol>
       <div class="lead-modal-actions ld-actions">
-        ${admin ? `<button type="button" class="dl-btn" id="ldAdd">＋ Add update / move stage</button>` : ""}
+        ${canRemarkLeads() ? `<button type="button" class="dl-btn" id="ldAdd">＋ Add update${admin ? " / move stage" : ""}</button>` : ""}
         ${admin && !r.owner && myLeadOwner() ? `<button type="button" class="ghost-btn" id="ldMine">🙋 Assign to me</button>` : ""}
         ${admin ? (archived ? `<button type="button" class="ghost-btn" id="ldArch">↩ Restore</button>` : `<button type="button" class="ghost-btn" id="ldArch">🗄 Archive</button>`) : ""}
         ${admin ? `<button type="button" class="ghost-btn" id="ldSave">💾 Save details</button>` : ""}
@@ -3799,6 +3803,7 @@
   function leadRemarkDialog(opts) {
     const { id, newStage, oldStage, selEl } = opts;
     const l = leadAll().find((x) => x.id === id); if (!l) { if (selEl && oldStage) selEl.value = oldStage; return; }
+    const canMove = canEditLeads(); // view users may only add a note, not move stage
     const curStage = l.stage || "new";
     const preStage = newStage || curStage;
     const wrap = document.createElement("div");
@@ -3807,12 +3812,12 @@
       <h3>Add to timeline — ${esc(l.name || l.company || "lead")}</h3>
       <label class="lead-remark-label">Update / note
         <textarea id="lrText" rows="3" placeholder="e.g. Called, shared brochure, asked to follow up next week"></textarea></label>
-      <label class="lead-remark-label">Stage (leave as current, or move it)
+      ${canMove ? `<label class="lead-remark-label">Stage (leave as current, or move it)
         <select id="lrStage" class="select">${LEAD_STAGES.map((s) => `<option value="${s.key}"${preStage === s.key ? " selected" : ""}>${esc(s.label)}${s.key === curStage ? " · current" : ""}</option>`).join("")}</select></label>
       <div class="lead-form-grid" id="lrSoldBox"${preStage === "sold" ? "" : " hidden"}>
         <label>Deal value ₹<input id="lrAmt" type="number" placeholder="0" value="${l.soldAmount ? esc(l.soldAmount) : ""}"></label>
         <label>Sold on<input id="lrDate" type="date" value="${esc(l.soldDate || leadToday())}"></label>
-      </div>
+      </div>` : `<div class="muted-note">This is added as a note in the current stage. Only editors can move the stage.</div>`}
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="lrCancel">Cancel</button>
         <button type="button" class="dl-btn" id="lrSave">Save to timeline</button>
@@ -3822,15 +3827,15 @@
     const revert = () => { if (selEl && oldStage) selEl.value = oldStage; };
     const close = () => wrap.remove();
     const stageSel = document.getElementById("lrStage");
-    stageSel.onchange = () => { document.getElementById("lrSoldBox").hidden = stageSel.value !== "sold"; };
+    if (stageSel) stageSel.onchange = () => { document.getElementById("lrSoldBox").hidden = stageSel.value !== "sold"; };
     wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
     document.getElementById("lrCancel").onclick = () => { revert(); close(); };
     document.getElementById("lrSave").onclick = () => {
       const text = (document.getElementById("lrText").value || "").trim();
       if (!text) { window.alert("Please enter an update / note."); return; }
-      const chosen = stageSel.value;
+      const chosen = stageSel ? stageSel.value : curStage;
       const moved = chosen !== curStage;
-      if (chosen === "sold") {
+      if (moved && chosen === "sold") {
         const n = parseFloat(String(document.getElementById("lrAmt").value).replace(/[^0-9.]/g, "")) || 0;
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
         leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
@@ -5366,7 +5371,7 @@
 
   let saveTimer = null;
   function saveEdits(what) {
-    if (!db || !(roleIsAdmin() || hasAnyEditGrant())) return;
+    if (!db || !(roleIsAdmin() || hasAnyEditGrant() || canSeePage("leads"))) return;
     clearTimeout(saveTimer);
     const desc = (what == null ? "" : String(what)).slice(0, 120);
     saveTimer = setTimeout(async () => {
