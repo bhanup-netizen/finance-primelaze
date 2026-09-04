@@ -2670,7 +2670,6 @@
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
   let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" };
-  let payColFrom = "", payColTo = ""; // collections table: filter by collected (received) date
   let payColFilters = {}; // Excel-style per-column filters on the detailed report
   let paySnapshots = [];  // [{at, by, total, rows, cust:{name:outstanding}}] — one per import, for collection tracking
   let payClearBefore = ""; // admin: hide commitments committed before this date
@@ -2972,10 +2971,11 @@
         const rd = r.receivedDate ? String(r.receivedDate).slice(0, 10) : "";
         if (rd && rd > m.rd) m.rd = rd; // keep the most recent received date
       });
-      // Attach the collected-on date, then filter by the chosen date range.
+      // Attach the collected-on date, then filter by the shared top-bar range.
+      const cFrom = payFilter.from, cTo = payFilter.to;
       let crows = col.rows.map((r) => ({ ...r, rd: (meta[r.customer] || {}).rd || "" }));
-      const ranged = payColFrom || payColTo;
-      if (ranged) crows = crows.filter((r) => r.rd && (!payColFrom || r.rd >= payColFrom) && (!payColTo || r.rd <= payColTo));
+      const ranged = cFrom || cTo;
+      if (ranged) crows = crows.filter((r) => r.rd && (!cFrom || r.rd >= cFrom) && (!cTo || r.rd <= cTo));
       const rangedTotal = crows.reduce((a, r) => a + r.collected, 0);
       const body = crows.slice(0, 200).map((r) => { const mm = meta[r.customer] || {}; return `<tr>
         <td class="t-name">${esc(r.customer)}</td>
@@ -2986,15 +2986,9 @@
         <td class="num" style="color:var(--good);font-weight:700">↓ ${rupeeShort(r.collected)}</td>
         <td>${r.rd ? esc(fmtDate(r.rd)) : "—"}</td></tr>`; }).join("")
         || `<tr><td colspan="7" class="empty">No collections${ranged ? " in this date range" : " since the previous import"}.</td></tr>`;
-      const rangeBar = `<div class="controls" style="margin:4px 0 10px">
-        <label class="ord-field"><span>Collected from</span><input id="payColFrom" type="date" class="select" value="${esc(payColFrom)}"></label>
-        <label class="ord-field"><span>Collected to</span><input id="payColTo" type="date" class="select" value="${esc(payColTo)}"></label>
-        ${(payColFrom || payColTo) ? `<button id="payColClear" class="ghost-btn" type="button">Clear dates</button>` : ""}
-      </div>`;
       summary = `<p>${ranged
-        ? `Collected <b style="color:var(--good)">${rupeeShort(rangedTotal)}</b> across <b>${crows.length}</b> customer(s)${payColFrom ? " from <b>" + esc(payColFrom) + "</b>" : ""}${payColTo ? " to <b>" + esc(payColTo) + "</b>" : ""} (by payment received date).`
-        : `Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s).`}</p>
-        ${rangeBar}
+        ? `Collected <b style="color:var(--good)">${rupeeShort(rangedTotal)}</b> across <b>${crows.length}</b> customer(s)${cFrom ? " from <b>" + esc(cFrom) + "</b>" : ""}${cTo ? " to <b>" + esc(cTo) + "</b>" : ""} (by payment received date). Set the <b>date range</b> in the filter bar above.`
+        : `Since the previous update (<b>${esc(fmtWhen(col.prev.at))}</b> → <b>${esc(fmtWhen(col.cur.at))}</b>): collected <b style="color:var(--good)">${rupeeShort(col.totalCollected)}</b> across <b>${col.rows.length}</b> customer(s). Use the <b>date range</b> in the filter bar above to track a specific period.`}</p>
         <div class="table-wrap"><table><thead><tr><th>Customer (doctor/clinic)</th><th>Sales Person</th><th>State</th><th class="num">Outstanding was</th><th class="num">Now</th><th class="num">Collected</th><th>Collected on</th></tr></thead><tbody>${body}</tbody></table></div>`;
     }
     const trendRows = trend.map((s, i) => {
@@ -3192,13 +3186,6 @@
       });
       const clr = document.getElementById("payClearFilters");
       if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" }; payColFilters = {}; renderTab("payments"); };
-      // Collections table — filter by collected (payment received) date range.
-      const cf = document.getElementById("payColFrom");
-      if (cf) cf.onchange = (e) => { payColFrom = e.target.value; renderTab("payments"); };
-      const cto = document.getElementById("payColTo");
-      if (cto) cto.onchange = (e) => { payColTo = e.target.value; renderTab("payments"); };
-      const cclr = document.getElementById("payColClear");
-      if (cclr) cclr.onclick = () => { payColFrom = ""; payColTo = ""; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
@@ -3246,8 +3233,8 @@
         <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Due period</span><select id="payDueSel" class="select"><option value="">All</option><option value="below30"${payFilter.due === "below30" ? " selected" : ""}>Below 30 days / Pending machines</option><option value="above30"${payFilter.due === "above30" ? " selected" : ""}>Above 30 days / Installed machines</option></select></label>
-        <label class="ord-field"><span>Committed from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}"></label>
-        <label class="ord-field"><span>Committed to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}"></label>
+        <label class="ord-field"><span>Date from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}" title="Filters the report by committed date and the collections table by payment received date"></label>
+        <label class="ord-field"><span>Date to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}" title="Filters the report by committed date and the collections table by payment received date"></label>
         <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
