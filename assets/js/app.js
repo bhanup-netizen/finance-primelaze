@@ -3298,7 +3298,8 @@
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history",
-    "soldAmount", "soldDate", "updatedAt"];
+    "soldAmount", "soldDate", "createdBy", "createdAt", "updatedAt"];
+  const LEAD_STEP_KEYS = ["new", "contacted", "demo", "negotiation", "sold"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
   const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
@@ -3340,7 +3341,7 @@
   }
   function leadAddNew(obj) {
     const id = "u" + (leadSeq++);
-    leadAdds.push(Object.assign({ id, stage: "new", updatedAt: Date.now() }, obj));
+    leadAdds.push(Object.assign({ id, stage: "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, obj));
     saveEdits("Added lead " + (obj.name || obj.company || ""));
     return id;
   }
@@ -3433,25 +3434,76 @@
       ${owners.map((o) => `<option value="${esc(o)}"${cur === o ? " selected" : ""}>${esc(spLabel(o))}</option>`).join("")}
     </select>`;
   }
-  // Remark cell = latest remark + timestamped history + "add remark" control.
+  // Remark cell = compact stage tracker + latest remark + a Timeline opener.
   function leadHistory(r) { return Array.isArray(r.history) ? r.history : []; }
+  function leadWhen(h) { return h && h.at ? fmtWhen(h.at) : "from lead sheet"; }
+  // Small dotted progress tracker showing where the lead sits in the pipeline.
+  function leadStepper(r) {
+    if (r.stage === "lost") return `<div class="lead-steps"><span class="lead-lost-tag">✕ Lost</span></div>`;
+    const idx = LEAD_STEP_KEYS.indexOf(r.stage || "new");
+    return `<div class="lead-steps">${LEAD_STEP_KEYS.map((k, i) =>
+      `<span class="lead-step lst-${k}${i < idx ? " done" : ""}${i === idx ? " cur" : ""}" title="${esc(LEAD_STAGE_LABEL[k])}"></span>`).join("<span class=\"lead-step-bar\"></span>")}</div>`;
+  }
   function leadRemarkCell(r, admin) {
     const hist = leadHistory(r);
     const last = hist.length ? hist[hist.length - 1] : null;
-    const when = (h) => h.at ? fmtWhen(h.at) : "from lead sheet";
-    const meta = (h) => `${esc(when(h))} · <span class="lead-stage-tag lst-${h.stage || "new"}">${esc(LEAD_STAGE_LABEL[h.stage || "new"] || "")}</span>${h.by ? " · " + esc(h.by) : ""}`;
     const lastHtml = last
-      ? `<div class="lead-remark-last">${esc(last.text)}</div><div class="t-muted lead-remark-meta">${meta(last)}</div>`
-      : `<span class="t-muted">No remarks yet</span>`;
-    const doc = r.link ? ` <a href="${esc(r.link)}" target="_blank" rel="noopener" title="Open attachment">📎</a>` : "";
+      ? `<div class="lead-remark-last">${esc(last.text)}</div><div class="t-muted lead-remark-meta">${last.by ? esc(last.by) : "—"} · ${esc(leadWhen(last))}</div>`
+      : `<span class="t-muted lead-remark-empty">No remark yet</span>`;
     const sold = r.stage === "sold" && (Number(r.soldAmount) || r.soldDate)
-      ? `<div class="lead-sold-note">✓ Sold ${r.soldAmount ? "₹" + inr(Number(r.soldAmount)) : ""}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
-    const histBtn = hist.length > 1 ? `<button type="button" class="linkish lead-hist-toggle" data-id="${esc(r.id)}">History (${hist.length})</button>` : "";
+      ? `<div class="lead-sold-note">✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
+    const tlBtn = `<button type="button" class="linkish lead-timeline-btn" data-id="${esc(r.id)}">🕘 Timeline${hist.length ? " (" + hist.length + ")" : ""}</button>`;
     const addBtn = admin ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Log an activity / add a remark">＋ Remark</button>` : "";
     const delBtn = admin ? `<button type="button" class="linkish lead-del" data-id="${esc(r.id)}" title="Delete this lead">Delete</button>` : "";
-    const histList = hist.length ? `<ul class="lead-hist" hidden>${hist.slice().reverse().map((h) =>
-      `<li><span class="lead-hist-when">${esc(when(h))}</span> · <span class="lead-stage-tag lst-${h.stage || "new"}">${esc(LEAD_STAGE_LABEL[h.stage || "new"] || "")}</span>${h.by ? ` · <b>${esc(h.by)}</b>` : ""}<div>${esc(h.text)}</div></li>`).join("")}</ul>` : "";
-    return `${sold}${lastHtml}${doc}<div class="lead-remark-tools">${addBtn}${histBtn}${delBtn}</div>${histList}`;
+    return `${leadStepper(r)}${sold}${lastHtml}<div class="lead-remark-tools">${tlBtn}${addBtn}${delBtn}</div>`;
+  }
+  // Full lifecycle timeline in a modal — entered-by, source, then every move.
+  function leadTimelineDialog(id) {
+    const r = leadAll().find((x) => x.id === id); if (!r) return;
+    const admin = canEditLeads();
+    const hist = leadHistory(r);
+    const enteredBy = r.createdBy ? esc(r.createdBy) : "Lead sheet import";
+    const enteredWhen = r.createdAt ? esc(fmtWhen(r.createdAt)) : "—";
+    const events = [{ kind: "created", at: r.createdAt || 0, by: r.createdBy || "", stage: "new", text: "Lead entered into the system" }]
+      .concat(hist.map((h) => ({ kind: "stage", at: h.at, by: h.by, stage: h.stage, text: h.text })));
+    const dot = (e) => e.kind === "created" ? "lead-tl-created" : "lst-" + (e.stage || "new");
+    const items = events.map((e) => `
+      <li class="lead-tl-item">
+        <span class="lead-tl-dot ${dot(e)}"></span>
+        <div class="lead-tl-body">
+          <div class="lead-tl-head">
+            ${e.kind === "created" ? `<span class="lead-stage-tag lead-tl-created">Entered</span>` : `<span class="lead-stage-tag lst-${e.stage || "new"}">${esc(LEAD_STAGE_LABEL[e.stage || "new"] || "")}</span>`}
+            <span class="lead-tl-when">${esc(leadWhen(e))}</span>
+          </div>
+          <div class="lead-tl-text">${esc(e.text)}</div>
+          <div class="lead-tl-by">${e.by ? "— " + esc(e.by) : (e.kind === "created" ? "— " + enteredBy : "")}</div>
+        </div>
+      </li>`).join("");
+    const doc = r.link ? ` · <a href="${esc(r.link)}" target="_blank" rel="noopener">📎 Attachment</a>` : "";
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card lead-tl-card">
+      <div class="lead-tl-topline">
+        <h3>${esc(r.name || r.company || "Lead")}</h3>
+        <span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>
+      </div>
+      <div class="lead-tl-sub">
+        ${esc(r.company || "")}${r.mobile ? " · " + esc(r.mobile) : ""}${r.city || r.state ? " · " + esc([r.city, r.state].filter(Boolean).join(", ")) : ""}<br>
+        <b>Source:</b> ${esc(r.source || "—")} · <b>Product:</b> ${esc(r.product || "—")} · <b>Owner:</b> ${esc(spLabel(r.owner) || "Unassigned")}${doc}<br>
+        <b>Entered by:</b> ${enteredBy} · ${enteredWhen}
+      </div>
+      <ol class="lead-tl">${items}</ol>
+      <div class="lead-modal-actions">
+        ${admin ? `<button type="button" class="ghost-btn" id="ltlAdd">＋ Add remark</button>` : ""}
+        <button type="button" class="dl-btn" id="ltlClose">Close</button>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("ltlClose").onclick = close;
+    const addB = document.getElementById("ltlAdd");
+    if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
   }
   function leadRows(rows, admin) {
     if (!rows.length) return `<tr><td colspan="8" class="empty">No leads match these filters.</td></tr>`;
@@ -3521,10 +3573,8 @@
     });
     // "＋ Remark" = log an activity in the CURRENT stage.
     document.querySelectorAll(".lead-remark-add").forEach((b) => (b.onclick = () => leadRemarkDialog({ id: b.dataset.id })));
-    // History expander.
-    document.querySelectorAll(".lead-hist-toggle").forEach((b) => (b.onclick = () => {
-      const ul = b.closest("td").querySelector(".lead-hist"); if (ul) ul.hidden = !ul.hidden;
-    }));
+    // Open the full lifecycle timeline.
+    document.querySelectorAll(".lead-timeline-btn").forEach((b) => (b.onclick = () => leadTimelineDialog(b.dataset.id)));
     // Delete (moved into the remark cell as a small link).
     document.querySelectorAll(".lead-del").forEach((b) => (b.onclick = () => {
       const l = leadAll().find((x) => x.id === b.dataset.id);
@@ -3693,7 +3743,7 @@
         const key = String(m.name || "").toLowerCase() + "|" + String(m.mobile || "");
         if (seen.has(key)) { skipped++; return; }
         seen.add(key);
-        leadAdds.push(Object.assign({ id: "u" + (leadSeq++), stage: m.stage || "new", updatedAt: Date.now() }, m));
+        leadAdds.push(Object.assign({ id: "u" + (leadSeq++), stage: m.stage || "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, m));
         added++;
       });
       saveEdits("Imported " + added + " leads");
