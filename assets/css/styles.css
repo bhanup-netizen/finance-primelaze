@@ -969,3 +969,39 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-arch-tag { display: inline-block; font-size: 10px; font-weight: 700; color: var(--text-2); background: var(--border); padding: 1px 8px; border-radius: 999px; margin-bottom: 4px; }
 .lead-table tr:has(.lead-arch-tag) { opacity: .78; }
 .ghost-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+
+/* Leads — contact (Call + WhatsApp) */
+.lead-contact { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.lead-num { font-variant-numeric: tabular-nums; }
+.lead-contact-btns { display: flex; gap: 6px; }
+.cbtn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1px solid transparent; line-height: 1; white-space: nowrap; }
+.cbtn span { display: none; }
+.cbtn.call { color: var(--info); background: var(--info-soft); }
+.cbtn.wa { color: #0a8f4d; background: color-mix(in srgb, #25D366 20%, transparent); }
+:root[data-theme="dark"] .cbtn.wa { color: #4ade80; }
+.cbtn:hover { filter: brightness(.96); }
+
+/* Leads — phone-friendly card layout */
+@media (max-width: 760px) {
+  .lead-table { table-layout: auto; font-size: 14px; }
+  .lead-table thead { display: none; }
+  .lead-table, .lead-table tbody, .lead-table tr, .lead-table td { display: block; width: auto; }
+  .lead-table tr { border: 1px solid var(--border); border-radius: 12px; margin: 0 0 12px; padding: 12px 14px; background: var(--surface); box-shadow: var(--shadow-sm); }
+  .lead-table td { padding: 6px 0; border: none; overflow: visible; }
+  .lead-table td::before { content: attr(data-label); display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); font-weight: 700; margin-bottom: 3px; }
+  .lead-table td[data-label="Lead"]::before { display: none; }
+  .lead-table td[data-label="Lead"] .lead-name { font-size: 17px; }
+  .lead-table select { width: 100%; max-width: 100%; font-size: 15px; padding: 9px 10px; }
+  .lead-table td.lead-remarkcell { border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 10px; }
+  /* Big, tappable call / whatsapp buttons */
+  .lead-contact-btns { gap: 10px; width: 100%; margin-top: 2px; }
+  .lead-contact-btns .cbtn { flex: 1; justify-content: center; font-size: 14px; padding: 10px 12px; }
+  .cbtn span { display: inline; }
+  .lead-remark-tools { gap: 16px; }
+  .lead-remark-tools .mini-btn, .lead-remark-tools .linkish { font-size: 14px; padding: 6px 4px; }
+}
+/* Contact buttons inside the timeline modal show their labels */
+.lead-tl-contact { margin: 0 0 14px; }
+.lead-tl-contact .lead-contact { flex-direction: row; align-items: center; gap: 10px; }
+.lead-tl-contact .cbtn span { display: inline; }
+.lead-tl-contact .cbtn { font-size: 13px; padding: 7px 14px; }

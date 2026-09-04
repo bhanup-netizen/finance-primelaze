@@ -3546,10 +3546,11 @@
         <span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>
       </div>
       <div class="lead-tl-sub">
-        ${esc(r.company || "")}${r.mobile ? " · " + esc(r.mobile) : ""}${r.city || r.state ? " · " + esc([r.city, r.state].filter(Boolean).join(", ")) : ""}<br>
+        ${esc(r.company || "")}${r.city || r.state ? " · " + esc([r.city, r.state].filter(Boolean).join(", ")) : ""}<br>
         <b>Source:</b> ${esc(r.source || "—")} · <b>Product:</b> ${esc(r.product || "—")} · <b>Owner:</b> ${esc(spLabel(r.owner) || "Unassigned")}${doc}<br>
         <b>Entered by:</b> ${enteredBy} · ${enteredWhen}
       </div>
+      ${r.mobile ? `<div class="lead-tl-contact">${leadContactCell(r)}</div>` : ""}
       <ol class="lead-tl">${items}</ol>
       <div class="lead-modal-actions">
         ${admin ? `<button type="button" class="ghost-btn" id="ltlAdd">＋ Add to timeline</button>` : ""}
@@ -3563,20 +3564,33 @@
     const addB = document.getElementById("ltlAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
   }
+  // Contact cell — the number plus separate Call and WhatsApp actions.
+  function leadContactCell(r) {
+    const digits = String(r.mobile || "").replace(/[^0-9]/g, "");
+    if (!digits) return "—";
+    const wa = digits.length === 10 ? "91" + digits : digits;
+    return `<div class="lead-contact">
+      <span class="lead-num">${esc(r.mobile)}</span>
+      <span class="lead-contact-btns">
+        <a class="cbtn call" href="tel:${esc(digits)}" title="Call ${esc(r.mobile)}" aria-label="Call">📞<span>Call</span></a>
+        <a class="cbtn wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="WhatsApp ${esc(r.mobile)}" aria-label="WhatsApp">💬<span>WhatsApp</span></a>
+      </span>
+    </div>`;
+  }
   function leadRows(rows, admin) {
     if (!rows.length) return `<tr><td colspan="8" class="empty">No leads match these filters.</td></tr>`;
     return rows.map((r) => {
       const loc = [r.city, r.state].filter(Boolean).join(", ");
       const sold = r.stage === "sold";
       return `<tr class="${sold ? "lead-won" : ""}">
-        <td><div class="lead-name">${esc(r.name || "—")}</div><div class="t-muted">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</div></td>
-        <td>${r.mobile ? `<a href="tel:${esc(r.mobile)}">${esc(r.mobile)}</a>` : "—"}</td>
-        <td>${esc(loc || "—")}</td>
-        <td><span class="tag lead-src">${esc(r.source || "—")}</span></td>
-        <td>${esc(r.product || "—")}</td>
-        <td>${leadOwnerCell(r, admin)}</td>
-        <td>${leadStageCell(r, admin)}</td>
-        <td class="lead-remarkcell">${leadRemarkCell(r, admin)}</td>
+        <td data-label="Lead"><div class="lead-name">${esc(r.name || "—")}</div><div class="t-muted">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</div></td>
+        <td data-label="Contact">${leadContactCell(r)}</td>
+        <td data-label="Location">${esc(loc || "—")}</td>
+        <td data-label="Source"><span class="tag lead-src">${esc(r.source || "—")}</span></td>
+        <td data-label="Product">${esc(r.product || "—")}</td>
+        <td data-label="Owner">${leadOwnerCell(r, admin)}</td>
+        <td data-label="Stage">${leadStageCell(r, admin)}</td>
+        <td class="lead-remarkcell" data-label="Lead journey">${leadRemarkCell(r, admin)}</td>
       </tr>`;
     }).join("");
   }
