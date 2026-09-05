@@ -3297,6 +3297,108 @@
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
   const customLeadSources = []; // admin-added lead sources, persisted for everyone
   const allLeadSources = () => Array.from(new Set(LEAD_SOURCES.concat(customLeadSources)));
+
+  // ---- India geography: states + major cities, with clean-up of messy values ----
+  const INDIAN_STATES = ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"];
+  const CITIES_BY_STATE = {
+    "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Nellore", "Tirupati", "Kakinada", "Rajahmundry", "Kurnool", "Anantapur"],
+    "Assam": ["Guwahati", "Silchar", "Dibrugarh", "Jorhat", "Nagaon", "Tinsukia"],
+    "Bihar": ["Patna", "Gaya", "Bhagalpur", "Muzaffarpur", "Darbhanga", "Purnia", "Vijay Nagar"],
+    "Chhattisgarh": ["Raipur", "Bhilai", "Bilaspur", "Korba", "Durg"],
+    "Goa": ["Panaji", "Margao", "Vasco da Gama", "Mapusa"],
+    "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar", "Jamnagar", "Gandhinagar", "Anand"],
+    "Haryana": ["Gurugram", "Faridabad", "Panipat", "Ambala", "Karnal", "Hisar", "Rohtak", "Panchkula", "Sonipat", "Yamunanagar"],
+    "Himachal Pradesh": ["Shimla", "Solan", "Dharamshala", "Mandi", "Baddi"],
+    "Jharkhand": ["Ranchi", "Jamshedpur", "Dhanbad", "Bokaro", "Hazaribagh"],
+    "Karnataka": ["Bengaluru", "Mysuru", "Hubli", "Mangaluru", "Belagavi", "Davangere", "Ballari", "Tumakuru"],
+    "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur", "Kollam", "Kannur", "Kottayam", "Palakkad"],
+    "Madhya Pradesh": ["Indore", "Bhopal", "Jabalpur", "Gwalior", "Ujjain", "Sagar", "Ratlam"],
+    "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Thane", "Aurangabad", "Solapur", "Kolhapur", "Amravati", "Navi Mumbai", "Badlapur", "Vellore", "Nanded", "Sangli", "Jalgaon", "Akola", "Latur"],
+    "Manipur": ["Imphal"], "Meghalaya": ["Shillong"], "Mizoram": ["Aizawl"], "Nagaland": ["Kohima", "Dimapur"],
+    "Odisha": ["Bhubaneswar", "Cuttack", "Rourkela", "Berhampur", "Sambalpur"],
+    "Punjab": ["Ludhiana", "Amritsar", "Jalandhar", "Patiala", "Bathinda", "Mohali", "Zirakpur", "Pathankot", "Hoshiarpur", "Moga"],
+    "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota", "Ajmer", "Bikaner", "Bhilwara", "Alwar", "Sikar", "Sri Ganganagar"],
+    "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem", "Tirunelveli", "Vellore", "Erode", "Tiruppur", "Thoothukudi"],
+    "Telangana": ["Hyderabad", "Warangal", "Nizamabad", "Karimnagar", "Khammam", "Secunderabad"],
+    "Tripura": ["Agartala"],
+    "Uttar Pradesh": ["Lucknow", "Kanpur", "Ghaziabad", "Agra", "Varanasi", "Meerut", "Noida", "Prayagraj", "Bareilly", "Aligarh", "Moradabad", "Gorakhpur"],
+    "Uttarakhand": ["Dehradun", "Haridwar", "Roorkee", "Haldwani", "Rishikesh", "Nainital"],
+    "West Bengal": ["Kolkata", "Howrah", "Durgapur", "Asansol", "Siliguri", "Bardhaman"],
+    "Chandigarh": ["Chandigarh"],
+    "Delhi": ["Delhi", "New Delhi"],
+    "Jammu and Kashmir": ["Srinagar", "Jammu"],
+    "Puducherry": ["Puducherry", "Karaikal"],
+  };
+  const customCities = []; // [{state, city}] admin-added cities, persisted
+  const titleCase = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim().replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  const STATE_FIX = { "west bangal": "West Bengal", "westbengal": "West Bengal", "wb": "West Bengal", "tamilnadu": "Tamil Nadu", "tamil nadu": "Tamil Nadu", "telengana": "Telangana", "delhi ncr": "Delhi", "ncr": "Delhi", "orissa": "Odisha", "pondicherry": "Puducherry", "uttaranchal": "Uttarakhand", "j k": "Jammu and Kashmir", "jk": "Jammu and Kashmir", "up": "Uttar Pradesh", "mp": "Madhya Pradesh", "hp": "Himachal Pradesh", "hr": "Haryana", "uk": "Uttarakhand", "kerela": "Kerala", "karnatak": "Karnataka", "arunanchal pradesh": "Arunachal Pradesh", "gujrat": "Gujarat" };
+  const CITY_FIX = { "bhilwada": "Bhilwara", "hydrabad": "Hyderabad", "vellora": "Vellore", "zirukpur": "Zirakpur", "bangalore": "Bengaluru", "bombay": "Mumbai", "calcutta": "Kolkata", "gurgaon": "Gurugram", "gurgoan": "Gurugram", "gajiyabaad": "Ghaziabad", "jaiputr": "Jaipur", "vijaywada": "Vijayawada", "gorengaon": "Goregaon", "mysore": "Mysuru", "new delhi": "New Delhi", "vijay nagar": "Vijay Nagar", "juhu": "Mumbai", "juhu mumbai": "Mumbai" };
+  // Reverse map: a known city (or common alias) → its state, so a "state" value
+  // that is actually a city gets corrected.
+  const CITY_TO_STATE = (function () {
+    const m = {};
+    Object.keys(CITIES_BY_STATE).forEach((st) => CITIES_BY_STATE[st].forEach((c) => (m[c.toLowerCase()] = st)));
+    Object.assign(m, {
+      "mumbai": "Maharashtra", "bombay": "Maharashtra", "pune": "Maharashtra", "goregaon": "Maharashtra", "gorengaon": "Maharashtra", "chennai": "Tamil Nadu", "hyderabad": "Telangana", "kolkata": "West Bengal", "calcutta": "West Bengal", "bengaluru": "Karnataka", "bangalore": "Karnataka", "mysore": "Karnataka", "mysuru": "Karnataka", "noida": "Uttar Pradesh", "ghaziabad": "Uttar Pradesh", "gajiyabaad": "Uttar Pradesh", "meerut": "Uttar Pradesh", "rohini": "Delhi", "gurgaon": "Haryana", "gurgoan": "Haryana", "gurugram": "Haryana", "sirsa": "Haryana", "jaipur": "Rajasthan", "jaiputr": "Rajasthan", "ganganagar": "Rajasthan", "vijaywada": "Andhra Pradesh", "vijayawada": "Andhra Pradesh",
+    });
+    return m;
+  })();
+  function normalizeState(s) {
+    let raw = String(s || "").trim();
+    if (!raw) return "";
+    raw = raw.split(",")[0]; // "J&K, Delhi" → "J&K"
+    // drop pincodes/numbers & stray punctuation
+    let k = raw.toLowerCase().replace(/[0-9]/g, "").replace(/[^a-z& ]/g, " ").replace(/&/g, " ").replace(/\s+/g, " ").trim();
+    if (!k) return "";
+    if (k.indexOf("delhi") >= 0) return "Delhi";
+    if (STATE_FIX[k]) return STATE_FIX[k];
+    const hit = INDIAN_STATES.find((st) => st.toLowerCase() === k);
+    if (hit) return hit;
+    if (CITY_TO_STATE[k]) return CITY_TO_STATE[k];
+    const nospace = k.replace(/\s/g, "");
+    const fz = INDIAN_STATES.find((st) => st.toLowerCase().replace(/\s/g, "") === nospace);
+    return fz || titleCase(k);
+  }
+  function normalizeCity(s) {
+    const k = String(s || "").toLowerCase().replace(/[0-9]/g, "").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+    if (!k) return "";
+    return CITY_FIX[k] || titleCase(k);
+  }
+  // Cities for a state = curated list + custom + any already in the data.
+  function citiesForState(state) {
+    const base = CITIES_BY_STATE[state] || [];
+    const cust = customCities.filter((c) => !c.state || c.state === state).map((c) => c.city);
+    const inData = new Set();
+    (window.LEADS_SEED || []).forEach((l) => { if (normalizeState(l.state) === state && l.city) inData.add(normalizeCity(l.city)); });
+    leadAdds.forEach((l) => { if (normalizeState(l.state) === state && l.city) inData.add(normalizeCity(l.city)); });
+    return Array.from(new Set(base.concat(cust).concat(Array.from(inData)))).sort((a, b) => a.localeCompare(b));
+  }
+  function stateSelectHtml(id, cur) {
+    const extra = cur && INDIAN_STATES.indexOf(cur) < 0 ? `<option selected>${esc(cur)}</option>` : "";
+    return `<select id="${id}"><option value="">— State —</option>${extra}${INDIAN_STATES.map((s) => `<option${s === cur ? " selected" : ""}>${esc(s)}</option>`).join("")}</select>`;
+  }
+  function cityOptionsHtml(state, cur) {
+    const list = citiesForState(state);
+    const extra = cur && list.indexOf(cur) < 0 ? `<option selected>${esc(cur)}</option>` : "";
+    return `<option value="">— City —</option>${extra}${list.map((c) => `<option${c === cur ? " selected" : ""}>${esc(c)}</option>`).join("")}<option value="__newcity__">＋ Add new city…</option>`;
+  }
+  function citySelectHtml(id, state, cur) { return `<select id="${id}">${cityOptionsHtml(state, cur)}</select>`; }
+  // Wire a state→city pair: changing state refills cities; "＋ Add new city…" prompts.
+  function wireStateCity(stateId, cityId) {
+    const st = document.getElementById(stateId), ct = document.getElementById(cityId);
+    if (!st || !ct) return;
+    let lastCity = ct.value;
+    st.onchange = () => { ct.innerHTML = cityOptionsHtml(st.value, ""); lastCity = ""; };
+    ct.onchange = () => {
+      if (ct.value !== "__newcity__") { lastCity = ct.value; return; }
+      const name = (window.prompt("New city name:") || "").trim();
+      if (name) {
+        const nc = normalizeCity(name);
+        if (!citiesForState(st.value).includes(nc)) { customCities.push({ state: st.value, city: nc }); saveEdits("Added city: " + nc); }
+        ct.innerHTML = cityOptionsHtml(st.value, nc); ct.value = nc; lastCity = nc;
+      } else { ct.value = lastCity; }
+    };
+  }
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
@@ -3383,7 +3485,11 @@
       return o;
     });
     const adds = leadAdds.map((a) => Object.assign({ _seed: false, stage: "new" }, a));
-    return seed.concat(adds).filter((r) => !rm.has(r.id));
+    return seed.concat(adds).filter((r) => !rm.has(r.id)).map((r) => {
+      // Clean up messy state/city for display, filters and dropdowns.
+      r.state = normalizeState(r.state); r.city = normalizeCity(r.city);
+      return r;
+    });
   }
   function leadUpdate(id, field, value) {
     if (String(id).charAt(0) === "L") {
@@ -3654,8 +3760,8 @@
         ${fText("name", "Name", "Contact name")}
         ${fText("mobile", "Mobile", "10-digit")}
         ${fText("company", "Salon / company")}
-        ${fText("city", "City")}
-        ${fText("state", "State")}
+        ${admin ? `<label class="ld-field"><span>State</span>${stateSelectHtml("ld_state", r.state || "")}</label>` : `<div class="ld-field"><span>State</span><div class="ld-val">${r.state ? esc(r.state) : "—"}</div></div>`}
+        ${admin ? `<label class="ld-field"><span>City</span>${citySelectHtml("ld_city", r.state || "", r.city || "")}</label>` : `<div class="ld-field"><span>City</span><div class="ld-val">${r.city ? esc(r.city) : "—"}</div></div>`}
         ${fSelect("source", "Source", allLeadSources(), "")}
         ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
         ${fSelect("owner", "Owner (rep)", owners, "— Unassigned —")}
@@ -3674,6 +3780,7 @@
     </div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
+    if (admin) wireStateCity("ld_state", "ld_city");
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("ldClose").onclick = close;
     const addB = document.getElementById("ldAdd");
@@ -3874,8 +3981,8 @@
         <label>Name<input id="lfName" type="text" placeholder="Contact name"></label>
         <label>Mobile<input id="lfMobile" type="text" placeholder="10-digit"></label>
         <label>Salon / company<input id="lfCompany" type="text"></label>
-        <label>City<input id="lfCity" type="text"></label>
-        <label>State<input id="lfState" type="text"></label>
+        <label>State${stateSelectHtml("lfState", "")}</label>
+        <label>City${citySelectHtml("lfCity", "", "")}</label>
         <label>Source<select id="lfSource">${allLeadSources().map((s) => `<option>${esc(s)}</option>`).join("")}<option value="__new__">＋ Add new source…</option></select></label>
         <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
         <label>Owner (rep)<select id="lfOwner"><option value="">— Unassigned —</option>${owners.map((o) => `<option value="${esc(o)}">${esc(spLabel(o))}</option>`).join("")}</select></label>
@@ -3888,6 +3995,7 @@
     </div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
+    wireStateCity("lfState", "lfCity");
     // Source dropdown: "＋ Add new source…" prompts for a new source and adds it.
     const srcSel = document.getElementById("lfSource");
     let lastSource = srcSel.value;
@@ -3923,9 +4031,18 @@
   function leadDownloadTemplate() {
     const sample = ["Priya Sharma", "9876543210", "Glow Salon", "Pune", "Maharashtra", "Instagram", "Esthemax", "Lubdha", "new", "Enquired on Instagram — wants pricing", ""];
     if (window.XLSX) {
-      const ws = window.XLSX.utils.aoa_to_sheet([LEAD_TPL_HEADERS, sample]);
       const wb = window.XLSX.utils.book_new();
-      window.XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet([LEAD_TPL_HEADERS, sample]), "Leads");
+      // Reference sheet: valid Sources, States and Cities to copy from.
+      const srcs = allLeadSources(), states = INDIAN_STATES.slice();
+      const cityRows = [];
+      states.forEach((st) => (CITIES_BY_STATE[st] || []).forEach((ci) => cityRows.push([st, ci])));
+      const ref = [["Valid Sources", "", "Valid States", "", "State", "City (examples)"]];
+      const maxN = Math.max(srcs.length, states.length, cityRows.length);
+      for (let i = 0; i < maxN; i++) {
+        ref.push([srcs[i] || "", "", states[i] || "", "", (cityRows[i] && cityRows[i][0]) || "", (cityRows[i] && cityRows[i][1]) || ""]);
+      }
+      window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(ref), "Valid values");
       window.XLSX.writeFile(wb, "lead_import_template.xlsx");
     } else {
       const csv = LEAD_TPL_HEADERS.join(",") + "\n" + sample.join(",");
@@ -3954,7 +4071,7 @@
       name,
       mobile: c(g("mobile", "phone", "contact")).replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, ""),
       company: c(g("company", "companyname", "salon")),
-      city: c(g("city")), state: c(g("state")),
+      city: normalizeCity(g("city")), state: normalizeState(g("state")),
       source: c(g("source", "leadsource")) || "Other",
       product: c(g("product", "productinterest", "interest")),
       owner: owner,
@@ -5454,6 +5571,7 @@
       if (Array.isArray(e.leadRemovals)) { leadRemovals.length = 0; e.leadRemovals.forEach((id) => leadRemovals.push(id)); }
       if (Array.isArray(e.leadArchive)) { leadArchive.length = 0; e.leadArchive.forEach((id) => leadArchive.push(id)); }
       if (Array.isArray(e.customLeadSources)) { customLeadSources.length = 0; e.customLeadSources.forEach((s) => customLeadSources.push(s)); }
+      if (Array.isArray(e.customCities)) { customCities.length = 0; e.customCities.forEach((c) => customCities.push(c)); }
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -5485,7 +5603,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
