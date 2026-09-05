@@ -3558,11 +3558,24 @@
     window.alert("Merged " + merged + " duplicate record" + (merged === 1 ? "" : "s") + ". The extra copies were archived and can be restored if needed.");
   }
 
-  // Owners = sales roster + anyone already assigned on a lead.
+  // Assignable lead owners = a fixed short list + any admin-added salespeople.
+  const LEAD_OWNERS_BASE = ["Ashutosh", "Lubdha"];
+  const customLeadOwners = []; // admin-added salespeople, persisted for everyone
   function leadOwners() {
-    const s = new Set(salesStaffList());
-    leadAll().forEach((l) => { const o = (l.owner || "").trim(); if (o) s.add(o); });
-    return Array.from(s).sort((a, b) => a.localeCompare(b));
+    return Array.from(new Set(LEAD_OWNERS_BASE.concat(customLeadOwners))).sort((a, b) => a.localeCompare(b));
+  }
+  // <option> list for an owner dropdown, keeping the current value + an add-new row.
+  function ownerOptionsHtml(cur) {
+    const owners = leadOwners();
+    const extra = cur && owners.indexOf(cur) < 0 ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : "";
+    return `<option value="">— Unassigned —</option>${extra}${owners.map((o) => `<option value="${esc(o)}"${cur === o ? " selected" : ""}>${esc(spLabel(o))}</option>`).join("")}<option value="__newrep__">＋ Add new salesperson…</option>`;
+  }
+  // Prompt for a new salesperson, persist it, and return the name (or "").
+  function addNewRepPrompt() {
+    const name = (window.prompt("New salesperson name:") || "").trim();
+    if (!name) return "";
+    if (!leadOwners().some((o) => o.toLowerCase() === name.toLowerCase())) { customLeadOwners.push(name); saveEdits("Added salesperson: " + name); }
+    return name;
   }
   function leadUniq(rows, field) {
     const s = new Set();
@@ -3674,13 +3687,7 @@
   }
   function leadOwnerCell(r, admin) {
     if (!admin) return esc(r.owner || "—");
-    const owners = leadOwners();
-    const cur = r.owner || "";
-    const extra = cur && owners.indexOf(cur) < 0 ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : "";
-    return `<select class="select lead-edit" data-id="${esc(r.id)}" data-field="owner">
-      <option value="">— Unassigned —</option>${extra}
-      ${owners.map((o) => `<option value="${esc(o)}"${cur === o ? " selected" : ""}>${esc(spLabel(o))}</option>`).join("")}
-    </select>`;
+    return `<select class="select lead-edit" data-id="${esc(r.id)}" data-field="owner">${ownerOptionsHtml(r.owner || "")}</select>`;
   }
   // Remark cell = compact stage tracker + latest remark + a Timeline opener.
   function leadHistory(r) { return Array.isArray(r.history) ? r.history : []; }
@@ -3764,7 +3771,7 @@
         ${admin ? `<label class="ld-field"><span>City</span>${citySelectHtml("ld_city", r.state || "", r.city || "")}</label>` : `<div class="ld-field"><span>City</span><div class="ld-val">${r.city ? esc(r.city) : "—"}</div></div>`}
         ${fSelect("source", "Source", allLeadSources(), "")}
         ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
-        ${fSelect("owner", "Owner (rep)", owners, "— Unassigned —")}
+        ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
         ${fText("link", "Attachment link", "https://…")}
       </div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
@@ -3781,6 +3788,8 @@
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
     if (admin) wireStateCity("ld_state", "ld_city");
+    const ldOwn = document.getElementById("ld_owner");
+    if (ldOwn) { let lastO = ldOwn.value; ldOwn.onchange = () => { if (ldOwn.value !== "__newrep__") { lastO = ldOwn.value; return; } const nm = addNewRepPrompt(); ldOwn.innerHTML = ownerOptionsHtml(nm || lastO); ldOwn.value = nm || lastO; lastO = ldOwn.value; }; }
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("ldClose").onclick = close;
     const addB = document.getElementById("ldAdd");
@@ -3885,7 +3894,14 @@
   function wireLeadRowEdits() {
     // Owner is the only free inline edit (no remark needed).
     document.querySelectorAll(".lead-edit").forEach((el) => {
-      el.onchange = () => { leadUpdate(el.dataset.id, el.dataset.field, el.value); };
+      el.onchange = () => {
+        if (el.dataset.field === "owner" && el.value === "__newrep__") {
+          const nm = addNewRepPrompt();
+          if (nm) leadUpdate(el.dataset.id, "owner", nm);
+          leadRepaint(); return;
+        }
+        leadUpdate(el.dataset.id, el.dataset.field, el.value);
+      };
     });
     // Stage change → ask for a remark (and deal value/date when moving to Sold).
     document.querySelectorAll(".lead-stage-sel").forEach((el) => {
@@ -3985,7 +4001,7 @@
         <label>City${citySelectHtml("lfCity", "", "")}</label>
         <label>Source<select id="lfSource">${allLeadSources().map((s) => `<option>${esc(s)}</option>`).join("")}<option value="__new__">＋ Add new source…</option></select></label>
         <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
-        <label>Owner (rep)<select id="lfOwner"><option value="">— Unassigned —</option>${owners.map((o) => `<option value="${esc(o)}">${esc(spLabel(o))}</option>`).join("")}</select></label>
+        <label>Owner (rep)<select id="lfOwner">${ownerOptionsHtml("")}</select></label>
         <label class="lead-form-wide">Opening remark<input id="lfRemark" type="text" placeholder="how the lead came in / first note"></label>
       </div>
       <div class="lead-modal-actions">
@@ -3996,6 +4012,15 @@
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
     wireStateCity("lfState", "lfCity");
+    // Owner dropdown: "＋ Add new salesperson…" prompts and adds a rep.
+    const ownSel = document.getElementById("lfOwner");
+    let lastOwner = ownSel.value;
+    ownSel.onchange = () => {
+      if (ownSel.value !== "__newrep__") { lastOwner = ownSel.value; return; }
+      const nm = addNewRepPrompt();
+      ownSel.innerHTML = ownerOptionsHtml(nm || lastOwner);
+      ownSel.value = nm || lastOwner; lastOwner = ownSel.value;
+    };
     // Source dropdown: "＋ Add new source…" prompts for a new source and adds it.
     const srcSel = document.getElementById("lfSource");
     let lastSource = srcSel.value;
@@ -5572,6 +5597,7 @@
       if (Array.isArray(e.leadArchive)) { leadArchive.length = 0; e.leadArchive.forEach((id) => leadArchive.push(id)); }
       if (Array.isArray(e.customLeadSources)) { customLeadSources.length = 0; e.customLeadSources.forEach((s) => customLeadSources.push(s)); }
       if (Array.isArray(e.customCities)) { customCities.length = 0; e.customCities.forEach((c) => customCities.push(c)); }
+      if (Array.isArray(e.customLeadOwners)) { customLeadOwners.length = 0; e.customLeadOwners.forEach((o) => customLeadOwners.push(o)); }
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -5603,7 +5629,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, customLeadOwners, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
