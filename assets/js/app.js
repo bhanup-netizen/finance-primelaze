@@ -3295,6 +3295,8 @@
   const LEAD_STAGE_LABEL = {}; LEAD_STAGES.forEach((s) => (LEAD_STAGE_LABEL[s.key] = s.label));
   const LEAD_OPEN = ["new", "contacted", "demo", "negotiation"]; // still in play
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
+  const customLeadSources = []; // admin-added lead sources, persisted for everyone
+  const allLeadSources = () => Array.from(new Set(LEAD_SOURCES.concat(customLeadSources)));
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
@@ -3654,7 +3656,7 @@
         ${fText("company", "Salon / company")}
         ${fText("city", "City")}
         ${fText("state", "State")}
-        ${fSelect("source", "Source", LEAD_SOURCES, "")}
+        ${fSelect("source", "Source", allLeadSources(), "")}
         ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
         ${fSelect("owner", "Owner (rep)", owners, "— Unassigned —")}
         ${fText("link", "Attachment link", "https://…")}
@@ -3874,7 +3876,7 @@
         <label>Salon / company<input id="lfCompany" type="text"></label>
         <label>City<input id="lfCity" type="text"></label>
         <label>State<input id="lfState" type="text"></label>
-        <label>Source<select id="lfSource">${LEAD_SOURCES.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
+        <label>Source<select id="lfSource">${allLeadSources().map((s) => `<option>${esc(s)}</option>`).join("")}<option value="__new__">＋ Add new source…</option></select></label>
         <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
         <label>Owner (rep)<select id="lfOwner"><option value="">— Unassigned —</option>${owners.map((o) => `<option value="${esc(o)}">${esc(spLabel(o))}</option>`).join("")}</select></label>
         <label class="lead-form-wide">Opening remark<input id="lfRemark" type="text" placeholder="how the lead came in / first note"></label>
@@ -3886,6 +3888,18 @@
     </div>`;
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
+    // Source dropdown: "＋ Add new source…" prompts for a new source and adds it.
+    const srcSel = document.getElementById("lfSource");
+    let lastSource = srcSel.value;
+    srcSel.onchange = () => {
+      if (srcSel.value !== "__new__") { lastSource = srcSel.value; return; }
+      const name = (window.prompt("New lead source name:") || "").trim();
+      if (name) {
+        if (!allLeadSources().some((s) => s.toLowerCase() === name.toLowerCase())) { customLeadSources.push(name); saveEdits("Added lead source: " + name); }
+        srcSel.innerHTML = allLeadSources().map((s) => `<option${s === name ? " selected" : ""}>${esc(s)}</option>`).join("") + `<option value="__new__">＋ Add new source…</option>`;
+        srcSel.value = name; lastSource = name;
+      } else { srcSel.value = lastSource; }
+    };
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("lfCancel").onclick = close;
     document.getElementById("lfSave").onclick = () => {
@@ -5439,6 +5453,7 @@
       }
       if (Array.isArray(e.leadRemovals)) { leadRemovals.length = 0; e.leadRemovals.forEach((id) => leadRemovals.push(id)); }
       if (Array.isArray(e.leadArchive)) { leadArchive.length = 0; e.leadArchive.forEach((id) => leadArchive.push(id)); }
+      if (Array.isArray(e.customLeadSources)) { customLeadSources.length = 0; e.customLeadSources.forEach((s) => customLeadSources.push(s)); }
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
       if (typeof e.payHideBase === "boolean") payHideBase = e.payHideBase;
@@ -5470,7 +5485,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
