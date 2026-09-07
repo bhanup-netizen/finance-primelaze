@@ -4328,10 +4328,19 @@
   };
   const regDocs = {}; // "<group>:<slug>:<docType>" -> {name,url,path,size,at,by} | {url,link:true,at,by}
   const regTrack = {}; // "<group>:<slug>" -> {status, expected, actual, remarks:[{at,by,text}]}
+  const regAdds = { cdsco: [], gem: [], products: [], cosmetic: [] }; // items moved/added into a tab
+  const regMoved = []; // "<group>:<slug>" hidden from that tab (moved out)
   let regTab = "cdsco", regQ = "", regStatusF = "";
   const canEditReg = () => isAdmin();
   const regSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
-  const regItems = (g) => { const k = regGroup(g).kind; return k === "device" ? (window.REG_DEVICES || []) : k === "cosmetic" ? (window.REG_COSMETIC || []) : (window.REG_PRODUCTS || []); };
+  const regBaseItems = (g) => { const k = regGroup(g).kind; return k === "device" ? (window.REG_DEVICES || []) : k === "cosmetic" ? (window.REG_COSMETIC || []) : (window.REG_PRODUCTS || []); };
+  const regItems = (g) => {
+    const moved = new Set(regMoved);
+    const base = regBaseItems(g).filter((it) => !moved.has(g + ":" + regSlug(it.name)));
+    const baseSlugs = new Set(base.map((it) => regSlug(it.name)));
+    const adds = (regAdds[g] || []).filter((it) => !moved.has(g + ":" + regSlug(it.name)) && !baseSlugs.has(regSlug(it.name)));
+    return base.concat(adds);
+  };
   const regDocKey = (g, name, dt) => g + ":" + regSlug(name) + ":" + dt;
   function regDocGet(g, item, dt) {
     const v = regDocs[regDocKey(g, item.name, dt)];
@@ -4350,6 +4359,49 @@
   function regTrackSet(g, item, field, val) { const k = regTrackKey(g, item); const o = regTrack[k] || (regTrack[k] = {}); o[field] = val; saveEdits("Registration " + field + " · " + item.name); }
   function regRemarks(g, item) { const t = regTrackGet(g, item); return Array.isArray(t.remarks) ? t.remarks : []; }
   function regAddRemark(g, item, text) { const k = regTrackKey(g, item); const o = regTrack[k] || (regTrack[k] = {}); (o.remarks = o.remarks || []).push({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", text: text }); saveEdits("Registration remark · " + item.name); }
+  // Move an item from one tab to another — its status/dates/remarks and documents travel with it.
+  function regMoveItem(fromG, item, toG) {
+    if (fromG === toG) return;
+    const slug = regSlug(item.name);
+    // hide from source
+    if (!regMoved.includes(fromG + ":" + slug)) regMoved.push(fromG + ":" + slug);
+    // remove it from the source's own adds list if it lived there
+    if (regAdds[fromG]) regAdds[fromG] = regAdds[fromG].filter((x) => regSlug(x.name) !== slug);
+    // unhide in target; add to target adds if target doesn't already have it
+    const ti = regMoved.indexOf(toG + ":" + slug); if (ti >= 0) regMoved.splice(ti, 1);
+    const inTargetBase = regBaseItems(toG).some((x) => regSlug(x.name) === slug);
+    const inTargetAdds = (regAdds[toG] || []).some((x) => regSlug(x.name) === slug);
+    if (!inTargetBase && !inTargetAdds) { (regAdds[toG] = regAdds[toG] || []).push(Object.assign({}, item)); }
+    // migrate tracking (status/dates/remarks)
+    const fromTK = fromG + ":" + slug, toTK = toG + ":" + slug;
+    if (regTrack[fromTK] && !regTrack[toTK]) { regTrack[toTK] = regTrack[fromTK]; }
+    delete regTrack[fromTK];
+    // migrate documents
+    Object.keys(regDocs).forEach((k) => {
+      const pre = fromG + ":" + slug + ":";
+      if (k.indexOf(pre) === 0) { const nk = toG + ":" + slug + ":" + k.slice(pre.length); if (!regDocs[nk]) regDocs[nk] = regDocs[k]; delete regDocs[k]; }
+    });
+    saveEdits("Moved " + item.name + " → " + regGroup(toG).label);
+  }
+  function regMoveDialog(fromG, item) {
+    const others = REG_GROUPS.filter((x) => x.id !== fromG);
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card" style="width:min(460px,100%)">
+      <h3>Move “${esc(item.name)}”</h3>
+      <p class="lead-tl-sub">Currently in <b>${esc(regGroup(fromG).label)}</b>. Move it to another tab — its status, filing dates, remarks &amp; documents move with it.</p>
+      <div class="reg-move-opts">${others.map((x) => `<button type="button" class="ghost-btn reg-move-to" data-to="${x.id}">→ ${esc(x.label)}</button>`).join("")}</div>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="regMoveCancel">Cancel</button></div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("regMoveCancel").onclick = close;
+    wrap.querySelectorAll(".reg-move-to").forEach((b) => (b.onclick = () => {
+      const toG = b.dataset.to;
+      if (window.confirm('Move "' + item.name + '" to ' + regGroup(toG).label + "?")) { regMoveItem(fromG, item, toG); close(); renderTab("registration"); }
+    }));
+  }
   function regStatusBadge(s) {
     const t = String(s || "").toLowerCase();
     let cls = "b-neutral";
@@ -4381,7 +4433,7 @@
       const actCell = admin ? `<input type="date" class="reg-act" data-g="${g}" data-name="${esc(it.name)}" value="${esc(tr.actual || "")}">` : (tr.actual ? esc(fmtDate(tr.actual)) : "—");
       const rmN = regRemarks(g, it).length;
       const rmBtn = `<button type="button" class="ghost-btn reg-rem-btn" data-g="${g}" data-name="${esc(it.name)}" title="Remarks &amp; history">📝 <b>${rmN}</b></button>`;
-      const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>`;
+      const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>${admin ? ` <button type="button" class="ghost-btn reg-move-btn" data-g="${g}" data-name="${esc(it.name)}" title="Move to another tab">↔</button>` : ""}`;
       let nameCols;
       if (grp.kind === "device") {
         const lic = regDocGet(g, it, "MD-15 / CDSCO License");
@@ -4412,6 +4464,7 @@
     document.querySelectorAll(".reg-act").forEach((el) => (el.onchange = () => { const it = find(el); if (it) regTrackSet(el.dataset.g, it, "actual", el.value); }));
     document.querySelectorAll(".reg-rem-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regRemarksDialog(b.dataset.g, it); }));
     document.querySelectorAll(".reg-docs-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regDocsDialog(b.dataset.g, it); }));
+    document.querySelectorAll(".reg-move-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regMoveDialog(b.dataset.g, it); }));
   }
   // Remarks + history modal for one item.
   function regRemarksDialog(g, item) {
@@ -5853,6 +5906,8 @@
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
       if (e.regDocs && typeof e.regDocs === "object") { Object.keys(regDocs).forEach((k) => delete regDocs[k]); Object.assign(regDocs, e.regDocs); }
       if (e.regTrack && typeof e.regTrack === "object") { Object.keys(regTrack).forEach((k) => delete regTrack[k]); Object.assign(regTrack, e.regTrack); }
+      if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
+      if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
       if (typeof e.hqTargetSeedVersion === "number") hqTargetSeedVersion = e.hqTargetSeedVersion;
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
@@ -5933,7 +5988,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
