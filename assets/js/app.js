@@ -5832,7 +5832,7 @@
       const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
       editsUpdatedAt = at; editsUpdatedBy = by;
       editsLog.unshift({ by, at, tab: tabLabel, what: desc });
-      if (editsLog.length > 60) editsLog.length = 60;
+      if (editsLog.length > 300) editsLog.length = 300;
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
@@ -5877,30 +5877,30 @@
     if (!label) return [];
     return editsLog.filter((e) => e.tab === label);
   }
-  // Inner HTML for the per-page change note: last change + expandable history.
+  // Inner HTML for the per-page activity log: last change + expandable history.
   function pageEditInner(tabId) {
     const list = pageEditsFor(tabId);
-    if (!list.length) return "";
+    if (!list.length) {
+      return `<div class="pen-line"><span class="pen-ico">📋</span> <b>Activity log</b> · no changes recorded yet on this page.</div>`;
+    }
     const e = list[0];
     const who = e.by || "someone";
     const what = e.what ? ` — <span class="pen-what">${esc(e.what)}</span>` : "";
-    const more = list.length > 1
-      ? `<button type="button" class="linkish pen-toggle">History (${list.length})</button>` : "";
-    const rows = list.slice(0, 20).map((x) =>
+    const more = `<button type="button" class="linkish pen-toggle">Show full log (${list.length})</button>`;
+    const rows = list.slice(0, 100).map((x) =>
       `<li><span class="peh-when">${esc(fmtWhen(x.at))}</span> · <b>${esc(x.by || "—")}</b>${x.what ? ` — ${esc(x.what)}` : ""}</li>`).join("");
-    return `<div class="pen-line"><span class="pen-ico">✎</span> Last change by <b>${esc(who)}</b> · ${esc(fmtWhen(e.at))}${what}${more}</div>` +
-      (list.length > 1 ? `<ul class="pen-history" hidden>${rows}</ul>` : "");
+    return `<div class="pen-line"><span class="pen-ico">📋</span> <b>Activity log</b> · last change by <b>${esc(who)}</b> · ${esc(fmtWhen(e.at))}${what} ${more}</div>` +
+      `<ul class="pen-history" hidden>${rows}</ul>`;
   }
-  // The banner element markup, prepended to every rendered page.
+  // The banner element markup, prepended to every rendered page (always shown).
   function pageEditNote(tabId) {
-    const h = pageEditInner(tabId);
-    return `<div id="pageEditNote" class="page-edit-note"${h ? "" : " hidden"}>${h}</div>`;
+    return `<div id="pageEditNote" class="page-edit-note">${pageEditInner(tabId)}</div>`;
   }
   function wirePageEditNote() {
     const pt = document.querySelector("#pageEditNote .pen-toggle");
     if (pt) pt.onclick = () => {
       const h = document.querySelector("#pageEditNote .pen-history");
-      if (h) { h.hidden = !h.hidden; pt.textContent = h.hidden ? `History (${pageEditsFor(currentTab).length})` : "Hide history"; }
+      if (h) { h.hidden = !h.hidden; pt.textContent = h.hidden ? `Show full log (${pageEditsFor(currentTab).length})` : "Hide log"; }
     };
   }
   function refreshPageEditNote() {
