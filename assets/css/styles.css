@@ -1062,3 +1062,5 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
   .reg-doc-row { grid-template-columns: 1fr; gap: 4px; }
   .reg-doc-actions { justify-content: flex-start; }
 }
+.reg-info { color: var(--text-3); cursor: help; font-size: 12px; }
+.reg-table th[title] { cursor: help; }

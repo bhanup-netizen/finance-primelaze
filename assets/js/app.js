@@ -4271,6 +4271,45 @@
     products: ["Registration Certificate", "COA", "MSDS / SDS", "INCI / Ingredients", "Free Sale Certificate", "Stability Report", "Label Artwork", "Other"],
     cosmetic: ["Registration Certificate", "Product List", "COA", "MSDS / SDS", "Free Sale Certificate", "Power of Attorney", "Other"],
   };
+  // Plain-language explanation of each document / column, shown as a tooltip.
+  const REG_DOC_HELP = {
+    "MD-15 / CDSCO License": "CDSCO import licence (Form MD-15) — needed to legally import & sell a medical device in India.",
+    "ISO 13485": "Manufacturer's quality-management-system certificate for medical devices.",
+    "CE Certificate": "European conformity certificate — device meets EU safety standards.",
+    "US FDA": "US FDA clearance / registration status for the device.",
+    "Free Sale Certificate": "Proof the product is freely sold in its country of origin.",
+    "Device Master File": "DMF — the complete technical dossier of the device.",
+    "Plant Master File": "PMF — the manufacturing site details & quality information.",
+    "Technical File": "Design, specifications and test evidence for the device.",
+    "Test Reports": "Lab test reports (performance / electrical safety / EMC).",
+    "Biocompatibility Report": "Evidence the materials are safe for human contact (ISO 10993).",
+    "IFU / User Manual": "Instructions For Use / user manual supplied with the device.",
+    "Label Artwork": "Approved product label & packaging artwork.",
+    "Power of Attorney": "Manufacturer's authorisation appointing Primelaze as importer / agent.",
+    "Authorization Letter": "Manufacturer's letter authorising Primelaze to distribute the product.",
+    "Registration Certificate": "Official registration / approval certificate from the authority (e.g. CDSCO cosmetic RC).",
+    "COA": "Certificate of Analysis — batch quality / test results.",
+    "MSDS / SDS": "Material / Safety Data Sheet — safety & handling information.",
+    "INCI / Ingredients": "Full ingredient list (INCI names) for the cosmetic.",
+    "Stability Report": "Shelf-life / stability testing evidence.",
+    "Product List": "List of all SKUs covered under this registration.",
+    "Other": "Any other supporting document.",
+  };
+  const REG_COL_HELP = {
+    cdsco: "CDSCO = Central Drugs Standard Control Organisation. Registration status for importing/selling this medical device in India.",
+    gem: "GeM = Government e-Marketplace. Status of listing this device for government/institutional sales.",
+    cls: "Risk class of the medical device — A (low) to D (high). Higher class = stricter regulatory requirements.",
+    regNo: "The CDSCO import licence / registration number once approved.",
+    expiry: "Date the current registration expires and must be renewed.",
+    cert: "Cosmetic registration certificate number.",
+    renewal: "Date this cosmetic registration must be renewed.",
+    regStatus: "Registration status of this product with the authority.",
+  };
+  const REG_GROUP_HELP = {
+    devices: "Machines / aesthetic devices — regulated by CDSCO as medical devices (need MD-15, class, etc.).",
+    products: "Esthemax consumable products (masks, serums) — regulated as cosmetics.",
+    cosmetic: "Cosmetic registration ranges — the umbrella certificates that cover groups of products.",
+  };
   const regDocs = {}; // "<group>:<slug>:<docType>" -> {name,url,path,size,at,by} | {url,link:true,at,by}
   let regTab = "devices", regQ = "", regStatusF = "";
   const canEditReg = () => isAdmin();
@@ -4346,9 +4385,10 @@
     }).join("");
   }
   function regHead(g) {
-    if (g === "devices") return `<th>Device</th><th>Models</th><th>Class</th><th>Manufacturer</th><th>CDSCO</th><th>GeM</th><th>Reg No</th><th>Expiry</th><th>Documents</th>`;
-    if (g === "cosmetic") return `<th>Range</th><th>Type</th><th>Status</th><th>Cert No</th><th>Products</th><th>Renewal</th><th colspan="2">Manufacturer</th><th>Documents</th>`;
-    return `<th>Product</th><th>SKU</th><th>Category</th><th>Manufacturer</th><th>Reg status</th><th colspan="3">Type</th><th>Documents</th>`;
+    const H = REG_COL_HELP;
+    if (g === "devices") return `<th>Device</th><th>Models</th><th title="${esc(H.cls)}">Class ⓘ</th><th>Manufacturer</th><th title="${esc(H.cdsco)}">CDSCO ⓘ</th><th title="${esc(H.gem)}">GeM ⓘ</th><th title="${esc(H.regNo)}">Reg No ⓘ</th><th title="${esc(H.expiry)}">Expiry ⓘ</th><th>Documents</th>`;
+    if (g === "cosmetic") return `<th>Range</th><th>Type</th><th title="${esc(H.regStatus)}">Status ⓘ</th><th title="${esc(H.cert)}">Cert No ⓘ</th><th>Products</th><th title="${esc(H.renewal)}">Renewal ⓘ</th><th colspan="2">Manufacturer</th><th>Documents</th>`;
+    return `<th>Product</th><th>SKU</th><th>Category</th><th>Manufacturer</th><th title="${esc(H.regStatus)}">Reg status ⓘ</th><th colspan="3">Type</th><th>Documents</th>`;
   }
   function regRepaint() {
     const b = document.getElementById("regBody"); if (b) b.innerHTML = regRows(regTab);
@@ -4387,8 +4427,9 @@
           <label class="mini-btn" style="cursor:pointer" title="${has ? "Replace this file" : "Upload a file"}">${has ? "↻ Replace" : "⬆ Upload"}<input type="file" class="reg-up" data-key="${esc(key)}" hidden></label>
           <button type="button" class="mini-btn reg-link" data-key="${esc(key)}" title="Paste a link instead">🔗 Link</button>
           ${has ? `<button type="button" class="mini-btn danger reg-rm" data-key="${esc(key)}" title="Delete this document">🗑 Delete</button>` : ""}` : "";
+        const help = REG_DOC_HELP[dt] || "";
         return `<div class="reg-doc-row ${has ? "has" : ""}">
-          <div class="reg-doc-name">${has ? "✅" : "⬜"} ${esc(dt)}</div>
+          <div class="reg-doc-name" title="${esc(help)}">${has ? "✅" : "⬜"} ${esc(dt)}${help ? ` <span class="reg-info" title="${esc(help)}">ⓘ</span>` : ""}</div>
           <div class="reg-doc-view">${view}</div>
           <div class="reg-doc-actions">${actions}</div>
         </div>`;
@@ -4442,7 +4483,7 @@
     const approved = items.filter((it) => /approved|active/i.test((g === "devices" ? it.cdsco : g === "cosmetic" ? it.status : it.regStatus) || "")).length;
     const docsDone = items.reduce((n, it) => n + (regDocCount(g, it) > 0 ? 1 : 0), 0);
     const kpi = (cls, v, l, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(l)}</div><div class="kpi-value">${v}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
-    const subtabs = REG_GROUPS.map((x) => `<button data-regtab="${x.id}" class="${g === x.id ? "active" : ""}">${esc(x.label)} <span class="tag">${regItems(x.id).length}</span></button>`).join("");
+    const subtabs = REG_GROUPS.map((x) => `<button data-regtab="${x.id}" class="${g === x.id ? "active" : ""}" title="${esc(REG_GROUP_HELP[x.id] || "")}">${esc(x.label)} <span class="tag">${regItems(x.id).length}</span></button>`).join("");
     return `
       <div class="section-head">
         <h1>Product Registration</h1>
