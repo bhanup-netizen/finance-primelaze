@@ -4281,14 +4281,21 @@
     if (/not started|not yet|^na$/.test(t)) return "Not started";
     return "Started";
   }
+  // A machine may hold several CDSCO licences (MD-15 import, MD-17 mfg, etc.).
+  const REG_CDSCO_LICENCES = ["MD-15 (CDSCO Import Licence)", "MD-14 (Import Registration)", "MD-16 (Mfg Licence · Class A/B)", "MD-17 (Mfg Licence · Class C/D)", "MD-42 (Test Licence)"];
+  const regShortLic = (dt) => (String(dt).match(/MD-\d+/) || [dt])[0];
   const REG_DOC_TYPES = {
-    devices: ["MD-15 / CDSCO License", "ISO 13485", "CE Certificate", "US FDA", "Free Sale Certificate", "Device Master File", "Plant Master File", "Technical File", "Test Reports", "Biocompatibility Report", "IFU / User Manual", "Label Artwork", "Power of Attorney", "Authorization Letter", "Other"],
+    devices: REG_CDSCO_LICENCES.concat(["ISO 13485", "CE Certificate", "US FDA", "Free Sale Certificate", "Device Master File", "Plant Master File", "Technical File", "Test Reports", "Biocompatibility Report", "IFU / User Manual", "Label Artwork", "Power of Attorney", "Authorization Letter", "Other"]),
     products: ["Registration Certificate", "COA", "MSDS / SDS", "INCI / Ingredients", "Free Sale Certificate", "Stability Report", "Label Artwork", "Other"],
     cosmetic: ["Registration Certificate", "Product List", "COA", "MSDS / SDS", "Free Sale Certificate", "Power of Attorney", "Other"],
   };
   // Plain-language explanation of each document / column, shown as a tooltip.
   const REG_DOC_HELP = {
-    "MD-15 / CDSCO License": "CDSCO import licence (Form MD-15) — needed to legally import & sell a medical device in India.",
+    "MD-15 (CDSCO Import Licence)": "Form MD-15 — CDSCO import licence to legally import & sell a medical device in India.",
+    "MD-14 (Import Registration)": "Form MD-14 — application / registration for import of a medical device.",
+    "MD-16 (Mfg Licence · Class A/B)": "Form MD-16 — manufacturing licence for Class A / B medical devices.",
+    "MD-17 (Mfg Licence · Class C/D)": "Form MD-17 — manufacturing licence for Class C / D medical devices.",
+    "MD-42 (Test Licence)": "Form MD-42 — licence to import a device for testing / evaluation / demonstration.",
     "ISO 13485": "Manufacturer's quality-management-system certificate for medical devices.",
     "CE Certificate": "European conformity certificate — device meets EU safety standards.",
     "US FDA": "US FDA clearance / registration status for the device.",
@@ -4345,7 +4352,7 @@
   function regDocGet(g, item, dt) {
     const v = regDocs[regDocKey(g, item.name, dt)];
     if (v) return v.cleared ? null : v;                 // tombstone = explicitly removed
-    if (regGroup(g).docSet === "devices" && dt === "MD-15 / CDSCO License" && item.md15) return { url: item.md15, link: true, seed: true };
+    if (regGroup(g).docSet === "devices" && dt === "MD-15 (CDSCO Import Licence)" && item.md15) return { url: item.md15, link: true, seed: true };
     return null;
   }
   function regDocCount(g, item) {
@@ -4436,8 +4443,8 @@
       const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>${admin ? ` <button type="button" class="ghost-btn reg-move-btn" data-g="${g}" data-name="${esc(it.name)}" title="Move to another tab">↔</button>` : ""}`;
       let nameCols;
       if (grp.kind === "device") {
-        const lic = regDocGet(g, it, "MD-15 / CDSCO License");
-        const licLink = lic ? `<div><a href="${esc(lic.url)}" target="_blank" rel="noopener" class="reg-lic-link">📄 View CDSCO licence</a></div>` : "";
+        const licLinks = REG_CDSCO_LICENCES.map((dt) => { const rec = regDocGet(g, it, dt); return rec ? `<a href="${esc(rec.url)}" target="_blank" rel="noopener" class="reg-lic-link" title="${esc(dt)}">${esc(regShortLic(dt))}</a>` : ""; }).filter(Boolean);
+        const licLink = licLinks.length ? `<div class="reg-lic-row">📄 ${licLinks.join(" · ")}</div>` : "";
         nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.generic ? `<div class="t-muted">${esc(it.generic)}</div>` : ""}${licLink}</td><td>${esc(it.models || "—")}</td><td>${it.cls ? `<span class="badge b-neutral">${esc(it.cls)}</span>` : "—"}</td>`;
       }
       else if (grp.kind === "cosmetic") nameCols = `<td class="t-name"><b>${esc(it.name)}</b></td><td>${esc(it.type || "—")}</td><td>${esc(it.certNo || "—")}</td>`;

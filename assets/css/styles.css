@@ -1071,3 +1071,5 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .reg-move-btn { padding: 4px 7px; font-size: 12px; }
 .reg-move-opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .reg-move-opts .reg-move-to { text-align: left; padding: 10px 12px; font-size: 14px; }
+.reg-lic-row { margin-top: 3px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; font-size: 11px; }
+.reg-lic-row .reg-lic-link { padding: 0 2px; }
