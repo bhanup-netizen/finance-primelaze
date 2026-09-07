@@ -1064,3 +1064,6 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 }
 .reg-info { color: var(--text-3); cursor: help; font-size: 12px; }
 .reg-table th[title] { cursor: help; }
+.reg-table select.reg-status-sel { font-size: 11px; padding: 3px 4px; max-width: 130px; }
+.reg-table input.reg-exp, .reg-table input.reg-act { font-size: 11px; padding: 3px 4px; max-width: 128px; }
+.reg-rem-btn, .reg-docs-btn { font-size: 11px; padding: 4px 8px; white-space: nowrap; }
