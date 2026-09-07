@@ -4279,7 +4279,7 @@
   const regDocKey = (g, name, dt) => g + ":" + regSlug(name) + ":" + dt;
   function regDocGet(g, item, dt) {
     const v = regDocs[regDocKey(g, item.name, dt)];
-    if (v) return v;
+    if (v) return v.cleared ? null : v;                 // tombstone = explicitly removed
     if (g === "devices" && dt === "MD-15 / CDSCO License" && item.md15) return { url: item.md15, link: true, seed: true };
     return null;
   }
@@ -4384,9 +4384,9 @@
         const has = !!rec;
         const view = has ? `<a href="${esc(rec.url)}" target="_blank" rel="noopener" class="linkish">${rec.link ? "🔗 View link" : "📎 " + esc(rec.name || "View")}</a>` : `<span class="t-muted">Not uploaded</span>`;
         const actions = admin ? `
-          <label class="mini-btn" style="cursor:pointer">⬆ Upload<input type="file" class="reg-up" data-key="${esc(key)}" hidden></label>
-          <button type="button" class="mini-btn reg-link" data-key="${esc(key)}">🔗 Link</button>
-          ${has && !rec.seed ? `<button type="button" class="mini-btn danger reg-rm" data-key="${esc(key)}">Remove</button>` : ""}` : "";
+          <label class="mini-btn" style="cursor:pointer" title="${has ? "Replace this file" : "Upload a file"}">${has ? "↻ Replace" : "⬆ Upload"}<input type="file" class="reg-up" data-key="${esc(key)}" hidden></label>
+          <button type="button" class="mini-btn reg-link" data-key="${esc(key)}" title="Paste a link instead">🔗 Link</button>
+          ${has ? `<button type="button" class="mini-btn danger reg-rm" data-key="${esc(key)}" title="Delete this document">🗑 Delete</button>` : ""}` : "";
         return `<div class="reg-doc-row ${has ? "has" : ""}">
           <div class="reg-doc-name">${has ? "✅" : "⬜"} ${esc(dt)}</div>
           <div class="reg-doc-view">${view}</div>
@@ -4422,7 +4422,10 @@
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
   async function removeRegDoc(key, paint) {
-    const rec = regDocs[key]; delete regDocs[key];
+    if (!window.confirm("Delete this document?")) return;
+    const rec = regDocs[key];
+    // Tombstone so a seed link (e.g. the pre-filled MD-15) does not reappear.
+    regDocs[key] = { cleared: true, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
     saveEdits("Registration doc removed"); if (paint) paint(); regRepaint();
     if (rec && rec.path && storage) { try { await storage.ref().child(rec.path).delete(); } catch (e) {} }
   }
