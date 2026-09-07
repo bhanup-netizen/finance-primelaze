@@ -4383,7 +4383,11 @@
       const rmBtn = `<button type="button" class="ghost-btn reg-rem-btn" data-g="${g}" data-name="${esc(it.name)}" title="Remarks &amp; history">📝 <b>${rmN}</b></button>`;
       const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>`;
       let nameCols;
-      if (grp.kind === "device") nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.generic ? `<div class="t-muted">${esc(it.generic)}</div>` : ""}</td><td>${esc(it.models || "—")}</td><td>${it.cls ? `<span class="badge b-neutral">${esc(it.cls)}</span>` : "—"}</td>`;
+      if (grp.kind === "device") {
+        const lic = regDocGet(g, it, "MD-15 / CDSCO License");
+        const licLink = lic ? `<div><a href="${esc(lic.url)}" target="_blank" rel="noopener" class="reg-lic-link">📄 View CDSCO licence</a></div>` : "";
+        nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.generic ? `<div class="t-muted">${esc(it.generic)}</div>` : ""}${licLink}</td><td>${esc(it.models || "—")}</td><td>${it.cls ? `<span class="badge b-neutral">${esc(it.cls)}</span>` : "—"}</td>`;
+      }
       else if (grp.kind === "cosmetic") nameCols = `<td class="t-name"><b>${esc(it.name)}</b></td><td>${esc(it.type || "—")}</td><td>${esc(it.certNo || "—")}</td>`;
       else nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.group ? `<div class="t-muted">${esc(it.group)}</div>` : ""}</td><td>${esc(it.sku || "—")}</td><td>${it.category ? `<span class="badge b-neutral">${esc(it.category)}</span>` : "—"}</td>`;
       return `<tr>${nameCols}<td>${statusCell}</td><td>${expCell}</td><td>${actCell}</td><td>${rmBtn}</td><td>${docBtn}</td></tr>`;
