@@ -1043,3 +1043,22 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 }
 .lead-prod-chips { margin-top: 6px; }
 .lead-prod-chip.active { border-color: var(--accent); background: var(--accent-soft); }
+
+/* ================= PRODUCT REGISTRATION ================= */
+.reg-table { font-size: 12.5px; }
+.reg-table td, .reg-table th { padding: 6px 8px; vertical-align: middle; }
+.reg-table td.t-name { white-space: normal; min-width: 180px; }
+.reg-docs-btn { font-size: 11px; padding: 4px 8px; white-space: nowrap; }
+.reg-docs-btn b { color: var(--accent); }
+.reg-doc-card { width: min(680px, 100%); }
+.reg-doc-list { margin: 8px 0 6px; }
+.reg-doc-row { display: grid; grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) auto; gap: 10px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+.reg-doc-row:last-child { border-bottom: none; }
+.reg-doc-row.has { background: color-mix(in srgb, var(--good) 6%, transparent); }
+.reg-doc-name { font-weight: 600; font-size: 13px; }
+.reg-doc-view { font-size: 12px; }
+.reg-doc-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .reg-doc-row { grid-template-columns: 1fr; gap: 4px; }
+  .reg-doc-actions { justify-content: flex-start; }
+}

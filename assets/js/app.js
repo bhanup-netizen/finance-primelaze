@@ -115,6 +115,7 @@
     { id: "targets", label: "HQ Targets", group: "Sales", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Sales", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Catalog", render: renderPricing },
+    { id: "registration", label: "Registration", group: "Catalog", render: renderReg },
     { id: "order", label: "Inventory", group: "Operations", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Operations", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Operations", render: renderChallan },
@@ -4257,6 +4258,211 @@
       ${admin ? `<button type="button" class="lead-fab" id="leadFab" title="Add a lead" aria-label="Add a lead">＋</button>` : ""}`;
   }
 
+  /* ================= PRODUCT REGISTRATION / REGULATORY ================= */
+  // A portal listing every device / product and its registration status, with a
+  // document placeholder for each required document that can be uploaded.
+  const REG_GROUPS = [
+    { id: "devices", label: "Machines / Devices" },
+    { id: "products", label: "Esthemax Products" },
+    { id: "cosmetic", label: "Cosmetic Ranges" },
+  ];
+  const REG_DOC_TYPES = {
+    devices: ["MD-15 / CDSCO License", "ISO 13485", "CE Certificate", "US FDA", "Free Sale Certificate", "Device Master File", "Plant Master File", "Technical File", "Test Reports", "Biocompatibility Report", "IFU / User Manual", "Label Artwork", "Power of Attorney", "Authorization Letter", "Other"],
+    products: ["Registration Certificate", "COA", "MSDS / SDS", "INCI / Ingredients", "Free Sale Certificate", "Stability Report", "Label Artwork", "Other"],
+    cosmetic: ["Registration Certificate", "Product List", "COA", "MSDS / SDS", "Free Sale Certificate", "Power of Attorney", "Other"],
+  };
+  const regDocs = {}; // "<group>:<slug>:<docType>" -> {name,url,path,size,at,by} | {url,link:true,at,by}
+  let regTab = "devices", regQ = "", regStatusF = "";
+  const canEditReg = () => isAdmin();
+  const regSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  const regItems = (g) => g === "devices" ? (window.REG_DEVICES || []) : g === "cosmetic" ? (window.REG_COSMETIC || []) : (window.REG_PRODUCTS || []);
+  const regDocKey = (g, name, dt) => g + ":" + regSlug(name) + ":" + dt;
+  function regDocGet(g, item, dt) {
+    const v = regDocs[regDocKey(g, item.name, dt)];
+    if (v) return v;
+    if (g === "devices" && dt === "MD-15 / CDSCO License" && item.md15) return { url: item.md15, link: true, seed: true };
+    return null;
+  }
+  function regDocCount(g, item) {
+    return REG_DOC_TYPES[g].reduce((n, dt) => n + (regDocGet(g, item, dt) ? 1 : 0), 0);
+  }
+  function regStatusBadge(s) {
+    const t = String(s || "").toLowerCase();
+    let cls = "b-neutral";
+    if (/approved|active|registered/.test(t)) cls = "b-good";
+    else if (/submitted|under review|applied|awaiting/.test(t)) cls = "b-teal";
+    else if (/query|pending|renewal/.test(t)) cls = "b-warn";
+    else if (/reject|expired/.test(t)) cls = "b-bad";
+    return s ? `<span class="badge ${cls}">${esc(s)}</span>` : "—";
+  }
+  function regStatuses(g) {
+    const set = new Set();
+    regItems(g).forEach((it) => { const s = (g === "devices" ? it.cdsco : g === "cosmetic" ? it.status : it.regStatus) || ""; if (s) set.add(s); });
+    return Array.from(set).sort();
+  }
+  function regFiltered(g) {
+    const q = regQ.toLowerCase();
+    return regItems(g).filter((it) => {
+      const st = (g === "devices" ? it.cdsco : g === "cosmetic" ? it.status : it.regStatus) || "";
+      if (regStatusF && st !== regStatusF) return false;
+      if (q) { const hay = [it.name, it.models, it.sku, it.manufacturer, it.generic, it.category, it.brand].join(" ").toLowerCase(); if (hay.indexOf(q) < 0) return false; }
+      return true;
+    });
+  }
+  function regRows(g) {
+    const admin = canEditReg();
+    const rows = regFiltered(g);
+    if (!rows.length) return `<tr><td colspan="9" class="empty">No matching items.</td></tr>`;
+    return rows.map((it) => {
+      const n = regDocCount(g, it), total = REG_DOC_TYPES[g].length;
+      const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Open documents">📄 Docs <b>${n}</b>/${total}</button>`;
+      if (g === "devices") return `<tr>
+        <td class="t-name"><b>${esc(it.name)}</b>${it.generic ? `<div class="t-muted">${esc(it.generic)}</div>` : ""}</td>
+        <td>${esc(it.models || "—")}</td>
+        <td>${it.cls ? `<span class="badge b-neutral">${esc(it.cls)}</span>` : "—"}</td>
+        <td>${esc(it.manufacturer || "—")}${it.country ? `<div class="t-muted">${esc(it.country)}</div>` : ""}</td>
+        <td>${regStatusBadge(it.cdsco)}</td>
+        <td>${regStatusBadge(it.gem)}</td>
+        <td>${esc(it.regNo || "—")}</td>
+        <td>${it.expiry ? esc(fmtDate(it.expiry)) : "—"}</td>
+        <td>${docBtn}</td></tr>`;
+      if (g === "cosmetic") return `<tr>
+        <td class="t-name"><b>${esc(it.name)}</b></td>
+        <td>${esc(it.type || "—")}</td>
+        <td>${regStatusBadge(it.status)}</td>
+        <td>${esc(it.certNo || "—")}</td>
+        <td>${esc(it.totalProducts || "—")}</td>
+        <td>${it.renewal ? esc(fmtDate(it.renewal)) : "—"}</td>
+        <td colspan="2">${esc(it.manufacturer || "—")}</td>
+        <td>${docBtn}</td></tr>`;
+      return `<tr>
+        <td class="t-name"><b>${esc(it.name)}</b>${it.group ? `<div class="t-muted">${esc(it.group)}</div>` : ""}</td>
+        <td>${esc(it.sku || "—")}</td>
+        <td>${it.category ? `<span class="badge b-neutral">${esc(it.category)}</span>` : "—"}</td>
+        <td>${esc(it.manufacturer || "—")}${it.country ? `<div class="t-muted">${esc(it.country)}</div>` : ""}</td>
+        <td>${regStatusBadge(it.regStatus)}</td>
+        <td colspan="3">${esc(it.type || "—")}</td>
+        <td>${docBtn}</td></tr>`;
+    }).join("");
+  }
+  function regHead(g) {
+    if (g === "devices") return `<th>Device</th><th>Models</th><th>Class</th><th>Manufacturer</th><th>CDSCO</th><th>GeM</th><th>Reg No</th><th>Expiry</th><th>Documents</th>`;
+    if (g === "cosmetic") return `<th>Range</th><th>Type</th><th>Status</th><th>Cert No</th><th>Products</th><th>Renewal</th><th colspan="2">Manufacturer</th><th>Documents</th>`;
+    return `<th>Product</th><th>SKU</th><th>Category</th><th>Manufacturer</th><th>Reg status</th><th colspan="3">Type</th><th>Documents</th>`;
+  }
+  function regRepaint() {
+    const b = document.getElementById("regBody"); if (b) b.innerHTML = regRows(regTab);
+    const cnt = document.getElementById("regCount"); if (cnt) cnt.textContent = regFiltered(regTab).length + " of " + regItems(regTab).length;
+    wireRegDocBtns();
+  }
+  function wireRegDocBtns() {
+    document.querySelectorAll(".reg-docs-btn").forEach((b) => (b.onclick = () => {
+      const it = regItems(b.dataset.g).find((x) => x.name === b.dataset.name);
+      if (it) regDocsDialog(b.dataset.g, it);
+    }));
+  }
+  // Document placeholders modal for one item.
+  function regDocsDialog(g, item) {
+    const admin = canEditReg();
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card reg-doc-card">
+      <div class="lead-tl-topline"><h3>${esc(item.name)}</h3><span class="tag">${esc((REG_GROUPS.find((x) => x.id === g) || {}).label || "")}</span></div>
+      <div class="lead-tl-sub">${g === "devices" ? `<b>Models:</b> ${esc(item.models || "—")} · <b>Class:</b> ${esc(item.cls || "—")} · <b>Reg No:</b> ${esc(item.regNo || "—")}` : g === "cosmetic" ? `<b>Cert:</b> ${esc(item.certNo || "—")} · <b>Products:</b> ${esc(item.totalProducts || "—")}` : `<b>SKU:</b> ${esc(item.sku || "—")} · <b>Category:</b> ${esc(item.category || "—")}`}</div>
+      <div id="regDocList" class="reg-doc-list"></div>
+      <div class="lead-modal-actions"><button type="button" class="dl-btn" id="regDocClose">Close</button></div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("regDocClose").onclick = close;
+    const paint = () => {
+      const list = document.getElementById("regDocList");
+      list.innerHTML = REG_DOC_TYPES[g].map((dt) => {
+        const rec = regDocGet(g, item, dt);
+        const key = regDocKey(g, item.name, dt);
+        const has = !!rec;
+        const view = has ? `<a href="${esc(rec.url)}" target="_blank" rel="noopener" class="linkish">${rec.link ? "🔗 View link" : "📎 " + esc(rec.name || "View")}</a>` : `<span class="t-muted">Not uploaded</span>`;
+        const actions = admin ? `
+          <label class="mini-btn" style="cursor:pointer">⬆ Upload<input type="file" class="reg-up" data-key="${esc(key)}" hidden></label>
+          <button type="button" class="mini-btn reg-link" data-key="${esc(key)}">🔗 Link</button>
+          ${has && !rec.seed ? `<button type="button" class="mini-btn danger reg-rm" data-key="${esc(key)}">Remove</button>` : ""}` : "";
+        return `<div class="reg-doc-row ${has ? "has" : ""}">
+          <div class="reg-doc-name">${has ? "✅" : "⬜"} ${esc(dt)}</div>
+          <div class="reg-doc-view">${view}</div>
+          <div class="reg-doc-actions">${actions}</div>
+        </div>`;
+      }).join("");
+      list.querySelectorAll(".reg-up").forEach((inp) => (inp.onchange = (e) => { const f = e.target.files[0]; if (f) uploadRegDoc(inp.dataset.key, f, paint); e.target.value = ""; }));
+      list.querySelectorAll(".reg-link").forEach((b) => (b.onclick = () => {
+        const url = (window.prompt("Paste the document link (Google Drive / URL):", "") || "").trim();
+        if (!url) return;
+        if (!/^https?:\/\//i.test(url)) { window.alert("Please paste a full link starting with http…"); return; }
+        regDocs[b.dataset.key] = { url, link: true, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+        saveEdits("Registration doc linked"); paint(); regRepaint();
+      }));
+      list.querySelectorAll(".reg-rm").forEach((b) => (b.onclick = () => { removeRegDoc(b.dataset.key, paint); }));
+    };
+    paint();
+  }
+  async function uploadRegDoc(key, file, paint) {
+    if (!storage) { window.alert("⚠ File storage is not enabled yet — ask the admin to turn on Firebase Storage."); return; }
+    if (!(roleIsAdmin() || hasAnyEditGrant())) { window.alert("⚠ You don't have edit access."); return; }
+    if (file.size > 15 * 1024 * 1024) { window.alert("⚠ File too large (max 15 MB)."); return; }
+    try {
+      const safe = String(file.name).replace(/[^\w.\-]+/g, "_").slice(-80);
+      const path = "regdocs/" + key.replace(/[:]/g, "_") + "/" + Date.now() + "-" + safe;
+      const ref = storage.ref().child(path);
+      await ref.put(file, { contentType: file.type || "application/octet-stream" });
+      const url = await ref.getDownloadURL();
+      const prev = regDocs[key];
+      regDocs[key] = { name: file.name, url, path, size: file.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+      if (prev && prev.path && prev.path !== path) { try { await storage.ref().child(prev.path).delete(); } catch (e) {} }
+      saveEdits("Registration doc uploaded"); if (paint) paint(); regRepaint();
+    } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
+  }
+  async function removeRegDoc(key, paint) {
+    const rec = regDocs[key]; delete regDocs[key];
+    saveEdits("Registration doc removed"); if (paint) paint(); regRepaint();
+    if (rec && rec.path && storage) { try { await storage.ref().child(rec.path).delete(); } catch (e) {} }
+  }
+  function renderReg() {
+    const admin = canEditReg();
+    setTimeout(() => {
+      document.querySelectorAll("[data-regtab]").forEach((b) => (b.onclick = () => { regTab = b.dataset.regtab; regStatusF = ""; regQ = ""; renderTab("registration"); }));
+      const s = document.getElementById("regSearch"); if (s) s.oninput = (e) => { regQ = e.target.value; regRepaint(); };
+      const st = document.getElementById("regStatus"); if (st) st.onchange = (e) => { regStatusF = e.target.value; regRepaint(); };
+      wireRegDocBtns();
+    }, 0);
+    const g = regTab;
+    const items = regItems(g);
+    const approved = items.filter((it) => /approved|active/i.test((g === "devices" ? it.cdsco : g === "cosmetic" ? it.status : it.regStatus) || "")).length;
+    const docsDone = items.reduce((n, it) => n + (regDocCount(g, it) > 0 ? 1 : 0), 0);
+    const kpi = (cls, v, l, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(l)}</div><div class="kpi-value">${v}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
+    const subtabs = REG_GROUPS.map((x) => `<button data-regtab="${x.id}" class="${g === x.id ? "active" : ""}">${esc(x.label)} <span class="tag">${regItems(x.id).length}</span></button>`).join("");
+    return `
+      <div class="section-head">
+        <h1>Product Registration</h1>
+        <p>Registration &amp; regulatory status of every Primelaze device and product, with a document placeholder for each required document. ${admin ? "Open <b>📄 Docs</b> on any item to upload its files or paste a link." : "Open <b>📄 Docs</b> to view an item's documents."} ${storage ? "" : "<b>(File storage must be enabled by the admin to upload files — links work regardless.)</b>"}</p>
+      </div>
+      <div class="grid kpi-grid" style="margin-bottom:14px">
+        ${kpi("", items.length, "Total items", REG_GROUPS.find((x) => x.id === g).label)}
+        ${kpi("k-good", approved, "Approved / active", "registered")}
+        ${kpi("k-warn", items.length - approved, "In progress", "not yet approved")}
+        ${kpi("k-teal", docsDone, "With documents", "have ≥1 doc")}
+      </div>
+      <div class="seg" style="margin-bottom:12px">${subtabs}</div>
+      <div class="controls">
+        <input id="regSearch" class="search" type="search" placeholder="Search name, model, SKU, manufacturer…" value="${esc(regQ)}">
+        <label class="ord-field"><span>Status</span><select id="regStatus" class="select"><option value="">All</option>${regStatuses(g).map((s) => `<option value="${esc(s)}"${regStatusF === s ? " selected" : ""}>${esc(s)}</option>`).join("")}</select></label>
+        <span class="tag" id="regCount">${regFiltered(g).length} of ${items.length}</span>
+      </div>
+      <div class="table-wrap"><table class="inv-table reg-table">
+        <thead><tr>${regHead(g)}</tr></thead>
+        <tbody id="regBody">${regRows(g)}</tbody>
+      </table></div>`;
+  }
+
   /* ================= DELIVERY CHALLAN ================= */
   const DEFAULT_FROM = {
     name: "Leeford Healthcare Ltd (Primelaze)",
@@ -5549,6 +5755,7 @@
       }
       if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
+      if (e.regDocs && typeof e.regDocs === "object") { Object.keys(regDocs).forEach((k) => delete regDocs[k]); Object.assign(regDocs, e.regDocs); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
       if (typeof e.hqTargetSeedVersion === "number") hqTargetSeedVersion = e.hqTargetSeedVersion;
       if (Array.isArray(e.customHQs)) { customHQs.length = 0; e.customHQs.forEach((h) => customHQs.push(h)); }
@@ -5629,7 +5836,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, customLeadOwners, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, received, issued, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, customLeadOwners, regDocs, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {

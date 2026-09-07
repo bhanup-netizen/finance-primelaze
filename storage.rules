@@ -17,5 +17,17 @@ service firebase.storage {
                    && request.resource.size < 15 * 1024 * 1024;
       allow delete: if request.auth != null;
     }
+
+    // Product-registration documents (per device / product).
+    //  - Read: any signed-in user.
+    //  - Write: any signed-in user, capped at 15 MB per file. The dashboard only
+    //    exposes upload to admins / page editors, so this is fine for an internal
+    //    tool. The Firestore edits doc that records each file is write-guarded.
+    match /regdocs/{item}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 15 * 1024 * 1024;
+      allow delete: if request.auth != null;
+    }
   }
 }
