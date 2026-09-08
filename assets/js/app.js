@@ -3882,6 +3882,7 @@
     const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
     const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + (leadViewArchived ? " archived" : " leads");
     const at = document.getElementById("leadArchBtn"); if (at) at.textContent = `🗄 Archived (${leadAll().filter((r) => leadIsArchived(r.id)).length})`;
+    const ss = document.getElementById("leadStageSel"); if (ss) ss.value = leadFilter.stage || "";
     wireLeadRowEdits();
   }
   function wireLeadChips() {
@@ -4196,6 +4197,7 @@
       wire("leadSource", (e) => { leadFilter.source = e.target.value; leadRepaint(); });
       wire("leadOwner", (e) => { leadFilter.owner = e.target.value; leadRepaint(); });
       wire("leadState", (e) => { leadFilter.state = e.target.value; leadRepaint(); });
+      wire("leadStageSel", (e) => { leadFilter.stage = e.target.value; leadRepaint(); });
       const s = document.getElementById("leadSearch");
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
@@ -4232,6 +4234,7 @@
         ${sel("leadSource", leadFilter.source, leadUniq(leadRowsExcept(rows0, "source"), "source"), "Source")}
         ${sel("leadOwner", leadFilter.owner, leadOwnersPresent(leadRowsExcept(rows0, "owner")), "Owner")}
         ${sel("leadState", leadFilter.state, leadUniq(leadRowsExcept(rows0, "state"), "state"), "State")}
+        <label class="ord-field"><span>Stage</span><select id="leadStageSel" class="select"><option value="">All</option>${LEAD_STAGES.map((s) => `<option value="${s.key}"${leadFilter.stage === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
         ${me ? `<button id="leadMine" class="ghost-btn${leadFilter.owner === me ? " active" : ""}" type="button" title="Show only leads assigned to you">👤 My leads</button>` : ""}
         <button id="leadStuck" class="ghost-btn${leadFilter.stuck ? " active" : ""}" type="button" title="Leads sitting over ${LEAD_STUCK_DAYS} days in one stage">⚠ Stuck (${stuckN})</button>
         <button id="leadClear" class="ghost-btn" type="button">Clear</button>
