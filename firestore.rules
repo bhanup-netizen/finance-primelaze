@@ -35,6 +35,16 @@ service cloud.firestore {
             || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages is list
                 && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages.size() > 0));
     }
+    // True when the signed-in user may EDIT a specific page id (admin, or a page
+    // editor whose editPages includes that page — or 'all').
+    function canEditPage(page) {
+      return isAdmin()
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages == 'all'
+                || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages is list
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.editPages.hasAny([page]))));
+    }
 
     // App config (holds the data-decryption key) — any signed-in user may read;
     // only admins may write.
@@ -51,10 +61,11 @@ service cloud.firestore {
       allow write: if isAdmin() || isPageEditor();
     }
 
-    // Delivery challans — any signed-in user may read/download; admins write.
+    // Delivery challans — any signed-in user may read/download; admins and
+    // anyone with EDIT access to the "challan" page may create/update/delete.
     match /challans/{doc} {
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow write: if canEditPage('challan');
     }
 
     // User permission docs.

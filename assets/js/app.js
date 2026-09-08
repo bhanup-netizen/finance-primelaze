@@ -4680,10 +4680,10 @@
     return `
       <div class="section-head">
         <h1>Delivery Challan</h1>
-        <p>${roleIsAdmin() ? "Create delivery challans and download them as PDF. " : "View and download delivery challans. "}Everyone can view &amp; download; only admins can create.</p>
+        <p>${canEditPage("challan") ? "Create delivery challans and download them as PDF. " : "View and download delivery challans. "}Everyone can view &amp; download; editors can create.</p>
       </div>
-      ${roleIsAdmin() ? `<div class="controls"><button id="newChallanBtn" class="dl-btn" type="button">＋ New challan</button>
-        <button id="brandBtn" class="ghost-btn" type="button">🖼 Logo &amp; signature</button></div>` : ""}
+      ${canEditPage("challan") ? `<div class="controls"><button id="newChallanBtn" class="dl-btn" type="button">＋ New challan</button>
+        ${roleIsAdmin() ? `<button id="brandBtn" class="ghost-btn" type="button">🖼 Logo &amp; signature</button>` : ""}</div>` : ""}
       <div id="brandBox"></div>
       <div id="challanForm"></div>
       <div id="challanList"><div class="empty">Loading…</div></div>`;
@@ -4926,10 +4926,10 @@
       try { const snap = await challanStore().get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
       catch (e2) { box.innerHTML = `<div class="empty">Could not load challans (${esc(e2.message || "" + e2)}).</div>`; return; }
     }
-    if (!list.length) { box.innerHTML = `<div class="empty">No challans yet.${roleIsAdmin() ? " Click “New challan” to create one." : ""}</div>`; return; }
+    if (!list.length) { box.innerHTML = `<div class="empty">No challans yet.${canEditPage("challan") ? " Click “New challan” to create one." : ""}</div>`; return; }
     const rows = list.map((c) => {
       const val = c.declaredValue ? rupee(+c.declaredValue) : "—";
-      const admin = roleIsAdmin()
+      const admin = canEditPage("challan")
         ? `<button class="ghost-btn ch-edit" data-id="${esc(c.id)}">Edit</button> <button class="ghost-btn ch-rm" data-id="${esc(c.id)}">Delete</button>`
         : "";
       return `<tr>
