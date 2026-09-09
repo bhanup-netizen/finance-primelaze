@@ -4275,9 +4275,11 @@
     { id: "cdsco", label: "CDSCO", docSet: "devices", kind: "device" },
     { id: "gem", label: "GeM Portal", docSet: "devices", kind: "device" },
     { id: "products", label: "Esthemax Products", docSet: "products", kind: "product" },
+    { id: "celluma", label: "Celluma", docSet: "products", kind: "celluma" },
     { id: "cosmetic", label: "Cosmetic Ranges", docSet: "cosmetic", kind: "cosmetic" },
   ];
   const regGroup = (g) => REG_GROUPS.find((x) => x.id === g) || REG_GROUPS[0];
+  const REG_IS_CELLUMA = (x) => /cellu/i.test(String((x && x.name) || "") + " " + String((x && x.brand) || ""));
   // Fixed workflow statuses (editable per item, per portal).
   const REG_STATUSES = ["Not started", "Started", "In progress", "Submitted", "Blocker", "Approved", "Rejected"];
   function regCanonStatus(raw) {
@@ -4341,16 +4343,23 @@
     cdsco: "CDSCO medical-device import registration (Form MD-15) for each machine.",
     gem: "GeM (Government e-Marketplace) listing/registration status for each machine.",
     products: "Esthemax consumable products (masks, serums) — regulated as cosmetics.",
+    celluma: "Celluma LED devices — separated from the Esthemax product list.",
     cosmetic: "Cosmetic registration ranges — the umbrella certificates that cover groups of products.",
   };
   const regDocs = {}; // "<group>:<slug>:<docType>" -> {name,url,path,size,at,by} | {url,link:true,at,by}
   const regTrack = {}; // "<group>:<slug>" -> {status, expected, actual, remarks:[{at,by,text}]}
-  const regAdds = { cdsco: [], gem: [], products: [], cosmetic: [] }; // items moved/added into a tab
+  const regAdds = { cdsco: [], gem: [], products: [], celluma: [], cosmetic: [] }; // items moved/added into a tab
   const regMoved = []; // "<group>:<slug>" hidden from that tab (moved out)
   let regTab = "cdsco", regQ = "", regStatusF = "";
   const canEditReg = () => isAdmin();
   const regSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
-  const regBaseItems = (g) => { const k = regGroup(g).kind; return k === "device" ? (window.REG_DEVICES || []) : k === "cosmetic" ? (window.REG_COSMETIC || []) : (window.REG_PRODUCTS || []); };
+  const regBaseItems = (g) => {
+    const k = regGroup(g).kind;
+    if (k === "device") return window.REG_DEVICES || [];
+    if (k === "cosmetic") return window.REG_COSMETIC || [];
+    if (k === "celluma") return (window.REG_PRODUCTS || []).filter(REG_IS_CELLUMA);   // Celluma tab
+    return (window.REG_PRODUCTS || []).filter((x) => !REG_IS_CELLUMA(x));             // Esthemax Products (non-Celluma)
+  };
   const regItems = (g) => {
     const moved = new Set(regMoved);
     const base = regBaseItems(g).filter((it) => !moved.has(g + ":" + regSlug(it.name)));
@@ -4439,7 +4448,7 @@
   function regRows(g) {
     const admin = canEditReg(), grp = regGroup(g);
     const rows = regFiltered(g);
-    if (!rows.length) return `<tr><td colspan="8" class="empty">No matching items.</td></tr>`;
+    if (!rows.length) return `<tr><td colspan="9" class="empty">No matching items.</td></tr>`;
     return rows.map((it) => {
       const total = REG_DOC_TYPES[grp.docSet].length, n = regDocCount(g, it);
       const tr = regTrackGet(g, it);
@@ -4451,14 +4460,15 @@
       const rmN = regRemarks(g, it).length;
       const rmBtn = `<button type="button" class="ghost-btn reg-rem-btn" data-g="${g}" data-name="${esc(it.name)}" title="Remarks &amp; history">📝 <b>${rmN}</b></button>`;
       const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>${admin ? ` <button type="button" class="ghost-btn reg-move-btn" data-g="${g}" data-name="${esc(it.name)}" title="Move to another tab">↔</button>` : ""}`;
+      const mfrCell = `<td>${esc(it.manufacturer || "—")}${it.country ? `<div class="t-muted" title="Country of origin">${esc(it.country)}</div>` : ""}</td>`;
       let nameCols;
       if (grp.kind === "device") {
         const licLinks = REG_CDSCO_LICENCES.map((dt) => { const rec = regDocGet(g, it, dt); return rec ? `<a href="${esc(rec.url)}" target="_blank" rel="noopener" class="reg-lic-link" title="${esc(dt)}">${esc(regShortLic(dt))}</a>` : ""; }).filter(Boolean);
         const licLink = licLinks.length ? `<div class="reg-lic-row">📄 ${licLinks.join(" · ")}</div>` : "";
-        nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.generic ? `<div class="t-muted">${esc(it.generic)}</div>` : ""}${licLink}</td><td>${esc(it.models || "—")}</td><td>${it.cls ? `<span class="badge b-neutral">${esc(it.cls)}</span>` : "—"}</td>`;
+        nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.generic ? `<div class="t-muted">${esc(it.generic)}</div>` : ""}${licLink}</td><td>${esc(it.models || "—")}</td><td>${it.cls ? `<span class="badge b-neutral">${esc(it.cls)}</span>` : "—"}</td>${mfrCell}`;
       }
-      else if (grp.kind === "cosmetic") nameCols = `<td class="t-name"><b>${esc(it.name)}</b></td><td>${esc(it.type || "—")}</td><td>${esc(it.certNo || "—")}</td>`;
-      else nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.group ? `<div class="t-muted">${esc(it.group)}</div>` : ""}</td><td>${esc(it.sku || "—")}</td><td>${it.category ? `<span class="badge b-neutral">${esc(it.category)}</span>` : "—"}</td>`;
+      else if (grp.kind === "cosmetic") nameCols = `<td class="t-name"><b>${esc(it.name)}</b></td><td>${esc(it.type || "—")}</td><td>${esc(it.certNo || "—")}</td>${mfrCell}`;
+      else nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.group ? `<div class="t-muted">${esc(it.group)}</div>` : ""}</td><td>${esc(it.sku || "—")}</td><td>${it.category ? `<span class="badge b-neutral">${esc(it.category)}</span>` : "—"}</td>${mfrCell}`;
       return `<tr>${nameCols}<td>${statusCell}</td><td>${expCell}</td><td>${actCell}</td><td>${rmBtn}</td><td>${docBtn}</td></tr>`;
     }).join("");
   }
@@ -4467,7 +4477,7 @@
     const first = grp.kind === "device" ? `<th>Device</th><th>Models</th><th title="${esc(H.cls)}">Class ⓘ</th>`
       : grp.kind === "cosmetic" ? `<th>Range</th><th>Type</th><th title="${esc(H.cert)}">Cert No ⓘ</th>`
       : `<th>Product</th><th>SKU</th><th>Category</th>`;
-    return first + `<th title="${esc(H.regStatus)}">Status ⓘ</th><th title="Expected date to file the documents">Expected filing ⓘ</th><th title="Actual date the documents were filed">Actual filing ⓘ</th><th>Remarks</th><th>Documents</th>`;
+    return first + `<th title="Manufacturer &amp; country of origin">Manufacturer ⓘ</th><th title="${esc(H.regStatus)}">Status ⓘ</th><th title="Expected date to file the documents">Expected filing ⓘ</th><th title="Actual date the documents were filed">Actual filing ⓘ</th><th>Remarks</th><th>Documents</th>`;
   }
   function regRepaint() {
     const b = document.getElementById("regBody"); if (b) b.innerHTML = regRows(regTab);
@@ -5938,7 +5948,7 @@
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
       if (e.regDocs && typeof e.regDocs === "object") { Object.keys(regDocs).forEach((k) => delete regDocs[k]); Object.assign(regDocs, e.regDocs); }
       if (e.regTrack && typeof e.regTrack === "object") { Object.keys(regTrack).forEach((k) => delete regTrack[k]); Object.assign(regTrack, e.regTrack); }
-      if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
+      if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
       if (typeof e.hqTargetSeedVersion === "number") hqTargetSeedVersion = e.hqTargetSeedVersion;
