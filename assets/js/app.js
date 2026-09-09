@@ -3406,7 +3406,7 @@
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
-    "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "deliveredDate",
+    "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
     "createdBy", "createdAt", "updatedAt"];
   const LEAD_STEP_KEYS = ["new", "contacted", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
 
@@ -3420,6 +3420,43 @@
   let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false };
   const canEditLeads = () => isAdmin();
   const leadToday = () => new Date().toISOString().slice(0, 10);
+  // Default transit window: when a lead is dispatched, this is how many days
+  // later we expect it delivered — used to pre-fill the expected-delivery date
+  // and to auto-advance Dispatched → Delivered once that date is reached.
+  const LEAD_TRANSIT_DAYS = 5;
+  // Add n days to a YYYY-MM-DD string, returning YYYY-MM-DD.
+  function leadAddDays(dateStr, n) {
+    const base = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? new Date(dateStr + "T00:00:00") : new Date();
+    base.setDate(base.getDate() + (Number(n) || 0));
+    return base.toISOString().slice(0, 10);
+  }
+  // The date a dispatched lead is expected to be delivered: the explicit
+  // expected date if set, else dispatch date + transit window.
+  function leadExpectedDelivery(l) {
+    if (l.expDelivDate) return l.expDelivDate;
+    if (l.dispatchDate) return leadAddDays(l.dispatchDate, LEAD_TRANSIT_DAYS);
+    return "";
+  }
+  // Auto-advance any Dispatched lead to Delivered once its expected-delivery
+  // date has arrived. Runs on the leads board for editors only (viewers can't
+  // write). Idempotent — a lead already Delivered is skipped. Each move is
+  // recorded in the timeline as a system note so the team can confirm.
+  function leadAutoDeliver() {
+    if (!canEditLeads()) return 0;
+    const today = leadToday();
+    let moved = 0;
+    leadAll().forEach((l) => {
+      if (l.stage !== "dispatched") return;
+      const exp = leadExpectedDelivery(l);
+      if (!exp || exp > today) return;
+      leadUpdate(l.id, "deliveredDate", exp);
+      leadUpdate(l.id, "stage", "delivered");
+      leadUpdate(l.id, "stageSince", Date.now());
+      leadAddHistory(l.id, "delivered", "Auto-marked Delivered — expected delivery date (" + exp + ") reached. Please confirm receipt with the client.", "system");
+      moved++;
+    });
+    return moved;
+  }
   const leadIsArchived = (id) => leadArchive.indexOf(id) >= 0;
   // Only a super-admin can ever hard-delete a lead; page admins archive instead.
   const canDeleteLeads = () => isSuperAdmin() && appMode === "admin";
@@ -3712,6 +3749,7 @@
     const bits = [];
     if (Number(r.soldAmount) || r.soldDate) bits.push(`✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}`);
     if ((r.stage === "dispatched" || r.stage === "delivered") && (r.courier || r.awb)) bits.push(`🚚 ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}`);
+    if (r.stage === "dispatched" && leadExpectedDelivery(r)) bits.push(`📅 Exp. delivery ${esc(leadExpectedDelivery(r))}`);
     if (r.stage === "delivered" && r.deliveredDate) bits.push(`✅ Delivered ${esc(r.deliveredDate)}`);
     return bits.length ? `<div class="lead-sold-note">${bits.join(" ")}</div>` : "";
   }
@@ -3789,7 +3827,7 @@
         ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
         ${fText("link", "Attachment link", "https://…")}
       </div>
-      ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
+      ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.stage === "dispatched" && leadExpectedDelivery(r) ? ` · <b>Exp. delivery:</b> ${esc(leadExpectedDelivery(r))}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
       <div class="ld-attach"><h4 class="ld-h">Attachments</h4><div id="ldFiles"></div>${admin ? `<label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Attach file<input type="file" id="ldFileInput" hidden></label>` : ""}</div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
       <h4 class="ld-h">Journey</h4>
@@ -4018,6 +4056,8 @@
         <label>Courier / carrier<input id="lrCourier" type="text" placeholder="e.g. Bluedart, DTDC" value="${esc(l.courier || "")}"></label>
         <label>AWB / tracking no.<input id="lrAwb" type="text" placeholder="tracking number" value="${esc(l.awb || "")}"></label>
         <label>Dispatched on<input id="lrDispDate" type="date" value="${esc(l.dispatchDate || leadToday())}"></label>
+        <label>Expected delivery<input id="lrExpDeliv" type="date" value="${esc(l.expDelivDate || leadAddDays(l.dispatchDate || leadToday(), LEAD_TRANSIT_DAYS))}"></label>
+        <div class="muted-note lead-form-wide">On this date the lead moves to <b>Delivered</b> automatically — Sparsha/Lubdha can confirm or move it sooner.</div>
       </div>
       <div class="lead-form-grid" id="lrDelivBox"${preStage === "delivered" ? "" : " hidden"}>
         <label>Delivered on<input id="lrDelivDate" type="date" value="${esc(l.deliveredDate || leadToday())}"></label>
@@ -4050,9 +4090,11 @@
         leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
       }
       if (moved && chosen === "dispatched") {
+        const dDate = (document.getElementById("lrDispDate").value || "").trim() || leadToday();
         leadUpdate(id, "courier", (document.getElementById("lrCourier").value || "").trim());
         leadUpdate(id, "awb", (document.getElementById("lrAwb").value || "").trim());
-        leadUpdate(id, "dispatchDate", (document.getElementById("lrDispDate").value || "").trim() || leadToday());
+        leadUpdate(id, "dispatchDate", dDate);
+        leadUpdate(id, "expDelivDate", (document.getElementById("lrExpDeliv").value || "").trim() || leadAddDays(dDate, LEAD_TRANSIT_DAYS));
       }
       if (moved && chosen === "delivered") {
         leadUpdate(id, "deliveredDate", (document.getElementById("lrDelivDate").value || "").trim() || leadToday());
@@ -4260,6 +4302,8 @@
   }
 
   function renderLeads() {
+    // Auto-advance any dispatched leads whose expected-delivery date has passed.
+    leadAutoDeliver();
     // keep leadSeq ahead of any restored adds
     const ids = leadAdds.map((a) => +String(a.id).replace(/^u/, "")).filter((n) => !isNaN(n));
     leadSeq = Math.max(leadSeq, ids.length ? Math.max(...ids) + 1 : 0);
