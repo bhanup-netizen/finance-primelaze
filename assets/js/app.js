@@ -3830,11 +3830,17 @@
       </span>
     </div>`;
   }
+  // Most-recent activity time for a lead (edit, remark, or creation).
+  function leadLastUpdated(r) {
+    const h = leadHistory(r); const hAt = h.length ? (h[h.length - 1].at || 0) : 0;
+    return Number(r.updatedAt) || hAt || Number(r.createdAt) || 0;
+  }
   function leadRows(rows, admin) {
-    if (!rows.length) return `<tr><td colspan="8" class="empty">No leads match these filters.</td></tr>`;
-    return rows.map((r) => {
+    if (!rows.length) return `<tr><td colspan="9" class="empty">No leads match these filters.</td></tr>`;
+    return rows.slice().sort((a, b) => leadLastUpdated(b) - leadLastUpdated(a)).map((r) => {
       const loc = [r.city, r.state].filter(Boolean).join(", ");
       const sold = r.stage === "sold";
+      const lu = leadLastUpdated(r);
       return `<tr class="${sold ? "lead-won" : ""}">
         <td data-label="Lead"><button type="button" class="lead-open" data-id="${esc(r.id)}"><span class="lead-name">${esc(r.name || "—")}</span><span class="t-muted lead-open-sub">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</span></button></td>
         <td data-label="Contact">${leadContactCell(r)}</td>
@@ -3843,6 +3849,7 @@
         <td data-label="Product">${esc(r.product || "—")}</td>
         <td data-label="Owner">${leadOwnerCell(r, admin)}</td>
         <td data-label="Stage">${leadStageCell(r, admin)}</td>
+        <td data-label="Updated" class="lead-updated">${lu ? esc(fmtWhen(lu)) : "—"}</td>
         <td class="lead-remarkcell" data-label="Lead journey">${leadRemarkCell(r, admin)}</td>
       </tr>`;
     }).join("");
@@ -4254,7 +4261,7 @@
       <div class="table-wrap"><table class="lead-table">
         <thead><tr>
           <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
-          <th>Owner</th><th>Stage</th><th>Lead journey</th>
+          <th>Owner</th><th>Stage</th><th>Updated</th><th>Lead journey</th>
         </tr></thead>
         <tbody id="leadBody">${leadRows(leadFiltered(rows0), admin)}</tbody>
       </table></div>
