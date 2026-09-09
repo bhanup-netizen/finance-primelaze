@@ -16,7 +16,17 @@
   let userSuper = false;                // true = Super Admin (everything + user mgmt)
   let perms = { pages: "all", hqs: "all", landing: false, managerInc: false, editPages: [] };
   let sessionUser = null;               // firebase.User
-  let auth = null, db = null, storage = null; // firebase handles
+  let auth = null, db = null, storage = null, fns = null; // firebase handles
+
+  // ---- Server-side dispatch messaging (WhatsApp / SMS via Cloud Function) ----
+  // Flip `enabled` to true AFTER deploying functions/ and configuring the
+  // WhatsApp Cloud API + MSG91 credentials (see MESSAGING-setup.md). Until then
+  // the dashboard falls back to one-tap WhatsApp/SMS deep links (no backend).
+  const MESSAGING = {
+    enabled: false,               // true = auto-send via Cloud Function on dispatch
+    region: "asia-south1",        // must match the region in functions/index.js
+    channels: ["whatsapp", "sms"], // which channels to auto-send on dispatch
+  };
 
   // Super Admin can view & edit everything AND manage users (Admin tab).
   // Plain Admin edits every content page but cannot manage users.
@@ -3822,8 +3832,18 @@
     paintFiles();
     const fileInput = document.getElementById("ldFileInput");
     if (fileInput) fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) uploadLeadFile(id, f, paintFiles); e.target.value = ""; };
-    wrap.querySelectorAll(".lead-send-wa").forEach((b) => (b.onclick = () => leadSendDispatch(r, "wa")));
-    wrap.querySelectorAll(".lead-send-sms").forEach((b) => (b.onclick = () => leadSendDispatch(r, "sms")));
+    const detailSend = (mode) => {
+      const ch = mode === "sms" ? "sms" : "whatsapp";
+      if (MESSAGING.enabled && fns) {
+        leadServerSend(r, [ch])
+          .then((res) => window.alert(leadSendSummary(res)))
+          .catch((e) => { window.alert("Server send failed: " + (e && e.message || e) + " — opening the app instead."); leadSendDispatch(r, mode); });
+      } else {
+        leadSendDispatch(r, mode);
+      }
+    };
+    wrap.querySelectorAll(".lead-send-wa").forEach((b) => (b.onclick = () => detailSend("wa")));
+    wrap.querySelectorAll(".lead-send-sms").forEach((b) => (b.onclick = () => detailSend("sms")));
     const addB = document.getElementById("ldAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
     const mineB = document.getElementById("ldMine");
@@ -3891,6 +3911,30 @@
       ? `sms:${n.digits}?body=${encodeURIComponent(msg)}`
       : `https://wa.me/${n.wa}?text=${encodeURIComponent(msg)}`;
     window.open(url, "_blank", "noopener");
+  }
+  // Server-side send via the Cloud Function (real WhatsApp Business / SMS).
+  // Returns a promise resolving to { ok, results:{whatsapp?, sms?} }.
+  function leadServerSend(r, channels, courier, awb) {
+    if (!MESSAGING.enabled || !fns) return Promise.reject(new Error("Server messaging is not enabled."));
+    const n = leadWaNumber(r);
+    if (!n) return Promise.reject(new Error("This lead has no mobile number."));
+    const call = fns.httpsCallable("sendDispatchNotification");
+    return call({
+      to: n.wa,
+      name: (String(r.name || "").trim()) || "Customer",
+      courier: String(courier != null ? courier : (r.courier || "")).trim(),
+      awb: String(awb != null ? awb : (r.awb || "")).trim(),
+      channels: channels || MESSAGING.channels,
+      leadId: r.id,
+    }).then((res) => (res && res.data) || {});
+  }
+  // Human-readable summary of a server-send result.
+  function leadSendSummary(res) {
+    const rs = (res && res.results) || {};
+    const bits = [];
+    if (rs.whatsapp) bits.push("WhatsApp " + (rs.whatsapp.ok ? "sent ✓" : "failed (" + (rs.whatsapp.error || "error") + ")"));
+    if (rs.sms) bits.push("SMS " + (rs.sms.ok ? "sent ✓" : "failed (" + (rs.sms.error || "error") + ")"));
+    return bits.join(" · ") || "No channel sent.";
   }
   // WhatsApp + SMS "notify client" buttons for a dispatched lead.
   function leadDispatchBtns(r) {
@@ -4119,10 +4163,17 @@
       }
       if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
       leadAddHistory(id, chosen, text);
-      // On a dispatch move, offer to open WhatsApp pre-filled with the tracking.
-      if (moved && chosen === "dispatched" && leadWaNumber(l) &&
-          window.confirm("Dispatch saved. Open WhatsApp now to send the tracking details to " + (l.name || "the client") + "?")) {
-        leadSendDispatch(l, "wa", dispCourier, dispAwb);
+      // On a dispatch move, notify the client with the tracking details.
+      if (moved && chosen === "dispatched" && leadWaNumber(l)) {
+        if (MESSAGING.enabled && fns) {
+          // Automatic server send (real WhatsApp Business + SMS via gateway).
+          leadServerSend(l, MESSAGING.channels, dispCourier, dispAwb)
+            .then((res) => window.alert("Dispatch update to " + (l.name || "client") + ": " + leadSendSummary(res)))
+            .catch((e) => window.alert("Auto-send failed: " + (e && e.message || e) + "\nYou can still tap WhatsApp / SMS on the lead to send manually."));
+        } else if (window.confirm("Dispatch saved. Open WhatsApp now to send the tracking details to " + (l.name || "the client") + "?")) {
+          // Fallback: one-tap deep link (no backend configured).
+          leadSendDispatch(l, "wa", dispCourier, dispAwb);
+        }
       }
       close(); leadRepaint();
     };
@@ -5989,6 +6040,7 @@
       auth = firebase.auth();
       db = firebase.firestore();
       try { storage = firebase.storage ? firebase.storage() : null; } catch (e) { storage = null; }
+      try { fns = firebase.functions ? firebase.app().functions(MESSAGING.region) : null; } catch (e) { fns = null; }
       return true;
     } catch (e) { console.error("Firebase init failed", e); return false; }
   }

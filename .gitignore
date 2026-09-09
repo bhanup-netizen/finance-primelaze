@@ -3,6 +3,9 @@ node_modules/
 package.json
 package-lock.json
 npm-debug.log*
+# ...but the Cloud Functions manifest MUST be tracked (needed to deploy).
+!functions/package.json
+!functions/package-lock.json
 
 # Verification artifacts
 .verify/
