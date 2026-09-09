@@ -1,9 +1,0 @@
-node_modules/
-# Local env — real values live here (never commit). Use .env.example as a guide.
-.env
-.env.local
-.env.*.local
-# Firebase debug logs
-firebase-debug.log
-ui-debug.log
-*.log

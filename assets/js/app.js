@@ -16,17 +16,7 @@
   let userSuper = false;                // true = Super Admin (everything + user mgmt)
   let perms = { pages: "all", hqs: "all", landing: false, managerInc: false, editPages: [] };
   let sessionUser = null;               // firebase.User
-  let auth = null, db = null, storage = null, fns = null; // firebase handles
-
-  // ---- Server-side dispatch messaging (WhatsApp / SMS via Cloud Function) ----
-  // Flip `enabled` to true AFTER deploying functions/ and configuring the
-  // WhatsApp Cloud API + MSG91 credentials (see MESSAGING-setup.md). Until then
-  // the dashboard falls back to one-tap WhatsApp/SMS deep links (no backend).
-  const MESSAGING = {
-    enabled: false,               // true = auto-send via Cloud Function on dispatch
-    region: "asia-south1",        // must match the region in functions/index.js
-    channels: ["whatsapp", "sms"], // which channels to auto-send on dispatch
-  };
+  let auth = null, db = null, storage = null; // firebase handles
 
   // Super Admin can view & edit everything AND manage users (Admin tab).
   // Plain Admin edits every content page but cannot manage users.
@@ -3800,7 +3790,6 @@
         ${fText("link", "Attachment link", "https://…")}
       </div>
       ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
-      ${(r.stage === "dispatched" || r.stage === "delivered") && (r.courier || r.awb) ? leadDispatchBtns(r) : ""}
       <div class="ld-attach"><h4 class="ld-h">Attachments</h4><div id="ldFiles"></div>${admin ? `<label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Attach file<input type="file" id="ldFileInput" hidden></label>` : ""}</div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
       <h4 class="ld-h">Journey</h4>
@@ -3832,18 +3821,6 @@
     paintFiles();
     const fileInput = document.getElementById("ldFileInput");
     if (fileInput) fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) uploadLeadFile(id, f, paintFiles); e.target.value = ""; };
-    const detailSend = (mode) => {
-      const ch = mode === "sms" ? "sms" : "whatsapp";
-      if (MESSAGING.enabled && fns) {
-        leadServerSend(r, [ch])
-          .then((res) => window.alert(leadSendSummary(res)))
-          .catch((e) => { window.alert("Server send failed: " + (e && e.message || e) + " — opening the app instead."); leadSendDispatch(r, mode); });
-      } else {
-        leadSendDispatch(r, mode);
-      }
-    };
-    wrap.querySelectorAll(".lead-send-wa").forEach((b) => (b.onclick = () => detailSend("wa")));
-    wrap.querySelectorAll(".lead-send-sms").forEach((b) => (b.onclick = () => detailSend("sms")));
     const addB = document.getElementById("ldAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
     const mineB = document.getElementById("ldMine");
@@ -3879,70 +3856,6 @@
         <a class="cbtn call" href="tel:${esc(digits)}" title="Call ${esc(r.mobile)}" aria-label="Call">📞<span>Call</span></a>
         <a class="cbtn wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="WhatsApp ${esc(r.mobile)}" aria-label="WhatsApp">💬<span>WhatsApp</span></a>
       </span>
-    </div>`;
-  }
-  // Digits + WhatsApp-format number (91 + 10 digits) for a lead's mobile.
-  function leadWaNumber(r) {
-    const digits = String(r.mobile || "").replace(/[^0-9]/g, "");
-    if (!digits) return null;
-    return { digits, wa: digits.length === 10 ? "91" + digits : digits };
-  }
-  // Build the client-facing dispatch message. Pass live courier/awb (from the
-  // form) to override what's stored on the lead.
-  function leadDispatchMsg(r, courier, awb) {
-    const c = String(courier != null ? courier : (r.courier || "")).trim();
-    const a = String(awb != null ? awb : (r.awb || "")).trim();
-    const nm = (String(r.name || "").trim().split(/\s+/)[0]) || "there";
-    let m = `Hi ${nm}, good news — your Casovil order has been dispatched`;
-    if (c) m += ` via ${c}`;
-    m += ".";
-    if (a) m += ` Tracking / AWB no: ${a}.`;
-    m += " You can track it with the courier. Thank you for choosing Casovil! — Team Casovil";
-    return m;
-  }
-  // Open WhatsApp or the SMS app to the client's number, pre-filled with the
-  // dispatch update. This is a one-tap deep link (opens the messaging app with
-  // the message ready to send) — a static web app can't silently auto-send.
-  function leadSendDispatch(r, mode, courier, awb) {
-    const n = leadWaNumber(r);
-    if (!n) { window.alert("This lead has no mobile number to message."); return; }
-    const msg = leadDispatchMsg(r, courier, awb);
-    const url = mode === "sms"
-      ? `sms:${n.digits}?body=${encodeURIComponent(msg)}`
-      : `https://wa.me/${n.wa}?text=${encodeURIComponent(msg)}`;
-    window.open(url, "_blank", "noopener");
-  }
-  // Server-side send via the Cloud Function (real WhatsApp Business / SMS).
-  // Returns a promise resolving to { ok, results:{whatsapp?, sms?} }.
-  function leadServerSend(r, channels, courier, awb) {
-    if (!MESSAGING.enabled || !fns) return Promise.reject(new Error("Server messaging is not enabled."));
-    const n = leadWaNumber(r);
-    if (!n) return Promise.reject(new Error("This lead has no mobile number."));
-    const call = fns.httpsCallable("sendDispatchNotification");
-    return call({
-      to: n.wa,
-      name: (String(r.name || "").trim()) || "Customer",
-      courier: String(courier != null ? courier : (r.courier || "")).trim(),
-      awb: String(awb != null ? awb : (r.awb || "")).trim(),
-      channels: channels || MESSAGING.channels,
-      leadId: r.id,
-    }).then((res) => (res && res.data) || {});
-  }
-  // Human-readable summary of a server-send result.
-  function leadSendSummary(res) {
-    const rs = (res && res.results) || {};
-    const bits = [];
-    if (rs.whatsapp) bits.push("WhatsApp " + (rs.whatsapp.ok ? "sent ✓" : "failed (" + (rs.whatsapp.error || "error") + ")"));
-    if (rs.sms) bits.push("SMS " + (rs.sms.ok ? "sent ✓" : "failed (" + (rs.sms.error || "error") + ")"));
-    return bits.join(" · ") || "No channel sent.";
-  }
-  // WhatsApp + SMS "notify client" buttons for a dispatched lead.
-  function leadDispatchBtns(r) {
-    if (!leadWaNumber(r)) return "";
-    return `<div class="lead-dispatch-send">
-      <span class="lead-dispatch-lbl">📲 Notify client:</span>
-      <button type="button" class="cbtn wa lead-send-wa" data-id="${esc(r.id)}" title="Open WhatsApp with the tracking details pre-filled">💬<span>WhatsApp</span></button>
-      <button type="button" class="cbtn sms lead-send-sms" data-id="${esc(r.id)}" title="Open your SMS app with the tracking details pre-filled">✉<span>SMS</span></button>
     </div>`;
   }
   // Most-recent activity time for a lead (edit, remark, or creation).
@@ -4105,11 +4018,6 @@
         <label>Courier / carrier<input id="lrCourier" type="text" placeholder="e.g. Bluedart, DTDC" value="${esc(l.courier || "")}"></label>
         <label>AWB / tracking no.<input id="lrAwb" type="text" placeholder="tracking number" value="${esc(l.awb || "")}"></label>
         <label>Dispatched on<input id="lrDispDate" type="date" value="${esc(l.dispatchDate || leadToday())}"></label>
-        ${leadWaNumber(l) ? `<div class="lead-dispatch-send lead-form-wide">
-          <span class="lead-dispatch-lbl">📲 Send tracking to client:</span>
-          <button type="button" class="cbtn wa" id="lrSendWa" title="Open WhatsApp to ${esc(l.mobile)} with the courier + AWB pre-filled">💬<span>WhatsApp</span></button>
-          <button type="button" class="cbtn sms" id="lrSendSms" title="Open your SMS app to ${esc(l.mobile)} with the courier + AWB pre-filled">✉<span>SMS</span></button>
-        </div>` : ""}
       </div>
       <div class="lead-form-grid" id="lrDelivBox"${preStage === "delivered" ? "" : " hidden"}>
         <label>Delivered on<input id="lrDelivDate" type="date" value="${esc(l.deliveredDate || leadToday())}"></label>
@@ -4129,15 +4037,6 @@
       document.getElementById("lrDispBox").hidden = v !== "dispatched";
       document.getElementById("lrDelivBox").hidden = v !== "delivered";
     };
-    // "Send tracking to client" buttons inside the dispatch box — read the
-    // courier/AWB the user is typing right now and deep-link WhatsApp / SMS.
-    const liveDisp = (mode) => leadSendDispatch(l, mode,
-      (document.getElementById("lrCourier") || {}).value,
-      (document.getElementById("lrAwb") || {}).value);
-    const sendWa = document.getElementById("lrSendWa");
-    if (sendWa) sendWa.onclick = () => liveDisp("wa");
-    const sendSms = document.getElementById("lrSendSms");
-    if (sendSms) sendSms.onclick = () => liveDisp("sms");
     wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
     document.getElementById("lrCancel").onclick = () => { revert(); close(); };
     document.getElementById("lrSave").onclick = () => {
@@ -4150,12 +4049,9 @@
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
         leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
       }
-      let dispCourier = "", dispAwb = "";
       if (moved && chosen === "dispatched") {
-        dispCourier = (document.getElementById("lrCourier").value || "").trim();
-        dispAwb = (document.getElementById("lrAwb").value || "").trim();
-        leadUpdate(id, "courier", dispCourier);
-        leadUpdate(id, "awb", dispAwb);
+        leadUpdate(id, "courier", (document.getElementById("lrCourier").value || "").trim());
+        leadUpdate(id, "awb", (document.getElementById("lrAwb").value || "").trim());
         leadUpdate(id, "dispatchDate", (document.getElementById("lrDispDate").value || "").trim() || leadToday());
       }
       if (moved && chosen === "delivered") {
@@ -4163,18 +4059,6 @@
       }
       if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
       leadAddHistory(id, chosen, text);
-      // On a dispatch move, notify the client with the tracking details.
-      if (moved && chosen === "dispatched" && leadWaNumber(l)) {
-        if (MESSAGING.enabled && fns) {
-          // Automatic server send (real WhatsApp Business + SMS via gateway).
-          leadServerSend(l, MESSAGING.channels, dispCourier, dispAwb)
-            .then((res) => window.alert("Dispatch update to " + (l.name || "client") + ": " + leadSendSummary(res)))
-            .catch((e) => window.alert("Auto-send failed: " + (e && e.message || e) + "\nYou can still tap WhatsApp / SMS on the lead to send manually."));
-        } else if (window.confirm("Dispatch saved. Open WhatsApp now to send the tracking details to " + (l.name || "the client") + "?")) {
-          // Fallback: one-tap deep link (no backend configured).
-          leadSendDispatch(l, "wa", dispCourier, dispAwb);
-        }
-      }
       close(); leadRepaint();
     };
     setTimeout(() => { const t = document.getElementById("lrText"); if (t) t.focus(); }, 0);
@@ -6040,7 +5924,6 @@
       auth = firebase.auth();
       db = firebase.firestore();
       try { storage = firebase.storage ? firebase.storage() : null; } catch (e) { storage = null; }
-      try { fns = firebase.functions ? firebase.app().functions(MESSAGING.region) : null; } catch (e) { fns = null; }
       return true;
     } catch (e) { console.error("Firebase init failed", e); return false; }
   }

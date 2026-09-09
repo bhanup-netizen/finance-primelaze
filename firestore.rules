@@ -68,14 +68,6 @@ service cloud.firestore {
       allow write: if canEditPage('challan');
     }
 
-    // Dispatch notification audit log — written ONLY by the Cloud Function
-    // (admin SDK, which bypasses these rules). Admins may read it to audit
-    // WhatsApp/SMS sends; no client may write.
-    match /notifications/{doc} {
-      allow read: if isAdmin();
-      allow write: if false;
-    }
-
     // User permission docs.
     //  - Read: own doc; admins/super and page editors read the list (to manage).
     //  - Super admins: full create/update/delete of any account.
