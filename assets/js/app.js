@@ -3790,6 +3790,7 @@
         ${fText("link", "Attachment link", "https://…")}
       </div>
       ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
+      ${(r.stage === "dispatched" || r.stage === "delivered") && (r.courier || r.awb) ? leadDispatchBtns(r) : ""}
       <div class="ld-attach"><h4 class="ld-h">Attachments</h4><div id="ldFiles"></div>${admin ? `<label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Attach file<input type="file" id="ldFileInput" hidden></label>` : ""}</div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
       <h4 class="ld-h">Journey</h4>
@@ -3821,6 +3822,8 @@
     paintFiles();
     const fileInput = document.getElementById("ldFileInput");
     if (fileInput) fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) uploadLeadFile(id, f, paintFiles); e.target.value = ""; };
+    wrap.querySelectorAll(".lead-send-wa").forEach((b) => (b.onclick = () => leadSendDispatch(r, "wa")));
+    wrap.querySelectorAll(".lead-send-sms").forEach((b) => (b.onclick = () => leadSendDispatch(r, "sms")));
     const addB = document.getElementById("ldAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
     const mineB = document.getElementById("ldMine");
@@ -3856,6 +3859,46 @@
         <a class="cbtn call" href="tel:${esc(digits)}" title="Call ${esc(r.mobile)}" aria-label="Call">📞<span>Call</span></a>
         <a class="cbtn wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="WhatsApp ${esc(r.mobile)}" aria-label="WhatsApp">💬<span>WhatsApp</span></a>
       </span>
+    </div>`;
+  }
+  // Digits + WhatsApp-format number (91 + 10 digits) for a lead's mobile.
+  function leadWaNumber(r) {
+    const digits = String(r.mobile || "").replace(/[^0-9]/g, "");
+    if (!digits) return null;
+    return { digits, wa: digits.length === 10 ? "91" + digits : digits };
+  }
+  // Build the client-facing dispatch message. Pass live courier/awb (from the
+  // form) to override what's stored on the lead.
+  function leadDispatchMsg(r, courier, awb) {
+    const c = String(courier != null ? courier : (r.courier || "")).trim();
+    const a = String(awb != null ? awb : (r.awb || "")).trim();
+    const nm = (String(r.name || "").trim().split(/\s+/)[0]) || "there";
+    let m = `Hi ${nm}, good news — your Casovil order has been dispatched`;
+    if (c) m += ` via ${c}`;
+    m += ".";
+    if (a) m += ` Tracking / AWB no: ${a}.`;
+    m += " You can track it with the courier. Thank you for choosing Casovil! — Team Casovil";
+    return m;
+  }
+  // Open WhatsApp or the SMS app to the client's number, pre-filled with the
+  // dispatch update. This is a one-tap deep link (opens the messaging app with
+  // the message ready to send) — a static web app can't silently auto-send.
+  function leadSendDispatch(r, mode, courier, awb) {
+    const n = leadWaNumber(r);
+    if (!n) { window.alert("This lead has no mobile number to message."); return; }
+    const msg = leadDispatchMsg(r, courier, awb);
+    const url = mode === "sms"
+      ? `sms:${n.digits}?body=${encodeURIComponent(msg)}`
+      : `https://wa.me/${n.wa}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank", "noopener");
+  }
+  // WhatsApp + SMS "notify client" buttons for a dispatched lead.
+  function leadDispatchBtns(r) {
+    if (!leadWaNumber(r)) return "";
+    return `<div class="lead-dispatch-send">
+      <span class="lead-dispatch-lbl">📲 Notify client:</span>
+      <button type="button" class="cbtn wa lead-send-wa" data-id="${esc(r.id)}" title="Open WhatsApp with the tracking details pre-filled">💬<span>WhatsApp</span></button>
+      <button type="button" class="cbtn sms lead-send-sms" data-id="${esc(r.id)}" title="Open your SMS app with the tracking details pre-filled">✉<span>SMS</span></button>
     </div>`;
   }
   // Most-recent activity time for a lead (edit, remark, or creation).
@@ -4018,6 +4061,11 @@
         <label>Courier / carrier<input id="lrCourier" type="text" placeholder="e.g. Bluedart, DTDC" value="${esc(l.courier || "")}"></label>
         <label>AWB / tracking no.<input id="lrAwb" type="text" placeholder="tracking number" value="${esc(l.awb || "")}"></label>
         <label>Dispatched on<input id="lrDispDate" type="date" value="${esc(l.dispatchDate || leadToday())}"></label>
+        ${leadWaNumber(l) ? `<div class="lead-dispatch-send lead-form-wide">
+          <span class="lead-dispatch-lbl">📲 Send tracking to client:</span>
+          <button type="button" class="cbtn wa" id="lrSendWa" title="Open WhatsApp to ${esc(l.mobile)} with the courier + AWB pre-filled">💬<span>WhatsApp</span></button>
+          <button type="button" class="cbtn sms" id="lrSendSms" title="Open your SMS app to ${esc(l.mobile)} with the courier + AWB pre-filled">✉<span>SMS</span></button>
+        </div>` : ""}
       </div>
       <div class="lead-form-grid" id="lrDelivBox"${preStage === "delivered" ? "" : " hidden"}>
         <label>Delivered on<input id="lrDelivDate" type="date" value="${esc(l.deliveredDate || leadToday())}"></label>
@@ -4037,6 +4085,15 @@
       document.getElementById("lrDispBox").hidden = v !== "dispatched";
       document.getElementById("lrDelivBox").hidden = v !== "delivered";
     };
+    // "Send tracking to client" buttons inside the dispatch box — read the
+    // courier/AWB the user is typing right now and deep-link WhatsApp / SMS.
+    const liveDisp = (mode) => leadSendDispatch(l, mode,
+      (document.getElementById("lrCourier") || {}).value,
+      (document.getElementById("lrAwb") || {}).value);
+    const sendWa = document.getElementById("lrSendWa");
+    if (sendWa) sendWa.onclick = () => liveDisp("wa");
+    const sendSms = document.getElementById("lrSendSms");
+    if (sendSms) sendSms.onclick = () => liveDisp("sms");
     wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
     document.getElementById("lrCancel").onclick = () => { revert(); close(); };
     document.getElementById("lrSave").onclick = () => {
@@ -4049,9 +4106,12 @@
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
         leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
       }
+      let dispCourier = "", dispAwb = "";
       if (moved && chosen === "dispatched") {
-        leadUpdate(id, "courier", (document.getElementById("lrCourier").value || "").trim());
-        leadUpdate(id, "awb", (document.getElementById("lrAwb").value || "").trim());
+        dispCourier = (document.getElementById("lrCourier").value || "").trim();
+        dispAwb = (document.getElementById("lrAwb").value || "").trim();
+        leadUpdate(id, "courier", dispCourier);
+        leadUpdate(id, "awb", dispAwb);
         leadUpdate(id, "dispatchDate", (document.getElementById("lrDispDate").value || "").trim() || leadToday());
       }
       if (moved && chosen === "delivered") {
@@ -4059,6 +4119,11 @@
       }
       if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
       leadAddHistory(id, chosen, text);
+      // On a dispatch move, offer to open WhatsApp pre-filled with the tracking.
+      if (moved && chosen === "dispatched" && leadWaNumber(l) &&
+          window.confirm("Dispatch saved. Open WhatsApp now to send the tracking details to " + (l.name || "the client") + "?")) {
+        leadSendDispatch(l, "wa", dispCourier, dispAwb);
+      }
       close(); leadRepaint();
     };
     setTimeout(() => { const t = document.getElementById("lrText"); if (t) t.focus(); }, 0);

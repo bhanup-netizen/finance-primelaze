@@ -981,7 +981,13 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .cbtn.call { color: var(--info); background: var(--info-soft); }
 .cbtn.wa { color: #0a8f4d; background: color-mix(in srgb, #25D366 20%, transparent); }
 :root[data-theme="dark"] .cbtn.wa { color: #4ade80; }
+.cbtn.sms { color: var(--info); background: var(--info-soft); }
 .cbtn:hover { filter: brightness(.96); }
+/* Dispatch — "notify client" WhatsApp/SMS buttons */
+.lead-dispatch-send { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.lead-dispatch-send .cbtn { cursor: pointer; }
+.lead-dispatch-send .cbtn span { display: inline; }
+.lead-dispatch-lbl { font-size: 12px; font-weight: 700; color: var(--muted); }
 
 /* Leads — phone-friendly card layout */
 @media (max-width: 760px) {
