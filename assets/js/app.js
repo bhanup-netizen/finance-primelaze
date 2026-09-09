@@ -3291,10 +3291,13 @@
     { key: "demo", label: "Demo done" },
     { key: "negotiation", label: "Negotiation" },
     { key: "sold", label: "Sold ✓" },
+    { key: "dispatched", label: "Dispatched 🚚" },
+    { key: "delivered", label: "Delivered ✅" },
     { key: "lost", label: "Lost" },
   ];
   const LEAD_STAGE_LABEL = {}; LEAD_STAGES.forEach((s) => (LEAD_STAGE_LABEL[s.key] = s.label));
   const LEAD_OPEN = ["new", "contacted", "demo", "negotiation"]; // still in play
+  const LEAD_WON = ["sold", "dispatched", "delivered"];           // converted (post-sale too)
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
   const customLeadSources = []; // admin-added lead sources, persisted for everyone
   const allLeadSources = () => Array.from(new Set(LEAD_SOURCES.concat(customLeadSources)));
@@ -3403,13 +3406,15 @@
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
-    "soldAmount", "soldDate", "createdBy", "createdAt", "updatedAt"];
-  const LEAD_STEP_KEYS = ["new", "contacted", "demo", "negotiation", "sold"]; // forward pipeline
+    "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "deliveredDate",
+    "createdBy", "createdAt", "updatedAt"];
+  const LEAD_STEP_KEYS = ["new", "contacted", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
   const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
   const leadRemovals = []; // ids permanently removed (super-admin only)
   const leadArchive = [];  // ids archived — kept in the database, hidden from the active board
+  const leadFiles = {};    // "<id>#<n>" -> {name,url,path,size,at,by} uploaded attachments
   let leadSeq = 0;
   let leadViewArchived = false; // board showing the archived leads instead of active
   let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false };
@@ -3623,15 +3628,16 @@
   function leadKpis(rows) {
     const total = rows.length;
     const open = rows.filter((r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0).length;
-    const sold = rows.filter((r) => r.stage === "sold");
+    const won = rows.filter((r) => LEAD_WON.indexOf(r.stage) >= 0);
+    const delivered = rows.filter((r) => r.stage === "delivered").length;
     const lost = rows.filter((r) => r.stage === "lost").length;
-    const wonVal = sold.reduce((a, r) => a + (Number(r.soldAmount) || 0), 0);
+    const wonVal = won.reduce((a, r) => a + (Number(r.soldAmount) || 0), 0);
     const stuck = rows.filter(leadIsStuck).length;
-    const conv = total ? Math.round((sold.length / total) * 100) : 0;
+    const conv = total ? Math.round((won.length / total) * 100) : 0;
     const card = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
     return card("", total, "Total leads", open + " still open")
-      + card("k-teal", sold.length, "Sold / won", conv + "% conversion")
-      + card("k-good", rupeeShort(wonVal), "Won value", "closed deals")
+      + card("k-teal", won.length, "Sold / won", conv + "% conversion")
+      + card("k-good", rupeeShort(wonVal), "Won value", delivered + " delivered")
       + card("k-warn", open, "In pipeline", "being worked")
       + card(stuck ? "k-bad" : "", stuck, "Stuck", "> " + LEAD_STUCK_DAYS + " days in stage")
       + card("k-warn", lost, "Lost", "marked lost");
@@ -3643,7 +3649,7 @@
       const o = (r.owner || "Unassigned").trim() || "Unassigned";
       const s = by[o] || (by[o] = { total: 0, open: 0, sold: 0, stuck: 0 });
       s.total++;
-      if (r.stage === "sold") s.sold++; else if (r.stage !== "lost") s.open++;
+      if (LEAD_WON.indexOf(r.stage) >= 0) s.sold++; else if (LEAD_OPEN.indexOf(r.stage || "new") >= 0) s.open++;
       if (leadIsStuck(r)) s.stuck++;
     });
     const list = Object.keys(by).map((o) => Object.assign({ owner: o }, by[o]))
@@ -3700,14 +3706,22 @@
     return `<div class="lead-steps">${LEAD_STEP_KEYS.map((k, i) =>
       `<span class="lead-step lst-${k}${i < idx ? " done" : ""}${i === idx ? " cur" : ""}" title="${esc(LEAD_STAGE_LABEL[k])}"></span>`).join("<span class=\"lead-step-bar\"></span>")}</div>`;
   }
+  // Won/fulfilment note: sold value, then courier+AWB once dispatched, then delivered.
+  function leadWonNote(r) {
+    if (LEAD_WON.indexOf(r.stage) < 0) return "";
+    const bits = [];
+    if (Number(r.soldAmount) || r.soldDate) bits.push(`✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}`);
+    if ((r.stage === "dispatched" || r.stage === "delivered") && (r.courier || r.awb)) bits.push(`🚚 ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}`);
+    if (r.stage === "delivered" && r.deliveredDate) bits.push(`✅ Delivered ${esc(r.deliveredDate)}`);
+    return bits.length ? `<div class="lead-sold-note">${bits.join(" ")}</div>` : "";
+  }
   function leadRemarkCell(r, admin) {
     const hist = leadHistory(r);
     const archived = leadIsArchived(r.id);
     const stuck = leadIsStuck(r);
     const age = leadAgeLabel(r);
     const ageHtml = age ? `<div class="t-muted lead-age${stuck ? " lead-stuck-age" : ""}">${esc(age)}${stuck ? ' <span class="lead-stuck">⚠ stuck</span>' : ""}</div>` : "";
-    const sold = r.stage === "sold" && (Number(r.soldAmount) || r.soldDate)
-      ? `<div class="lead-sold-note">✓ ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}</div>` : "";
+    const sold = leadWonNote(r);
     const archTag = archived ? `<div class="lead-arch-tag">🗄 Archived</div>` : "";
     const tlBtn = `<button type="button" class="linkish lead-timeline-btn" data-id="${esc(r.id)}">🔍 Open${hist.length ? " (" + hist.length + ")" : ""}</button>`;
     const addBtn = canRemarkLeads() ? `<button type="button" class="mini-btn lead-remark-add" data-id="${esc(r.id)}" title="Add an update to the timeline">＋ Update</button>` : "";
@@ -3775,6 +3789,8 @@
         ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
         ${fText("link", "Attachment link", "https://…")}
       </div>
+      ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
+      <div class="ld-attach"><h4 class="ld-h">Attachments</h4><div id="ldFiles"></div>${admin ? `<label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Attach file<input type="file" id="ldFileInput" hidden></label>` : ""}</div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
       <h4 class="ld-h">Journey</h4>
       <ol class="lead-tl">${items}</ol>
@@ -3793,6 +3809,18 @@
     if (ldOwn) { let lastO = ldOwn.value; ldOwn.onchange = () => { if (ldOwn.value !== "__newrep__") { lastO = ldOwn.value; return; } const nm = addNewRepPrompt(); ldOwn.innerHTML = ownerOptionsHtml(nm || lastO); ldOwn.value = nm || lastO; lastO = ldOwn.value; }; }
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("ldClose").onclick = close;
+    // Attachments list + upload.
+    const paintFiles = () => {
+      const box = document.getElementById("ldFiles"); if (!box) return;
+      const files = leadFileList(id);
+      box.innerHTML = files.length
+        ? files.map((f) => `<div class="ld-file"><a href="${esc(f.url)}" target="_blank" rel="noopener">📎 ${esc(f.name || "file")}</a>${admin ? ` <button type="button" class="linkish lead-file-rm" data-key="${esc(f.key)}">✕</button>` : ""}</div>`).join("")
+        : `<span class="t-muted">No files attached.</span>`;
+      box.querySelectorAll(".lead-file-rm").forEach((b) => (b.onclick = () => { if (window.confirm("Remove this file?")) removeLeadFile(b.dataset.key, paintFiles); }));
+    };
+    paintFiles();
+    const fileInput = document.getElementById("ldFileInput");
+    if (fileInput) fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) uploadLeadFile(id, f, paintFiles); e.target.value = ""; };
     const addB = document.getElementById("ldAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
     const mineB = document.getElementById("ldMine");
@@ -3937,6 +3965,26 @@
       if (window.confirm('PERMANENTLY delete lead "' + ((l && l.name) || "") + '"?\n\nThis cannot be undone. Prefer Archive unless you are sure.')) { leadRemove(b.dataset.id); leadRepaint(); }
     }));
   }
+  // ---- Lead file attachments (Firebase Storage) ----
+  function leadFileList(id) { return Object.keys(leadFiles).filter((k) => k.indexOf(id + "#") === 0).map((k) => Object.assign({ key: k }, leadFiles[k])); }
+  async function uploadLeadFile(id, file, paint) {
+    if (!storage) { window.alert("⚠ File storage is not enabled yet — ask the admin to turn on Firebase Storage. You can paste a link instead."); return; }
+    if (file.size > 15 * 1024 * 1024) { window.alert("⚠ File too large (max 15 MB)."); return; }
+    try {
+      const safe = String(file.name).replace(/[^\w.\-]+/g, "_").slice(-80);
+      const path = "leadfiles/" + id + "/" + Date.now() + "-" + safe;
+      const ref = storage.ref().child(path);
+      await ref.put(file, { contentType: file.type || "application/octet-stream" });
+      const url = await ref.getDownloadURL();
+      leadFiles[id + "#" + Date.now()] = { name: file.name, url, path, size: file.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+      saveEdits("Attached a file"); if (paint) paint();
+    } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
+  }
+  async function removeLeadFile(key, paint) {
+    const rec = leadFiles[key]; delete leadFiles[key];
+    saveEdits("Removed a file"); if (paint) paint();
+    if (rec && rec.path && storage) { try { await storage.ref().child(rec.path).delete(); } catch (e) {} }
+  }
   // Append a timestamped entry to a lead's journey. `kind` marks special events
   // (archive/restore/created); a normal update leaves it blank.
   function leadAddHistory(id, stage, text, kind) {
@@ -3965,6 +4013,14 @@
       <div class="lead-form-grid" id="lrSoldBox"${preStage === "sold" ? "" : " hidden"}>
         <label>Deal value ₹<input id="lrAmt" type="number" placeholder="0" value="${l.soldAmount ? esc(l.soldAmount) : ""}"></label>
         <label>Sold on<input id="lrDate" type="date" value="${esc(l.soldDate || leadToday())}"></label>
+      </div>
+      <div class="lead-form-grid" id="lrDispBox"${preStage === "dispatched" ? "" : " hidden"}>
+        <label>Courier / carrier<input id="lrCourier" type="text" placeholder="e.g. Bluedart, DTDC" value="${esc(l.courier || "")}"></label>
+        <label>AWB / tracking no.<input id="lrAwb" type="text" placeholder="tracking number" value="${esc(l.awb || "")}"></label>
+        <label>Dispatched on<input id="lrDispDate" type="date" value="${esc(l.dispatchDate || leadToday())}"></label>
+      </div>
+      <div class="lead-form-grid" id="lrDelivBox"${preStage === "delivered" ? "" : " hidden"}>
+        <label>Delivered on<input id="lrDelivDate" type="date" value="${esc(l.deliveredDate || leadToday())}"></label>
       </div>` : `<div class="muted-note">This is added as a note in the current stage. Only editors can move the stage.</div>`}
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="lrCancel">Cancel</button>
@@ -3975,7 +4031,12 @@
     const revert = () => { if (selEl && oldStage) selEl.value = oldStage; };
     const close = () => wrap.remove();
     const stageSel = document.getElementById("lrStage");
-    if (stageSel) stageSel.onchange = () => { document.getElementById("lrSoldBox").hidden = stageSel.value !== "sold"; };
+    if (stageSel) stageSel.onchange = () => {
+      const v = stageSel.value;
+      document.getElementById("lrSoldBox").hidden = v !== "sold";
+      document.getElementById("lrDispBox").hidden = v !== "dispatched";
+      document.getElementById("lrDelivBox").hidden = v !== "delivered";
+    };
     wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
     document.getElementById("lrCancel").onclick = () => { revert(); close(); };
     document.getElementById("lrSave").onclick = () => {
@@ -3987,6 +4048,14 @@
         const n = parseFloat(String(document.getElementById("lrAmt").value).replace(/[^0-9.]/g, "")) || 0;
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
         leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
+      }
+      if (moved && chosen === "dispatched") {
+        leadUpdate(id, "courier", (document.getElementById("lrCourier").value || "").trim());
+        leadUpdate(id, "awb", (document.getElementById("lrAwb").value || "").trim());
+        leadUpdate(id, "dispatchDate", (document.getElementById("lrDispDate").value || "").trim() || leadToday());
+      }
+      if (moved && chosen === "delivered") {
+        leadUpdate(id, "deliveredDate", (document.getElementById("lrDelivDate").value || "").trim() || leadToday());
       }
       if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
       leadAddHistory(id, chosen, text);
@@ -5996,6 +6065,7 @@
       }
       if (Array.isArray(e.leadRemovals)) { leadRemovals.length = 0; e.leadRemovals.forEach((id) => leadRemovals.push(id)); }
       if (Array.isArray(e.leadArchive)) { leadArchive.length = 0; e.leadArchive.forEach((id) => leadArchive.push(id)); }
+      if (e.leadFiles && typeof e.leadFiles === "object") { Object.keys(leadFiles).forEach((k) => delete leadFiles[k]); Object.assign(leadFiles, e.leadFiles); }
       if (Array.isArray(e.customLeadSources)) { customLeadSources.length = 0; e.customLeadSources.forEach((s) => customLeadSources.push(s)); }
       if (Array.isArray(e.customCities)) { customCities.length = 0; e.customCities.forEach((c) => customCities.push(c)); }
       if (Array.isArray(e.customLeadOwners)) { customLeadOwners.length = 0; e.customLeadOwners.forEach((o) => customLeadOwners.push(o)); }
@@ -6031,7 +6101,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {

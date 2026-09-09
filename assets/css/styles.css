@@ -1075,3 +1075,11 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .reg-move-opts .reg-move-to { text-align: left; padding: 10px 12px; font-size: 14px; }
 .reg-lic-row { margin-top: 3px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; font-size: 11px; }
 .reg-lic-row .reg-lic-link { padding: 0 2px; }
+
+/* Leads — dispatched / delivered stages */
+:root { --lst-dispatched: #7c3aed; --lst-delivered: #0891b2; }
+.lst-dispatched { background: var(--lst-dispatched); } .lst-delivered { background: var(--lst-delivered); }
+.lead-step.cur.lst-dispatched { background: var(--lst-dispatched); } .lead-step.cur.lst-delivered { background: var(--lst-delivered); }
+.lch-dispatched .lead-chip-dot { background: var(--lst-dispatched); } .lch-delivered .lead-chip-dot { background: var(--lst-delivered); }
+.ld-attach { margin: 6px 0 10px; }
+.ld-file { font-size: 13px; padding: 2px 0; }
