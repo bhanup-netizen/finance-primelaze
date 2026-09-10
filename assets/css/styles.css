@@ -879,6 +879,43 @@ tr.total-row:hover td { background: var(--surface-3); }
   .tab { padding: 8px 12px; font-size: 13px; }
 }
 
+/* ---- Whole-page mobile pass (phones ≤ 640px) ---- */
+@media (max-width: 640px) {
+  /* Wide tables scroll inside their own box (keeps the page from scrolling
+     sideways without overflow-x:hidden, which would break the sticky header). */
+  .table-wrap { max-height: none; overflow-x: auto; }
+
+  /* Any multi-column grid declared inline in markup collapses to one column
+     (e.g. the Expense tab's payees / week / bank split). Class grids like
+     .kpi-grid keep their own responsive rules. */
+  .view .grid[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+  .view .grid[style*="grid-template-columns"] > * { min-width: 0; }
+
+  /* Sub-headings: title and its side note wrap instead of overflowing. */
+  .section-title { flex-wrap: wrap; row-gap: 2px; }
+  .section-title h2 { font-size: 16px; }
+
+  /* Expense breakdown + tables stay compact and readable. */
+  .exp-table { font-size: 12px; }
+  .exp-table th, .exp-table td { padding: 6px 8px; }
+  .exp-row { grid-template-columns: minmax(88px, 1.2fr) 1.6fr auto 34px; gap: 8px; font-size: 12px; }
+
+  /* Toolbar buttons stay tappable and wrap rather than overflow. */
+  .section-head [style*="display:flex"] { flex-wrap: wrap; }
+  .ghost-btn, .dl-btn, .mini-btn, .linkish { min-height: 38px; }
+
+  /* Modals use the full width with room to breathe. */
+  .lead-modal-card, .lead-detail-card { width: min(560px, 94vw); }
+}
+
+/* ---- Very small phones ≤ 430px: keep the top bar on one line ---- */
+@media (max-width: 430px) {
+  .topbar { padding: 9px 12px; gap: 8px; }
+  .mode-btn { padding: 6px 9px; font-size: 12px; }
+  .brand-logo { font-size: 17px; }
+  .view { padding: 14px 12px 40px; }
+}
+
 /* ================= LEADS · SALES PIPELINE ================= */
 /* Stage accent colours (shared by chips, dots and stage pills). */
 :root {
@@ -1019,9 +1056,10 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
   .lead-table td[data-label="Lead"] .lead-name { font-size: 17px; }
   .lead-table select { width: 100%; max-width: 100%; font-size: 15px; padding: 9px 10px; }
   .lead-table td.lead-remarkcell { border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 10px; }
-  /* Big, tappable call / whatsapp buttons */
-  .lead-contact-btns { gap: 10px; width: 100%; margin-top: 2px; }
-  .lead-contact-btns .cbtn { flex: 1; justify-content: center; font-size: 14px; padding: 10px 12px; }
+  /* Big, tappable call / whatsapp / google buttons — wrap to rows so 3-5
+     actions stay readable instead of cramming into one line. */
+  .lead-contact-btns { gap: 8px; width: 100%; margin-top: 2px; flex-wrap: wrap; }
+  .lead-contact-btns .cbtn { flex: 1 1 28%; justify-content: center; font-size: 13.5px; padding: 10px 8px; }
   .cbtn span { display: inline; }
   .lead-remark-tools { gap: 16px; }
   .lead-remark-tools .mini-btn, .lead-remark-tools .linkish { font-size: 14px; padding: 6px 4px; }
