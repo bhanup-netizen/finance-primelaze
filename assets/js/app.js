@@ -3285,12 +3285,19 @@
   // Business expense analysis, seeded from the Finance Dept "Expense Ledger"
   // (window.EXPENSE_SEED). Read-only: total spend, categorised breakdown,
   // top payees, weekly + bank splits, and the full searchable transaction list.
-  const EXPENSE_ROWS = (window.EXPENSE_SEED || []).slice();
+  const EXPENSE_SEED_ROWS = (window.EXPENSE_SEED || []).slice();
+  const expenseAdds = [];       // imported expense rows (persisted in the edits doc)
+  let expenseHideBase = false;  // after a Replace import, hide the built-in Aug seed
+  let expSeq = 0;               // running Sr for imported rows
+  // Live expense rows = built-in seed (unless hidden) + imported rows.
+  function expenseRows() { return (expenseHideBase ? [] : EXPENSE_SEED_ROWS).concat(expenseAdds); }
   const EXP_BIG = 200000; // entries at/above this are flagged as large
   function expTitleCase(s) { return String(s || "").replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()); }
   function expCatKey(r) { return String(r.ledger || "—").trim().toUpperCase(); }
   const EXPENSE_CAT_LABEL = {};
-  EXPENSE_ROWS.forEach((r) => { const k = expCatKey(r); if (!EXPENSE_CAT_LABEL[k]) EXPENSE_CAT_LABEL[k] = expTitleCase(r.ledger); });
+  // Build display labels for whatever rows are currently loaded (seed + imports).
+  function expBuildLabels(rows) { rows.forEach((r) => { const k = expCatKey(r); if (!EXPENSE_CAT_LABEL[k]) EXPENSE_CAT_LABEL[k] = expTitleCase(r.ledger); }); }
+  expBuildLabels(EXPENSE_SEED_ROWS);
   function expFmtDate(d) { try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }); } catch (e) { return d; } }
   // A horizontal bar-breakdown block (category / payee / week / bank).
   function expBreakdown(entries, total, opts) {
@@ -3368,8 +3375,10 @@
     return null;
   }
   function renderExpense() {
-    const rows = EXPENSE_ROWS;
-    if (!rows.length) return `<div class="section-head"><h1>Expense</h1><p>No expense data loaded.</p></div>`;
+    const admin = isAdmin();
+    const rows = expenseRows();
+    expBuildLabels(rows);
+    if (!rows.length) return `<div class="section-head"><h1>Expense</h1><p>No expense data loaded.${admin ? " Use ⬆ Import to upload an expense sheet." : ""}</p></div>`;
     setTimeout(wireExpense, 0);
     const total = rows.reduce((s, r) => s + (+r.amount || 0), 0);
     const count = rows.length;
@@ -3430,6 +3439,11 @@
 
     const kpi = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
 
+    // period note from the loaded data's date range
+    const dts = rows.map((r) => String(r.date || "")).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    const periodNote = dts.length ? (expFmtDate(dts[0]) + " – " + expFmtDate(dts[dts.length - 1]) + ", " + dts[0].slice(0, 4)) : "";
+    const imported = expenseHideBase || expenseAdds.length > 0;
+
     // full transaction table
     const tbody = rows.slice().sort((a, b) => a.sr - b.sr).map((r) => `<tr>
       <td class="num">${r.sr}</td>
@@ -3445,14 +3459,16 @@
     return `<section class="expense">
       <div class="section-head" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px">
         <div>
-          <h1 style="margin:0">Business Expense — August 2026</h1>
-          <p style="margin:2px 0 0">Every outgoing entry recorded for the month · ${count} entries · Aug 1 – Aug 29, 2026</p>
+          <h1 style="margin:0">Business Expense${imported ? "" : " — August 2026"}</h1>
+          <p style="margin:2px 0 0">Every outgoing entry recorded${periodNote ? " · " + esc(periodNote) : ""} · ${count} entries</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button id="expTpl" class="ghost-btn" type="button" title="Download a blank Excel template to fill next month's expenses">⬇ Template</button>
+          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Upload an expense sheet (Excel/CSV) — replaces the current data">⬆ Import<input type="file" id="expFile" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
           <button id="expExport" class="ghost-btn" type="button" title="Download all entries as Excel">⬇ Export Excel</button>
         </div>
       </div>
+      ${imported ? `<div class="muted-note" style="margin:2px 0 8px">Showing <b>imported data</b>${expenseHideBase ? " only — the built-in August sample is hidden" : ""}.${admin ? ` <button id="expRestore" class="linkish" type="button">Restore built-in August data</button>` : ""}</div>` : ""}
 
       <div class="grid kpi-grid">
         ${kpi("", rupeeShort(total), "Total outflow", count + " entries")}
@@ -3510,12 +3526,21 @@
   }
   // Column order for expense export + template.
   const EXPENSE_HEADERS = ["Sr", "Date", "Details", "Paid to", "Category", "Bank", "Week", "Amount"];
-  // Wired after render (template + export buttons).
+  // Wired after render (template / import / export buttons).
   function wireExpense() {
     const ex = document.getElementById("expExport");
     if (ex) ex.onclick = expExport;
     const tp = document.getElementById("expTpl");
     if (tp) tp.onclick = expTemplate;
+    const fi = document.getElementById("expFile");
+    if (fi) fi.onchange = (e) => { const f = e.target.files[0]; if (f) expImport(f); e.target.value = ""; };
+    const rs = document.getElementById("expRestore");
+    if (rs) rs.onclick = () => {
+      if (!window.confirm("Restore the built-in August data and clear imported rows?")) return;
+      expenseAdds.length = 0; expenseHideBase = false;
+      saveEdits("Expense · restored built-in data");
+      renderTab("expense");
+    };
   }
   // Blank template so Finance can prepare next month's expense sheet.
   function expTemplate() {
@@ -3536,14 +3561,67 @@
   }
   function expExport() {
     if (!window.XLSX) { window.alert("Excel library not loaded."); return; }
-    const data = EXPENSE_ROWS.slice().sort((a, b) => a.sr - b.sr).map((r) => ({
+    const data = expenseRows().slice().sort((a, b) => (a.sr || 0) - (b.sr || 0)).map((r) => ({
       "Sr": r.sr, "Date": r.date, "Details": r.details, "Paid to": r.name,
-      "Category": EXPENSE_CAT_LABEL[expCatKey(r)], "Bank": r.bank, "Week": r.week, "Amount": +r.amount || 0,
+      "Category": EXPENSE_CAT_LABEL[expCatKey(r)] || r.ledger, "Bank": r.bank, "Week": r.week, "Amount": +r.amount || 0,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Expenses Aug 2026");
-    XLSX.writeFile(wb, "primelaze_expenses_aug_2026.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+    XLSX.writeFile(wb, "primelaze_expenses.xlsx");
+  }
+  // Map one imported row (flexible header names) to the expense shape.
+  function expMapRow(o) {
+    const norm = {};
+    Object.keys(o).forEach((k) => { norm[k.toLowerCase().replace(/[^a-z]/g, "")] = o[k]; });
+    const g = (...keys) => { for (const k of keys) if (norm[k] != null && norm[k] !== "") return norm[k]; return ""; };
+    const date = payNormDate(g("date", "expensedate", "paymentdate", "voucherdate"));
+    let week = String(g("week", "weekno") || "").trim();
+    if (week && /^\d+$/.test(week)) week = "Week " + week;
+    if (!week && date) { const d = +date.slice(8, 10); if (d) week = "Week " + (Math.floor((d - 1) / 7) + 1); }
+    let month = "";
+    if (date) { try { month = new Date(date + "T00:00:00").toLocaleDateString("en-US", { month: "long" }); } catch (e) { month = ""; } }
+    return {
+      sr: parseInt(g("sr", "srno", "sno", "serial"), 10) || 0,
+      date, month,
+      details: String(g("details", "particulars", "description", "narration", "purpose") || "").trim(),
+      name: String(g("paidto", "name", "payee", "party", "vendor", "paidTo") || "").trim(),
+      ledger: String(g("category", "ledger", "head", "account", "type") || "").trim() || "—",
+      bank: String(g("bank", "paidfrom", "fromaccount") || "").trim(),
+      amount: payNum(g("amount", "amountpaid", "debit", "value", "paid")),
+      week,
+    };
+  }
+  const expKey = (r) => [r.date, r.name, r.ledger, r.amount, r.details].join("|").toLowerCase();
+  // Replace-import: the uploaded sheet becomes the expense data (hides the seed).
+  function expAppend(mapped) {
+    const valid = mapped.filter((r) => r.amount || r.name || r.details);
+    if (!valid.length) { window.alert("No usable rows found. Make sure the sheet has Amount / Paid to / Details columns."); return; }
+    expSeq = 0;
+    expenseAdds.length = 0;
+    valid.forEach((r) => { r.sr = r.sr || ++expSeq; if (r.sr > expSeq) expSeq = r.sr; expenseAdds.push(r); });
+    expenseHideBase = true;
+    expBuildLabels(valid);
+    saveEdits(`Expense · imported ${valid.length} row(s) (replaced previous data)`);
+    renderTab("expense");
+    window.alert(`Imported ${valid.length} expense row(s).` + (mapped.length - valid.length ? ` ${mapped.length - valid.length} blank row(s) skipped.` : ""));
+  }
+  function expImport(file) {
+    const isCsv = /\.csv$/i.test(file.name) || !window.XLSX;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        let rows;
+        if (isCsv) rows = payParseCSV(String(e.target.result));
+        else {
+          const wb = window.XLSX.read(e.target.result, { type: "array", cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          rows = window.XLSX.utils.sheet_to_json(ws, { defval: "" });
+        }
+        expAppend(rows.map(expMapRow));
+      } catch (err) { window.alert("Could not read the file: " + (err.message || err)); }
+    };
+    if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
 
   /* ================= LEADS · SALES PIPELINE ================= */
@@ -6338,6 +6416,12 @@
         const ids = paymentAdds.map((r) => +String(r.id).replace(/^u/, "")).filter((n) => !isNaN(n));
         paySeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
+      if (Array.isArray(e.expenseAdds)) {
+        expenseAdds.length = 0; e.expenseAdds.forEach((r) => expenseAdds.push(r));
+        expSeq = expenseAdds.reduce((m, r) => Math.max(m, +r.sr || 0), 0);
+        expBuildLabels(expenseAdds);
+      }
+      if (typeof e.expenseHideBase === "boolean") expenseHideBase = e.expenseHideBase;
       if (Array.isArray(e.customPeople)) { customPeople.length = 0; e.customPeople.forEach((h) => customPeople.push(h)); }
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
@@ -6411,7 +6495,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
