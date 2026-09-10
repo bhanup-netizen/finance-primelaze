@@ -1001,6 +1001,10 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .cbtn.call { color: var(--info); background: var(--info-soft); }
 .cbtn.wa { color: #0a8f4d; background: color-mix(in srgb, #25D366 20%, transparent); }
 :root[data-theme="dark"] .cbtn.wa { color: #4ade80; }
+.cbtn.goog { color: #1a73e8; background: color-mix(in srgb, #1a73e8 14%, transparent); }
+.cbtn.map { color: #0a8f4d; background: color-mix(in srgb, #34a853 16%, transparent); }
+:root[data-theme="dark"] .cbtn.goog { color: #8ab4f8; }
+:root[data-theme="dark"] .cbtn.map { color: #6ee7a8; }
 .cbtn:hover { filter: brightness(.96); }
 
 /* Leads — phone-friendly card layout */

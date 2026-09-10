@@ -4241,15 +4241,31 @@
   // Back-compat alias (older call sites).
   function leadTimelineDialog(id) { leadDetailDialog(id); }
   // Contact cell — the number plus separate Call and WhatsApp actions.
+  // Google search + Maps links built from the lead's name/company, location and
+  // phone. (A static app can't look up the exact business URL, so these open a
+  // Google / Google Maps search pre-filled with the lead's details.)
+  function leadGoogleLinks(r) {
+    const digits = String(r.mobile || "").replace(/[^0-9]/g, "");
+    const textQ = [r.name, r.company, r.city, r.state].map((x) => String(x || "").trim()).filter(Boolean).join(" ");
+    const q = textQ || digits; // fall back to the phone number if no name/location
+    if (!q) return "";
+    const mapsQ = [r.company || r.name, r.city, r.state].map((x) => String(x || "").trim()).filter(Boolean).join(" ");
+    const g = `<a class="cbtn goog" href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener" title="Search Google for this lead" aria-label="Google">🔎<span>Google</span></a>`;
+    const m = mapsQ ? `<a class="cbtn map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQ)}" target="_blank" rel="noopener" title="Find on Google Maps" aria-label="Maps">📍<span>Maps</span></a>` : "";
+    const p = digits ? `<a class="cbtn goog" href="https://www.google.com/search?q=${encodeURIComponent(digits)}" target="_blank" rel="noopener" title="Search Google for this number" aria-label="Google number">🔢<span>Number</span></a>` : "";
+    return g + m + p;
+  }
   function leadContactCell(r) {
     const digits = String(r.mobile || "").replace(/[^0-9]/g, "");
-    if (!digits) return "—";
     const wa = digits.length === 10 ? "91" + digits : digits;
+    const google = leadGoogleLinks(r);
+    const phoneBtns = digits ? `<a class="cbtn call" href="tel:${esc(digits)}" title="Call ${esc(r.mobile)}" aria-label="Call">📞<span>Call</span></a>
+        <a class="cbtn wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="WhatsApp ${esc(r.mobile)}" aria-label="WhatsApp">💬<span>WhatsApp</span></a>` : "";
+    if (!phoneBtns && !google) return "—";
     return `<div class="lead-contact">
-      <span class="lead-num">${esc(r.mobile)}</span>
+      ${digits ? `<span class="lead-num">${esc(r.mobile)}</span>` : ""}
       <span class="lead-contact-btns">
-        <a class="cbtn call" href="tel:${esc(digits)}" title="Call ${esc(r.mobile)}" aria-label="Call">📞<span>Call</span></a>
-        <a class="cbtn wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="WhatsApp ${esc(r.mobile)}" aria-label="WhatsApp">💬<span>WhatsApp</span></a>
+        ${phoneBtns}${google}
       </span>
     </div>`;
   }
