@@ -3448,7 +3448,10 @@
           <h1 style="margin:0">Business Expense — August 2026</h1>
           <p style="margin:2px 0 0">Every outgoing entry recorded for the month · ${count} entries · Aug 1 – Aug 29, 2026</p>
         </div>
-        <button id="expExport" class="ghost-btn" type="button" title="Download all entries as Excel">⬇ Export Excel</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="expTpl" class="ghost-btn" type="button" title="Download a blank Excel template to fill next month's expenses">⬇ Template</button>
+          <button id="expExport" class="ghost-btn" type="button" title="Download all entries as Excel">⬇ Export Excel</button>
+        </div>
       </div>
 
       <div class="grid kpi-grid">
@@ -3505,10 +3508,31 @@
       </table></div>
     </section>`;
   }
-  // Wired after render (export button).
+  // Column order for expense export + template.
+  const EXPENSE_HEADERS = ["Sr", "Date", "Details", "Paid to", "Category", "Bank", "Week", "Amount"];
+  // Wired after render (template + export buttons).
   function wireExpense() {
-    const btn = document.getElementById("expExport");
-    if (btn) btn.onclick = expExport;
+    const ex = document.getElementById("expExport");
+    if (ex) ex.onclick = expExport;
+    const tp = document.getElementById("expTpl");
+    if (tp) tp.onclick = expTemplate;
+  }
+  // Blank template so Finance can prepare next month's expense sheet.
+  function expTemplate() {
+    const sample1 = [1, "2026-09-01", "Salary for the month of Aug 2026", "Employee Name (delete this row)", "Salary", "ICICI- 202", "Week 1", 50000];
+    const sample2 = [2, "2026-09-02", "Customs Duty", "DHL EXPRESS (delete this row)", "Customs Duty", "AXIS-962", "Week 1", 191240.8];
+    if (window.XLSX) {
+      const ws = XLSX.utils.aoa_to_sheet([EXPENSE_HEADERS, sample1, sample2]);
+      ws["!cols"] = EXPENSE_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 4) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Expenses");
+      XLSX.writeFile(wb, "primelaze_expense_template.xlsx");
+    } else {
+      const csv = [EXPENSE_HEADERS.join(","), sample1.join(","), sample2.join(",")].join("\n");
+      const a = document.createElement("a");
+      a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      a.download = "primelaze_expense_template.csv"; a.click();
+    }
   }
   function expExport() {
     if (!window.XLSX) { window.alert("Excel library not loaded."); return; }
