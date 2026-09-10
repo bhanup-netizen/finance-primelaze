@@ -3347,6 +3347,13 @@
   const EXP_PERSON_LEDGERS = { "SALARY": "salary", "INCENTIVES": "incentive", "EMPLOYEE EXPENSES": "reimbursement", "ADVANCE PAID FOR TRAVEL": "advance" };
   // Normalise a payee/person name for matching + merging case variants.
   function expNormName(s) { return String(s || "").toUpperCase().replace(/[^A-Z ]/g, " ").replace(/\s+/g, " ").trim(); }
+  // Merge obvious same-person variants — advances are booked under a short name
+  // but salary under the full name. Maps short (normalised) -> canonical key.
+  const EXP_NAME_ALIAS = { "SANTHOSH": "SANTHOSHKUMAR R", "BALAJI": "BALAJI B", "AVINESH": "AVINESH P", "PANKAJ VERNA": "PANKAJ VERMA", "BRAJESH KUMAR": "BRAJESHKUMAR V" };
+  // Preferred display names for merged/awkward keys.
+  const EXP_NAME_DISPLAY = { "SANTHOSHKUMAR R": "Santhosh Kumar R", "BALAJI B": "Balaji Balu B", "PANKAJ VERMA": "Pankaj Verma", "BRAJESHKUMAR V": "Brajeshkumar V" };
+  // Person key with aliases applied (so all of a person's rows aggregate as one).
+  function expPersonKey(name) { const k = expNormName(name); return EXP_NAME_ALIAS[k] || k; }
   // Build a lookup from the Team Roster so expense names can be tagged with the
   // person's department (to pick out salespeople) and designation.
   function expRosterIndex() {
@@ -3410,10 +3417,16 @@
     rows.forEach((r) => { const b = expBucketName(expCatKey(r)); byBucket[b] = (byBucket[b] || 0) + (+r.amount || 0); });
     const bucketEntries = Object.keys(byBucket).map((b) => ({ label: b, value: byBucket[b] })).sort((a, b) => b.value - a.value);
 
+    // resolve a person's display name (best original variant, alias override)
+    const bestName = {};
+    const setBestName = (key, nm) => { nm = String(nm || "").trim(); if (!nm) return; if (!bestName[key] || nm.length > bestName[key].length) bestName[key] = nm; };
+    rows.forEach((r) => { if (EXP_PERSON_LEDGERS[expCatKey(r)]) setBestName(expPersonKey(r.name), r.name); });
+    const personName = (key) => EXP_NAME_DISPLAY[key] || bestName[key] || key;
+
     // salary — per person (from the Salary ledger only)
     const salByPerson = {};
-    rows.forEach((r) => { if (expCatKey(r) !== "SALARY") return; const k = expNormName(r.name); (salByPerson[k] = salByPerson[k] || { label: r.name, value: 0, n: 0 }); salByPerson[k].value += +r.amount || 0; salByPerson[k].n++; });
-    const salaryEntries = Object.values(salByPerson).map((p) => ({ label: p.label, value: p.value, sub: p.n > 1 ? p.n + " payments" : "" })).sort((a, b) => b.value - a.value);
+    rows.forEach((r) => { if (expCatKey(r) !== "SALARY") return; const k = expPersonKey(r.name); (salByPerson[k] = salByPerson[k] || { key: k, value: 0, n: 0 }); salByPerson[k].value += +r.amount || 0; salByPerson[k].n++; });
+    const salaryEntries = Object.values(salByPerson).map((p) => ({ label: personName(p.key), value: p.value, sub: p.n > 1 ? p.n + " payments" : "" })).sort((a, b) => b.value - a.value);
     const salaryTotal = salaryEntries.reduce((s, e) => s + e.value, 0);
 
     // per-person attributable spend (salary + incentive + reimbursement + advance),
@@ -3422,19 +3435,19 @@
     const byPerson = {};
     rows.forEach((r) => {
       const type = EXP_PERSON_LEDGERS[expCatKey(r)]; if (!type) return;
-      const k = expNormName(r.name); if (!k) return;
+      const k = expPersonKey(r.name); if (!k) return;
       const rec = expMatchPerson(rIdx, r.name);
-      const p = (byPerson[k] = byPerson[k] || { label: r.name, dept: rec ? rec.dept : "", desig: rec ? rec.desig : "", salary: 0, advance: 0, incentive: 0, reimbursement: 0, total: 0 });
+      const p = (byPerson[k] = byPerson[k] || { key: k, dept: "", desig: "", salary: 0, advance: 0, incentive: 0, reimbursement: 0, total: 0 });
       p[type] += +r.amount || 0; p.total += +r.amount || 0;
       if (rec && !p.deptSet) { p.dept = rec.dept; p.desig = rec.desig; p.deptSet = true; }
     });
-    const personList = Object.values(byPerson);
+    const personList = Object.values(byPerson).map((p) => Object.assign(p, { label: personName(p.key) }));
     const personSub = (p) => [p.salary ? "salary " + rupeeShort(p.salary) : "", p.advance ? "advance " + rupeeShort(p.advance) : "", p.incentive ? "incentive " + rupeeShort(p.incentive) : "", p.reimbursement ? "reimb " + rupeeShort(p.reimbursement) : ""].filter(Boolean).join(" · ");
     const salesPeople = personList.filter((p) => p.dept === "Sales").sort((a, b) => b.total - a.total)
       .map((p) => ({ label: p.label, value: p.total, sub: personSub(p), tag: p.desig || "Sales", fill: "teal" }));
     const salesTotal = salesPeople.reduce((s, e) => s + e.value, 0);
-    const staffEntries = personList.sort((a, b) => b.total - a.total).slice(0, 15)
-      .map((p) => ({ label: p.label, value: p.total, sub: personSub(p), tag: p.dept || "" }));
+    // full employee table (every person, all components)
+    const empRows = personList.slice().sort((a, b) => b.total - a.total);
     const staffTotal = personList.reduce((s, e) => s + e.total, 0);
 
     const kpi = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
@@ -3498,8 +3511,31 @@
         </div>
       </div>
 
-      <div class="section-title" style="margin-top:18px"><h2 style="margin:0">By person — total payments</h2><span class="muted-note">top 15 · salary + incentive + reimbursement + advances</span></div>
-      <div class="card" style="padding:14px 16px">${expPersonBreakdown(staffEntries, staffTotal)}</div>
+      <div class="section-title" style="margin-top:18px"><h2 style="margin:0">Expense by employee</h2><span class="muted-note">every person · click a heading to sort · type to filter</span></div>
+      <p class="muted-note" style="margin:0 0 8px">Advances are travel floats given (not yet settled). Total = salary + advances + reimbursement + incentive.</p>
+      <div class="table-wrap"><table class="exp-table">
+        <thead><tr>
+          <th class="num">#</th><th>Employee</th><th>Dept</th><th class="num">Salary</th><th class="num">Advances</th><th class="num">Reimburse</th><th class="num">Incentive</th><th class="num">Total</th>
+        </tr></thead>
+        <tbody>${empRows.map((p, i) => `<tr>
+          <td class="num">${i + 1}</td>
+          <td>${esc(p.label)}</td>
+          <td>${p.dept ? `<span class="tag">${esc(p.dept)}</span>` : "—"}</td>
+          <td class="num">${p.salary ? inr(p.salary) : "—"}</td>
+          <td class="num">${p.advance ? inr(p.advance) : "—"}</td>
+          <td class="num">${p.reimbursement ? inr(p.reimbursement) : "—"}</td>
+          <td class="num">${p.incentive ? inr(p.incentive) : "—"}</td>
+          <td class="num"><b>${inr(p.total)}</b></td>
+        </tr>`).join("")}</tbody>
+        <tfoot><tr class="total-row">
+          <td colspan="3" class="num"><b>Total (${empRows.length})</b></td>
+          <td class="num"><b>${inr(empRows.reduce((s, p) => s + p.salary, 0))}</b></td>
+          <td class="num"><b>${inr(empRows.reduce((s, p) => s + p.advance, 0))}</b></td>
+          <td class="num"><b>${inr(empRows.reduce((s, p) => s + p.reimbursement, 0))}</b></td>
+          <td class="num"><b>${inr(empRows.reduce((s, p) => s + p.incentive, 0))}</b></td>
+          <td class="num"><b>${inr(staffTotal)}</b></td>
+        </tr></tfoot>
+      </table></div>
 
       <div class="grid" style="grid-template-columns:1.2fr .8fr;gap:16px;margin-top:16px">
         <div>
