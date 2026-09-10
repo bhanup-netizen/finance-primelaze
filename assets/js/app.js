@@ -3423,14 +3423,8 @@
     rows.forEach((r) => { if (EXP_PERSON_LEDGERS[expCatKey(r)]) setBestName(expPersonKey(r.name), r.name); });
     const personName = (key) => EXP_NAME_DISPLAY[key] || bestName[key] || key;
 
-    // salary — per person (from the Salary ledger only)
-    const salByPerson = {};
-    rows.forEach((r) => { if (expCatKey(r) !== "SALARY") return; const k = expPersonKey(r.name); (salByPerson[k] = salByPerson[k] || { key: k, value: 0, n: 0 }); salByPerson[k].value += +r.amount || 0; salByPerson[k].n++; });
-    const salaryEntries = Object.values(salByPerson).map((p) => ({ label: personName(p.key), value: p.value, sub: p.n > 1 ? p.n + " payments" : "" })).sort((a, b) => b.value - a.value);
-    const salaryTotal = salaryEntries.reduce((s, e) => s + e.value, 0);
-
     // per-person attributable spend (salary + incentive + reimbursement + advance),
-    // tagged with the roster department so salespeople can be picked out.
+    // tagged with the roster department (from the HR roster, matched by name).
     const rIdx = expRosterIndex();
     const byPerson = {};
     rows.forEach((r) => {
@@ -3442,10 +3436,6 @@
       if (rec && !p.deptSet) { p.dept = rec.dept; p.desig = rec.desig; p.deptSet = true; }
     });
     const personList = Object.values(byPerson).map((p) => Object.assign(p, { label: personName(p.key) }));
-    const personSub = (p) => [p.salary ? "salary " + rupeeShort(p.salary) : "", p.advance ? "advance " + rupeeShort(p.advance) : "", p.incentive ? "incentive " + rupeeShort(p.incentive) : "", p.reimbursement ? "reimb " + rupeeShort(p.reimbursement) : ""].filter(Boolean).join(" · ");
-    const salesPeople = personList.filter((p) => p.dept === "Sales").sort((a, b) => b.total - a.total)
-      .map((p) => ({ label: p.label, value: p.total, sub: personSub(p), tag: p.desig || "Sales", fill: "teal" }));
-    const salesTotal = salesPeople.reduce((s, e) => s + e.value, 0);
     // full employee table (every person, all components)
     const empRows = personList.slice().sort((a, b) => b.total - a.total);
     const staffTotal = personList.reduce((s, e) => s + e.total, 0);
@@ -3497,19 +3487,6 @@
       <div class="section-title" style="margin-top:18px"><h2 style="margin:0">Spend by category</h2></div>
       <p class="muted-note" style="margin:0 0 8px">Includes salaries, imports (creditors), advances and internal transfers exactly as booked in the ledger. ${bigCount} ${bigCount === 1 ? "entry is" : "entries are"} ≥ ₹2,00,000 (flagged in the table).</p>
       <div class="card" style="padding:14px 16px">${expBreakdown(catEntries, total)}</div>
-
-      <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-        <div>
-          <div class="section-title"><h2 style="margin:0">By salesperson</h2><span class="muted-note">${rupeeShort(salesTotal)} total</span></div>
-          <p class="muted-note" style="margin:0 0 8px">Salary, incentive, reimbursement &amp; travel advances for the Sales team (matched to the HR roster by name).</p>
-          <div class="card" style="padding:14px 16px">${salesPeople.length ? expPersonBreakdown(salesPeople, total) : `<div class="muted-note">No sales-team payments matched.</div>`}</div>
-        </div>
-        <div>
-          <div class="section-title"><h2 style="margin:0">Salary — by person</h2><span class="muted-note">${rupeeShort(salaryTotal)} payroll</span></div>
-          <p class="muted-note" style="margin:0 0 8px">July 2026 salary paid in August, per employee.</p>
-          <div class="card" style="padding:14px 16px">${expPersonBreakdown(salaryEntries, salaryTotal)}</div>
-        </div>
-      </div>
 
       <div class="section-title" style="margin-top:18px"><h2 style="margin:0">Expense by employee</h2><span class="muted-note">every person · click a heading to sort · type to filter</span></div>
       <p class="muted-note" style="margin:0 0 8px">Advances are travel floats given (not yet settled). Total = salary + advances + reimbursement + incentive.</p>
