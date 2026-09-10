@@ -1048,7 +1048,13 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 @media (max-width: 760px) {
   .lead-table { table-layout: auto; font-size: 14px; }
   .lead-table thead { display: none; }
-  .lead-table, .lead-table tbody, .lead-table tr, .lead-table td { display: block; width: auto; }
+  .lead-table, .lead-table tbody, .lead-table tr, .lead-table td { display: block; }
+  /* The desktop board uses table-layout:fixed with per-column %% widths whose
+     :nth-child selectors outrank a plain `.lead-table td` rule — so force full
+     width here, else each card cell stays ~40px wide and text breaks per-word. */
+  .lead-table, .lead-table tbody, .lead-table tr,
+  .lead-table td, .lead-table td:nth-child(n) { width: auto !important; }
+  .lead-table td { word-break: normal; overflow-wrap: anywhere; }
   .lead-table tr { border: 1px solid var(--border); border-radius: 12px; margin: 0 0 12px; padding: 12px 14px; background: var(--surface); box-shadow: var(--shadow-sm); }
   .lead-table td { padding: 6px 0; border: none; overflow: visible; }
   .lead-table td::before { content: attr(data-label); display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); font-weight: 700; margin-bottom: 3px; }
