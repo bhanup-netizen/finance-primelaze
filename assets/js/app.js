@@ -3307,6 +3307,66 @@
       </div>`;
     }).join("")}</div>`;
   }
+  // Person breakdown with an optional sub-line (e.g. "salary ₹X · advances ₹Y").
+  function expPersonBreakdown(items, total) {
+    if (!items.length) return `<div class="muted-note">No data.</div>`;
+    const max = Math.max.apply(null, items.map((e) => e.value)) || 1;
+    return `<div class="exp-break">${items.map((e) => {
+      const pct = total ? Math.round((e.value / total) * 100) : 0;
+      return `<div class="exp-row exp-row2">
+        <span class="exp-lbl" title="${esc(e.label)}">${esc(e.label)}${e.tag ? ` <span class="exp-badge">${esc(e.tag)}</span>` : ""}${e.sub ? `<span class="exp-sub">${esc(e.sub)}</span>` : ""}</span>
+        <span class="bar-track"><span class="bar-fill ${e.fill || ""}" style="width:${(e.value / max) * 100}%"></span></span>
+        <span class="exp-amt">${rupeeShort(e.value)}</span>
+        <span class="exp-pct">${pct}%</span>
+      </div>`;
+    }).join("")}</div>`;
+  }
+  // High-level spend buckets — maps each ledger category to a readable group so
+  // you can see where the money broadly goes.
+  const EXP_BUCKETS = [
+    { name: "Payroll & People", cats: ["SALARY", "INCENTIVES", "EMPLOYEE EXPENSES"] },
+    { name: "Travel & Lodging", cats: ["ADVANCE PAID FOR TRAVEL", "TRAVELLING", "LODGING CHARGES"] },
+    { name: "Marketing & Events", cats: ["MARKETING EXPENSES", "CONFERENCE EXPENSE"] },
+    { name: "Logistics & Imports", cats: ["CUSTOMS DUTY", "FREIGHT CHARGES", "POSTAGE & COURIER CHARGES", "CREDITOR"] },
+    { name: "Office & Utilities", cats: ["OFFICE EXPENSES", "INTERNET/TELEPHONE EXP.", "SOFTWARE EXPENSES", "RENT (PONDICHERRY)", "RENT (CHANDIGARH)"] },
+    { name: "Statutory & Bank", cats: ["FEES & TAXES", "BANK CHARGES", "INTEREST PAID"] },
+    { name: "Vendors (Local)", cats: ["LOCAL CREDITORS"] },
+    { name: "Internal & Debtors", cats: ["INTERNAL TRANSFER", "DEBTORS"] },
+  ];
+  const EXP_BUCKET_OF = {};
+  EXP_BUCKETS.forEach((b) => b.cats.forEach((c) => (EXP_BUCKET_OF[c] = b.name)));
+  const expBucketName = (catKey) => EXP_BUCKET_OF[catKey] || "Other";
+  // Ledgers that are money paid to / on behalf of a named person.
+  const EXP_PERSON_LEDGERS = { "SALARY": "salary", "INCENTIVES": "incentive", "EMPLOYEE EXPENSES": "reimbursement", "ADVANCE PAID FOR TRAVEL": "advance" };
+  // Normalise a payee/person name for matching + merging case variants.
+  function expNormName(s) { return String(s || "").toUpperCase().replace(/[^A-Z ]/g, " ").replace(/\s+/g, " ").trim(); }
+  // Build a lookup from the Team Roster so expense names can be tagged with the
+  // person's department (to pick out salespeople) and designation.
+  function expRosterIndex() {
+    const idx = { byFull: {}, byFirstLast: {}, byFirst: {} };
+    let people = [];
+    try { people = roster(); } catch (e) { people = []; }
+    people.forEach((p) => {
+      const nm = rval(p, "name"); if (!nm || /^vacant/i.test(nm)) return;
+      const dept = (typeof deptOf === "function" ? deptOf(p) : (rval(p, "dept") || "Sales"));
+      const rec = { name: nm, dept, desig: rval(p, "designation") || "" };
+      const norm = expNormName(nm); if (!norm) return;
+      const toks = norm.split(" ");
+      if (!idx.byFull[norm]) idx.byFull[norm] = rec;
+      if (toks.length >= 2) { const fl = toks[0] + " " + toks[toks.length - 1]; if (!idx.byFirstLast[fl]) idx.byFirstLast[fl] = rec; }
+      const f = toks[0];
+      idx.byFirst[f] = idx.byFirst[f] === undefined ? rec : (idx.byFirst[f] && idx.byFirst[f].name === rec.name ? rec : null); // null = ambiguous
+    });
+    return idx;
+  }
+  function expMatchPerson(idx, name) {
+    const norm = expNormName(name); if (!norm) return null;
+    if (idx.byFull[norm]) return idx.byFull[norm];
+    const toks = norm.split(" ");
+    if (toks.length >= 2) { const fl = toks[0] + " " + toks[toks.length - 1]; if (idx.byFirstLast[fl]) return idx.byFirstLast[fl]; }
+    if (idx.byFirst[toks[0]]) return idx.byFirst[toks[0]];
+    return null;
+  }
   function renderExpense() {
     const rows = EXPENSE_ROWS;
     if (!rows.length) return `<div class="section-head"><h1>Expense</h1><p>No expense data loaded.</p></div>`;
@@ -3335,6 +3395,38 @@
     rows.forEach((r) => { byBank[r.bank] = (byBank[r.bank] || 0) + (+r.amount || 0); });
     const bankEntries = Object.keys(byBank).sort((a, b) => byBank[b] - byBank[a]).map((b) => ({ label: b, value: byBank[b] }));
     const bigCount = rows.filter((r) => (+r.amount || 0) >= EXP_BIG).length;
+
+    // high-level spend buckets
+    const byBucket = {};
+    rows.forEach((r) => { const b = expBucketName(expCatKey(r)); byBucket[b] = (byBucket[b] || 0) + (+r.amount || 0); });
+    const bucketEntries = Object.keys(byBucket).map((b) => ({ label: b, value: byBucket[b] })).sort((a, b) => b.value - a.value);
+
+    // salary — per person (from the Salary ledger only)
+    const salByPerson = {};
+    rows.forEach((r) => { if (expCatKey(r) !== "SALARY") return; const k = expNormName(r.name); (salByPerson[k] = salByPerson[k] || { label: r.name, value: 0, n: 0 }); salByPerson[k].value += +r.amount || 0; salByPerson[k].n++; });
+    const salaryEntries = Object.values(salByPerson).map((p) => ({ label: p.label, value: p.value, sub: p.n > 1 ? p.n + " payments" : "" })).sort((a, b) => b.value - a.value);
+    const salaryTotal = salaryEntries.reduce((s, e) => s + e.value, 0);
+
+    // per-person attributable spend (salary + incentive + reimbursement + advance),
+    // tagged with the roster department so salespeople can be picked out.
+    const rIdx = expRosterIndex();
+    const byPerson = {};
+    rows.forEach((r) => {
+      const type = EXP_PERSON_LEDGERS[expCatKey(r)]; if (!type) return;
+      const k = expNormName(r.name); if (!k) return;
+      const rec = expMatchPerson(rIdx, r.name);
+      const p = (byPerson[k] = byPerson[k] || { label: r.name, dept: rec ? rec.dept : "", desig: rec ? rec.desig : "", salary: 0, advance: 0, incentive: 0, reimbursement: 0, total: 0 });
+      p[type] += +r.amount || 0; p.total += +r.amount || 0;
+      if (rec && !p.deptSet) { p.dept = rec.dept; p.desig = rec.desig; p.deptSet = true; }
+    });
+    const personList = Object.values(byPerson);
+    const personSub = (p) => [p.salary ? "salary " + rupeeShort(p.salary) : "", p.advance ? "advance " + rupeeShort(p.advance) : "", p.incentive ? "incentive " + rupeeShort(p.incentive) : "", p.reimbursement ? "reimb " + rupeeShort(p.reimbursement) : ""].filter(Boolean).join(" · ");
+    const salesPeople = personList.filter((p) => p.dept === "Sales").sort((a, b) => b.total - a.total)
+      .map((p) => ({ label: p.label, value: p.total, sub: personSub(p), tag: p.desig || "Sales", fill: "teal" }));
+    const salesTotal = salesPeople.reduce((s, e) => s + e.value, 0);
+    const staffEntries = personList.sort((a, b) => b.total - a.total).slice(0, 15)
+      .map((p) => ({ label: p.label, value: p.total, sub: personSub(p), tag: p.dept || "" }));
+    const staffTotal = personList.reduce((s, e) => s + e.total, 0);
 
     const kpi = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
 
@@ -3367,9 +3459,28 @@
         ${kpi("k-bad", largest ? rupeeShort(+largest.amount || 0) : "—", "Largest entry", largest ? largest.name : "")}
       </div>
 
+      <div class="section-title" style="margin-top:18px"><h2 style="margin:0">Spend groups (high level)</h2><span class="muted-note">where the money broadly goes</span></div>
+      <div class="card" style="padding:14px 16px">${expBreakdown(bucketEntries, total)}</div>
+
       <div class="section-title" style="margin-top:18px"><h2 style="margin:0">Spend by category</h2></div>
       <p class="muted-note" style="margin:0 0 8px">Includes salaries, imports (creditors), advances and internal transfers exactly as booked in the ledger. ${bigCount} ${bigCount === 1 ? "entry is" : "entries are"} ≥ ₹2,00,000 (flagged in the table).</p>
       <div class="card" style="padding:14px 16px">${expBreakdown(catEntries, total)}</div>
+
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div>
+          <div class="section-title"><h2 style="margin:0">By salesperson</h2><span class="muted-note">${rupeeShort(salesTotal)} total</span></div>
+          <p class="muted-note" style="margin:0 0 8px">Salary, incentive, reimbursement &amp; travel advances for the Sales team (matched to the HR roster by name).</p>
+          <div class="card" style="padding:14px 16px">${salesPeople.length ? expPersonBreakdown(salesPeople, total) : `<div class="muted-note">No sales-team payments matched.</div>`}</div>
+        </div>
+        <div>
+          <div class="section-title"><h2 style="margin:0">Salary — by person</h2><span class="muted-note">${rupeeShort(salaryTotal)} payroll</span></div>
+          <p class="muted-note" style="margin:0 0 8px">July 2026 salary paid in August, per employee.</p>
+          <div class="card" style="padding:14px 16px">${expPersonBreakdown(salaryEntries, salaryTotal)}</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:18px"><h2 style="margin:0">By person — total payments</h2><span class="muted-note">top 15 · salary + incentive + reimbursement + advances</span></div>
+      <div class="card" style="padding:14px 16px">${expPersonBreakdown(staffEntries, staffTotal)}</div>
 
       <div class="grid" style="grid-template-columns:1.2fr .8fr;gap:16px;margin-top:16px">
         <div>
