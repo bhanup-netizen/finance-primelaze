@@ -110,17 +110,18 @@
   /* ---------------- tab registry ---------------- */
   const TABS = [
     { id: "overview", label: "Overview", group: "", render: renderOverview },
-    { id: "team", label: "Team Roster", group: "People", render: renderTeam },
-    { id: "leads", label: "Casovil Leads", group: "Sales", render: renderLeads },
-    { id: "targets", label: "HQ Targets", group: "Sales", render: renderTargets },
-    { id: "incentives", label: "Incentives", group: "Sales", render: renderIncentives },
-    { id: "prices", label: "Pricing", group: "Catalog", render: renderPricing },
-    { id: "registration", label: "Registration", group: "Catalog", render: renderReg },
-    { id: "order", label: "Inventory", group: "Operations", render: renderOrder },
-    { id: "demo", label: "Demo Machines", group: "Operations", render: renderDemo },
-    { id: "challan", label: "Delivery Challan", group: "Operations", render: renderChallan },
-    { id: "payments", label: "Outstanding Payment", group: "Records", render: renderPayments },
-    { id: "admin", label: "⚙ Admin", group: "Records", render: renderAdmin },
+    { id: "targets", label: "HQ Targets", group: "Primelaze Sales", render: renderTargets },
+    { id: "incentives", label: "Incentives", group: "Primelaze Sales", render: renderIncentives },
+    { id: "prices", label: "Pricing", group: "Primelaze Sales", render: renderPricing },
+    { id: "leads", label: "Casovil Sales", group: "Casovil Sales", render: renderLeads },
+    { id: "payments", label: "Outstanding Payment", group: "Finance", render: renderPayments },
+    { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
+    { id: "team", label: "HR", group: "HR", render: renderTeam },
+    { id: "registration", label: "Registration", group: "Admin", render: renderReg },
+    { id: "order", label: "Inventory", group: "Admin", render: renderOrder },
+    { id: "demo", label: "Demo Machines", group: "Admin", render: renderDemo },
+    { id: "challan", label: "Delivery Challan", group: "Admin", render: renderChallan },
+    { id: "admin", label: "⚙ Admin", group: "Admin", render: renderAdmin },
   ];
 
   // rupees → short ₹ Cr / ₹ L / ₹ form
@@ -3278,6 +3279,136 @@
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
+  }
+
+  /* ================= FINANCE · EXPENSE LEDGER ================= */
+  // Business expense analysis, seeded from the Finance Dept "Expense Ledger"
+  // (window.EXPENSE_SEED). Read-only: total spend, categorised breakdown,
+  // top payees, weekly + bank splits, and the full searchable transaction list.
+  const EXPENSE_ROWS = (window.EXPENSE_SEED || []).slice();
+  const EXP_BIG = 200000; // entries at/above this are flagged as large
+  function expTitleCase(s) { return String(s || "").replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()); }
+  function expCatKey(r) { return String(r.ledger || "—").trim().toUpperCase(); }
+  const EXPENSE_CAT_LABEL = {};
+  EXPENSE_ROWS.forEach((r) => { const k = expCatKey(r); if (!EXPENSE_CAT_LABEL[k]) EXPENSE_CAT_LABEL[k] = expTitleCase(r.ledger); });
+  function expFmtDate(d) { try { return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }); } catch (e) { return d; } }
+  // A horizontal bar-breakdown block (category / payee / week / bank).
+  function expBreakdown(entries, total, opts) {
+    opts = opts || {};
+    if (!entries.length) return `<div class="muted-note">No data.</div>`;
+    const max = Math.max.apply(null, entries.map((e) => e.value)) || 1;
+    return `<div class="exp-break">${entries.map((e) => {
+      const pct = total ? Math.round((e.value / total) * 100) : 0;
+      return `<div class="exp-row">
+        <span class="exp-lbl" title="${esc(e.label)}">${esc(e.label)}${e.count != null ? ` <span class="exp-n">×${e.count}</span>` : ""}</span>
+        <span class="bar-track"><span class="bar-fill ${opts.fill || ""}" style="width:${(e.value / max) * 100}%"></span></span>
+        <span class="exp-amt">${rupeeShort(e.value)}</span>
+        <span class="exp-pct">${pct}%</span>
+      </div>`;
+    }).join("")}</div>`;
+  }
+  function renderExpense() {
+    const rows = EXPENSE_ROWS;
+    if (!rows.length) return `<div class="section-head"><h1>Expense</h1><p>No expense data loaded.</p></div>`;
+    setTimeout(wireExpense, 0);
+    const total = rows.reduce((s, r) => s + (+r.amount || 0), 0);
+    const count = rows.length;
+    const avg = count ? total / count : 0;
+
+    // by category
+    const byCat = {};
+    rows.forEach((r) => { const k = expCatKey(r); (byCat[k] = byCat[k] || { sum: 0, n: 0 }); byCat[k].sum += +r.amount || 0; byCat[k].n++; });
+    const catEntries = Object.keys(byCat).map((k) => ({ label: EXPENSE_CAT_LABEL[k], value: byCat[k].sum, count: byCat[k].n })).sort((a, b) => b.value - a.value);
+    const topCat = catEntries[0];
+    // largest single entry
+    const largest = rows.reduce((a, b) => ((+b.amount || 0) > (+a.amount || 0) ? b : a), rows[0]);
+    // top payees
+    const byPayee = {};
+    rows.forEach((r) => { byPayee[r.name] = (byPayee[r.name] || 0) + (+r.amount || 0); });
+    const topPayees = Object.entries(byPayee).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 12);
+    // by week
+    const byWeek = {};
+    rows.forEach((r) => { byWeek[r.week] = (byWeek[r.week] || 0) + (+r.amount || 0); });
+    const weekEntries = Object.keys(byWeek).sort().map((w) => ({ label: w, value: byWeek[w] }));
+    // by bank
+    const byBank = {};
+    rows.forEach((r) => { byBank[r.bank] = (byBank[r.bank] || 0) + (+r.amount || 0); });
+    const bankEntries = Object.keys(byBank).sort((a, b) => byBank[b] - byBank[a]).map((b) => ({ label: b, value: byBank[b] }));
+    const bigCount = rows.filter((r) => (+r.amount || 0) >= EXP_BIG).length;
+
+    const kpi = (cls, val, label, note) => `<div class="card kpi ${cls}"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${val}</div><div class="kpi-note">${esc(note || "")}</div></div>`;
+
+    // full transaction table
+    const tbody = rows.slice().sort((a, b) => a.sr - b.sr).map((r) => `<tr>
+      <td class="num">${r.sr}</td>
+      <td>${esc(expFmtDate(r.date))}</td>
+      <td>${esc(r.details || "")}</td>
+      <td>${esc(r.name || "")}</td>
+      <td>${esc(EXPENSE_CAT_LABEL[expCatKey(r)])}</td>
+      <td>${esc(r.bank || "")}</td>
+      <td>${esc(r.week || "")}</td>
+      <td class="num${(+r.amount || 0) >= EXP_BIG ? " exp-big" : ""}">${inr(+r.amount || 0)}</td>
+    </tr>`).join("");
+
+    return `<section class="expense">
+      <div class="section-head" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px">
+        <div>
+          <h1 style="margin:0">Business Expense — August 2026</h1>
+          <p style="margin:2px 0 0">Every outgoing entry recorded for the month · ${count} entries · Aug 1 – Aug 29, 2026</p>
+        </div>
+        <button id="expExport" class="ghost-btn" type="button" title="Download all entries as Excel">⬇ Export Excel</button>
+      </div>
+
+      <div class="grid kpi-grid">
+        ${kpi("", rupeeShort(total), "Total outflow", count + " entries")}
+        ${kpi("k-teal", count, "Transactions", "in August")}
+        ${kpi("", rupeeShort(avg), "Average entry", "per transaction")}
+        ${kpi("k-warn", topCat ? esc(topCat.label) : "—", "Top category", topCat ? rupeeShort(topCat.value) : "")}
+        ${kpi("k-bad", largest ? rupeeShort(+largest.amount || 0) : "—", "Largest entry", largest ? largest.name : "")}
+      </div>
+
+      <div class="section-title" style="margin-top:18px"><h2 style="margin:0">Spend by category</h2></div>
+      <p class="muted-note" style="margin:0 0 8px">Includes salaries, imports (creditors), advances and internal transfers exactly as booked in the ledger. ${bigCount} ${bigCount === 1 ? "entry is" : "entries are"} ≥ ₹2,00,000 (flagged in the table).</p>
+      <div class="card" style="padding:14px 16px">${expBreakdown(catEntries, total)}</div>
+
+      <div class="grid" style="grid-template-columns:1.2fr .8fr;gap:16px;margin-top:16px">
+        <div>
+          <div class="section-title"><h2 style="margin:0">Top payees</h2></div>
+          <div class="card" style="padding:14px 16px">${expBreakdown(topPayees, total, { fill: "teal" })}</div>
+        </div>
+        <div>
+          <div class="section-title"><h2 style="margin:0">By week</h2></div>
+          <div class="card" style="padding:14px 16px">${expBreakdown(weekEntries, total)}</div>
+          <div class="section-title" style="margin-top:14px"><h2 style="margin:0">By bank</h2></div>
+          <div class="card" style="padding:14px 16px">${expBreakdown(bankEntries, total, { fill: "teal" })}</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:18px"><h2 style="margin:0">All transactions</h2><span class="muted-note">click a heading to sort · type to filter</span></div>
+      <div class="table-wrap"><table class="exp-table">
+        <thead><tr>
+          <th class="num">Sr</th><th>Date</th><th>Details</th><th>Paid to</th><th>Category</th><th>Bank</th><th>Week</th><th class="num">Amount (₹)</th>
+        </tr></thead>
+        <tbody>${tbody}</tbody>
+        <tfoot><tr class="total-row"><td colspan="7" class="num"><b>Total</b></td><td class="num"><b>${inr(total)}</b></td></tr></tfoot>
+      </table></div>
+    </section>`;
+  }
+  // Wired after render (export button).
+  function wireExpense() {
+    const btn = document.getElementById("expExport");
+    if (btn) btn.onclick = expExport;
+  }
+  function expExport() {
+    if (!window.XLSX) { window.alert("Excel library not loaded."); return; }
+    const data = EXPENSE_ROWS.slice().sort((a, b) => a.sr - b.sr).map((r) => ({
+      "Sr": r.sr, "Date": r.date, "Details": r.details, "Paid to": r.name,
+      "Category": EXPENSE_CAT_LABEL[expCatKey(r)], "Bank": r.bank, "Week": r.week, "Amount": +r.amount || 0,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Expenses Aug 2026");
+    XLSX.writeFile(wb, "primelaze_expenses_aug_2026.xlsx");
   }
 
   /* ================= LEADS · SALES PIPELINE ================= */

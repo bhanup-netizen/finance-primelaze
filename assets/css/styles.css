@@ -130,6 +130,22 @@ a { color: var(--accent); text-decoration: none; }
 .pay-report td:nth-child(16), .pay-report th:nth-child(16) { white-space: normal; max-width: 116px; } /* Remark */
 .pay-report td:nth-child(18), .pay-report th:nth-child(18) { white-space: normal; max-width: 100px; } /* EMI */
 .pay-report .pay-cf input, .pay-report .pay-cf.select, .pay-report select.pay-cf { min-width: 60px; font-size: 11px; padding: 2px 4px; }
+/* Expense tab — category / payee breakdown bars + transaction table */
+.exp-break { display: flex; flex-direction: column; gap: 7px; }
+.exp-row { display: grid; grid-template-columns: minmax(120px, 1.4fr) 3fr auto 42px; align-items: center; gap: 10px; font-size: 13px; }
+.exp-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.exp-n { color: var(--muted); font-size: 11px; }
+.exp-amt { font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+.exp-pct { font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); font-size: 12px; }
+.exp-table { font-size: 12.5px; }
+.exp-table th, .exp-table td { padding: 5px 9px; vertical-align: top; }
+.exp-table td { white-space: nowrap; }
+.exp-table td:nth-child(3) { white-space: normal; max-width: 280px; }
+.exp-table td.exp-big { color: #A8432E; font-weight: 700; }
+:root[data-theme="dark"] .exp-table td.exp-big { color: #f2917c; }
+@media (max-width: 760px) {
+  .exp-row { grid-template-columns: minmax(90px, 1.3fr) 2fr auto 38px; font-size: 12px; }
+}
 .topbar-meta { display: flex; align-items: center; gap: 12px; }
 .fy-pill {
   font-size: 12px; font-weight: 600; color: var(--accent);
