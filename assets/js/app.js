@@ -2694,7 +2694,22 @@
     const n = parseFloat(String(v == null ? "" : v).replace(/[^0-9.\-]/g, ""));
     return isNaN(n) ? 0 : n;
   };
+  // One-time name merges for the same person spelt differently across sheets.
+  // (Going forward, whoever uploads should keep one consistent spelling.)
+  function paySpMerge(name) {
+    const n = String(name || "").toLowerCase().replace(/[^a-z]/g, "");
+    if (n.indexOf("vamsi") >= 0 || n.indexOf("vamshi") >= 0) return "Vamsi";
+    return null;
+  }
+  // Committed-date correction: any Aug or Sep 2026 date is booked to 28-Sep-2026
+  // (per finance — commitments in those months are due on the 28th).
+  function payFixCommitDate(d) {
+    const s = d ? String(d).slice(0, 10) : "";
+    return /^2026-(08|09)-/.test(s) ? "2026-09-28" : d;
+  }
   function payEnrich(r) {
+    const committedDate = payFixCommitDate(r.committedDate);
+    r = Object.assign({}, r, { committedDate });
     const received = payNum(r.received);
     const out = payNum(r.outstanding);
     const ca = payNum(r.committedAmount);
@@ -2724,8 +2739,9 @@
     // Machine install status → "Installed" / "Pending" / "".
     const ms = String(r.machineStatus || "");
     const machineStatus = /install/i.test(ms) ? "Installed" : /pend/i.test(ms) ? "Pending" : "";
-    // Normalize the salesperson to the proper roster name (imports + base data).
-    const salesPerson = properPersonName(r.salesPerson);
+    // Normalize the salesperson to the proper roster name (imports + base data),
+    // merging known spelling variants (e.g. Vamsi / Vamshi Krishna) into one.
+    const salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
     return Object.assign({}, r, { salesPerson, committed, received, pending, status, daysOverdue, dueDays, machineStatus });
   }
   const payAll = () => {
