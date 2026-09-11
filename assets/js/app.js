@@ -2768,12 +2768,14 @@
       // EMI filter: "emi" = rows with EMI details, "nonemi" = rows without.
       if (payFilter.emi === "emi" && !String(d.emi || "").trim()) return false;
       if (payFilter.emi === "nonemi" && String(d.emi || "").trim()) return false;
-      // Committed-date range (rows with a committed date in the window).
+      // Date range: show a row if its COMMITTED date OR its RECEIVED date falls
+      // in the window (so you can see what was committed or collected in that
+      // period). Rows with neither date in range are hidden.
       if (payFilter.from || payFilter.to) {
+        const inRange = (dt) => dt && (!payFilter.from || dt >= payFilter.from) && (!payFilter.to || dt <= payFilter.to);
         const cd = payCommitCd(d);
-        if (!cd) return false;
-        if (payFilter.from && cd < payFilter.from) return false;
-        if (payFilter.to && cd > payFilter.to) return false;
+        const rd = d.receivedDate ? String(d.receivedDate).slice(0, 10) : "";
+        if (!(inRange(cd) || inRange(rd))) return false;
       }
       // 30-day due filter: Consumables & Esthemax by due days; Machines by
       // install status (Pending = below 30 group, Installed = above 30 group).
