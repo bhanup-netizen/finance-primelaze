@@ -6529,7 +6529,9 @@
       const at = Date.now();
       const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
       editsUpdatedAt = at; editsUpdatedBy = by;
-      editsLog.unshift({ by, at, tab: tabLabel, what: desc });
+      // Record the stable page id too — labels get renamed, ids don't, so the
+      // per-page log keeps matching after a tab is renamed.
+      editsLog.unshift({ by, at, tab: tabLabel, tabId: currentTab, what: desc });
       if (editsLog.length > 300) editsLog.length = 300;
       updateLastUpdatedUI();
       try {
@@ -6569,11 +6571,22 @@
     refreshPageEditNote();
   }
 
-  // All changes recorded for a specific page (newest first), by its tab label.
+  // Past labels a page has been known by, so old log entries (recorded under the
+  // previous name) still show after a tab is renamed.
+  const TAB_PAST_LABELS = {
+    team: ["Team Roster"],
+    leads: ["Casovil Leads", "Leads"],
+    targets: ["HQ Targets"],
+    order: ["Inventory"],
+    payments: ["Outstanding Payment", "Payments"],
+  };
+  // All changes recorded for a specific page (newest first). Matches on the
+  // stable page id first, then the current label, then any past label.
   function pageEditsFor(tabId) {
-    const label = (TABS.find((t) => t.id === tabId) || {}).label;
-    if (!label) return [];
-    return editsLog.filter((e) => e.tab === label);
+    const t = TABS.find((x) => x.id === tabId);
+    if (!t) return [];
+    const labels = new Set([t.label].concat(TAB_PAST_LABELS[tabId] || []));
+    return editsLog.filter((e) => e.tabId === tabId || labels.has(e.tab));
   }
   // Inner HTML for the per-page activity log: last change + expandable history.
   function pageEditInner(tabId) {
