@@ -3157,7 +3157,9 @@
     Object.keys(o).forEach((k) => { norm[k.toLowerCase().replace(/[^a-z]/g, "")] = o[k]; });
     const g = (...keys) => { for (const k of keys) if (norm[k] != null && norm[k] !== "") return norm[k]; return ""; };
     return {
-      id: "u" + (paySeq++),
+      // Keep the exported Ref id if present, so re-uploading keeps each record's
+      // id (and its commitment / payment history stays attached).
+      id: String(g("ref", "refid", "recordid", "id") || "").trim() || ("u" + (paySeq++)),
       category: String(g("category", "type") || "").trim(),
       hq: String(g("hq", "region", "branch") || "").trim(),
       salesPerson: String(g("salesperson", "sp", "rep") || "").trim(),
@@ -3247,6 +3249,66 @@
       a.click();
     }
   }
+  // Export every current record with all fields (incl. a Ref so re-uploading
+  // keeps the record's id + history), to edit offline and re-import.
+  function payExport() {
+    if (!window.XLSX) { window.alert("Excel library not loaded."); return; }
+    const data = payAll().map((r) => ({
+      "Ref": payRowId(r),
+      "Customer": r.customer || "", "Product": r.product || "", "Invoice No.": r.invoiceNo || "",
+      "Invoice Date": r.invoiceDate || "", "Category": r.category || "", "HQ": r.hq || "",
+      "Sales Person": r.salesPerson || "", "Sales Value": payNum(r.salesValue) || 0,
+      "Machine": r.machineStatus || "", "Install Date": r.installDate || "", "EMI": r.emi || "",
+      "Committed Date": r.committedDate || "", "Received": r.received || 0, "Pending": r.pending || 0,
+      "Remark": r.remark || "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Payments");
+    XLSX.writeFile(wb, "primelaze_payments_" + leadToday() + ".xlsx");
+  }
+  // Add a new sale / machine directly in the portal (no import needed).
+  function payAddDialog() {
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>Add a new sale</h3>
+      <div class="lead-form-grid">
+        <label>Customer<input id="psCustomer" type="text" placeholder="Doctor / clinic"></label>
+        <label>Product<input id="psProduct" type="text"></label>
+        <label>Invoice No.<input id="psInv" type="text"></label>
+        <label>Invoice date<input id="psInvDate" type="date"></label>
+        <label>Category<input id="psCat" type="text" placeholder="Machine / Consumables / Esthemax"></label>
+        <label>HQ<input id="psHq" type="text"></label>
+        <label>Sales person<input id="psSp" type="text"></label>
+        <label>Sale value ₹<input id="psSv" type="number" placeholder="0"></label>
+        <label>Machine<select id="psMachine" class="select"><option value="">—</option><option>Pending</option><option>Installed</option></select></label>
+        <label>Install date<input id="psInstall" type="date"></label>
+        <label>EMI<input id="psEmi" type="text" placeholder="EMI / Non-EMI"></label>
+      </div>
+      <div class="lead-modal-actions">
+        <button type="button" class="ghost-btn" id="psCancel">Cancel</button>
+        <button type="button" class="dl-btn" id="psSave">Add sale</button>
+      </div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("psCancel").onclick = close;
+    document.getElementById("psSave").onclick = () => {
+      const gv = (id) => { const el = document.getElementById(id); return el ? String(el.value).trim() : ""; };
+      const customer = gv("psCustomer");
+      if (!customer) { window.alert("Enter the customer name."); return; }
+      paymentAdds.push({
+        id: "u" + (paySeq++), customer, product: gv("psProduct"), invoiceNo: gv("psInv"),
+        invoiceDate: payNormDate(gv("psInvDate")), category: gv("psCat"), hq: gv("psHq"),
+        salesPerson: gv("psSp"), salesValue: payNum(gv("psSv")), machineStatus: gv("psMachine"),
+        installDate: payNormDate(gv("psInstall")), emi: gv("psEmi"),
+      });
+      // A manually-added sale should always be visible.
+      payHideAll = false; payClearBefore = "";
+      saveEdits("Payment · added sale (" + customer + ")");
+      close(); payRepaint();
+    };
+  }
 
   function renderPayments() {
     const admin = canEditPayments();
@@ -3273,6 +3335,8 @@
         payRepaint();
       };
       const tpl = document.getElementById("payTplBtn"); if (tpl) tpl.onclick = payDownloadTemplate;
+      const expB = document.getElementById("payExportBtn"); if (expB) expB.onclick = payExport;
+      const addB = document.getElementById("payAddBtn"); if (addB) addB.onclick = payAddDialog;
       const up = document.getElementById("payUpload");
       if (up) up.onchange = (e) => {
         const f = e.target.files[0];
@@ -3342,7 +3406,9 @@
         <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
-          <button id="payTplBtn" class="ghost-btn" type="button">⬇ Download input template</button>
+          ${admin ? `<button id="payAddBtn" class="dl-btn" type="button" title="Add a new sale / machine directly in the portal">＋ Add sale</button>` : ""}
+          <button id="payTplBtn" class="ghost-btn" type="button" title="Download a blank template to fill">⬇ Empty template</button>
+          <button id="payExportBtn" class="ghost-btn" type="button" title="Download all current records (with every field) to edit and re-upload">⬇ Export current data</button>
           ${admin ? `<label class="dl-btn" style="cursor:pointer" title="Import an Excel/CSV — replaces the current data with your sheet (no duplicates)">⬆ Import (Excel/CSV)<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
           ${admin ? `<button id="payClearOld" class="ghost-btn danger" type="button" title="Clear commitment data — by date or all">🗑 Clear data</button>` : ""}
         </div>
