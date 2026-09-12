@@ -3124,9 +3124,50 @@
     const dc = document.getElementById("payDrillCount"); if (dc) dc.textContent = rep.length + " records";
     const dr = document.getElementById("payDateRange"); if (dr) dr.innerHTML = payDateRangeNote(rep);
     const ss = document.getElementById("payStatusSel"); if (ss) ss.value = payFilter.status; // keep in sync with chips
+    payRefreshFilters();
     wirePayChips();
     wirePayRows();
     enhanceTables(); // re-add the "Filter this table…" box to the re-rendered breakdown tables
+  }
+  // Rows matching every active filter EXCEPT the named one — used to compute
+  // each dropdown's options so the filters cascade (pick a salesperson and the
+  // other dropdowns only offer values that exist for that salesperson).
+  function payRowsExcept(except) {
+    const f = payFilter;
+    return payAll().filter((d) => {
+      if (except !== "cat" && f.cat && d.category !== f.cat) return false;
+      if (except !== "sp" && f.sp && d.salesPerson !== f.sp) return false;
+      if (except !== "product" && f.product && d.product !== f.product) return false;
+      if (except !== "emi" && f.emi === "emi" && !payIsEmi(d)) return false;
+      if (except !== "emi" && f.emi === "nonemi" && payIsEmi(d)) return false;
+      if (except !== "month" && f.month) {
+        const b = payMonthBounds(f.month);
+        const cd = payCommitCd(d), rd = d.receivedDate ? String(d.receivedDate).slice(0, 10) : "";
+        const inR = (dt) => dt && dt >= b.from && dt <= b.to;
+        if (!(inR(cd) || inR(rd))) return false;
+      }
+      return true;
+    });
+  }
+  // Rebuild the cascading dropdowns' options from the current selection.
+  function payRefreshFilters() {
+    const fill = (id, values, cur, labelFn) => {
+      const sel = document.getElementById(id); if (!sel) return;
+      const list = values.slice();
+      if (cur && list.indexOf(cur) < 0) list.push(cur); // keep current pick even if now empty
+      sel.innerHTML = `<option value="">All</option>` + list.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(labelFn ? labelFn(v) : v)}</option>`).join("");
+      sel.value = cur || "";
+    };
+    fill("payCat", payUniq(payRowsExcept("cat"), "category"), payFilter.cat);
+    fill("paySp", payUniq(payRowsExcept("sp"), "salesPerson"), payFilter.sp, spLabel);
+    fill("payProduct", payUniq(payRowsExcept("product"), "product"), payFilter.product);
+    const ms = document.getElementById("payMonth");
+    if (ms) {
+      const months = payMonthsInData(payRowsExcept("month"));
+      const list = months.slice(); if (payFilter.month && list.indexOf(payFilter.month) < 0) list.push(payFilter.month);
+      ms.innerHTML = `<option value="">All months</option>` + list.map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("");
+      ms.value = payFilter.month || "";
+    }
   }
   // Open the detail popup when a record's customer name (or row) is clicked.
   function wirePayRows() {
