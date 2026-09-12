@@ -2893,17 +2893,11 @@
       case 4: return r.category || "";
       case 5: return r.hq || "";
       case 6: return r.salesPerson || "";
-      case 7: return r.committedDate ? fmtDate(r.committedDate) : "no date";
-      case 8: return typeof r.dueDays === "number" ? String(r.dueDays) : "";
-      case 9: return r.salesValue ? String(r.salesValue) : "";
-      case 10: return String(r.committed || "");
-      case 11: return String(r.received || "");
-      case 12: return String(r.pending || "");
-      case 13: return r.machineStatus || "";
-      case 14: return (PAY_STATUS[r.status] || {}).label || "";
-      case 15: return r.remark || "";
-      case 16: return r.receivedDate ? fmtDate(r.receivedDate) : "";
-      case 17: return r.emi || "";
+      case 7: return r.salesValue ? String(r.salesValue) : "";
+      case 8: return String(r.pending || "");
+      case 9: return r.machineStatus || "";
+      case 10: return (PAY_STATUS[r.status] || {}).label || "";
+      case 11: return r.emi || "";
       default: return "";
     }
   }
@@ -2916,7 +2910,7 @@
   function payColFilterRow(rows0) {
     const sel = (i, opts) => `<th><select class="pay-cf select" data-ci="${i}" style="width:100%;min-width:90px;font-weight:400"><option value="">All</option>${opts.map((o) => `<option${String(payColFilters[i] || "") === String(o) ? " selected" : ""}>${esc(o)}</option>`).join("")}</select></th>`;
     const txt = (i, ph) => `<th><input class="pay-cf" type="search" data-ci="${i}" value="${esc(payColFilters[i] || "")}" placeholder="${esc(ph)}" style="width:100%;min-width:70px;font-weight:400"></th>`;
-    return `<tr class="pay-cf-row">${txt(0, "Customer")}${txt(1, "Product")}${txt(2, "Invoice")}${txt(3, "Date")}${sel(4, payUniq(rows0, "category"))}${sel(5, payUniq(rows0, "hq"))}${sel(6, payUniq(rows0, "salesPerson"))}${txt(7, "Date")}${txt(8, "Days")}${txt(9, "₹")}${txt(10, "₹")}${txt(11, "₹")}${txt(12, "₹")}${sel(13, ["Installed", "Pending"])}${sel(14, PAY_ORDER.map((s) => PAY_STATUS[s].label))}${txt(15, "Remark")}${txt(16, "Date")}${txt(17, "EMI")}`;
+    return `<tr class="pay-cf-row">${txt(0, "Customer")}${txt(1, "Product")}${txt(2, "Invoice")}${txt(3, "Date")}${sel(4, payUniq(rows0, "category"))}${sel(5, payUniq(rows0, "hq"))}${sel(6, payUniq(rows0, "salesPerson"))}${txt(7, "₹")}${txt(8, "₹")}${sel(9, ["Installed", "Pending"])}${sel(10, PAY_ORDER.map((s) => PAY_STATUS[s].label))}${txt(11, "EMI")}`;
   }
 
   function payTableRows(rows) {
@@ -2925,7 +2919,7 @@
       if (ra !== rb) return ra - rb;
       return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
     });
-    if (!sorted.length) return `<tr><td colspan="18" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
+    if (!sorted.length) return `<tr><td colspan="12" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
     return sorted.map((r) => {
       const m = PAY_STATUS[r.status];
       const mst = r.machineStatus ? `<span class="pay-badge ${r.machineStatus === "Installed" ? "pay-green" : "pay-yellow"}">${esc(r.machineStatus)}</span>` : "<span class='t-muted'>—</span>";
@@ -2937,33 +2931,23 @@
         <td>${esc(r.category || "—")}</td>
         <td>${esc(r.hq || "—")}</td>
         <td>${esc(r.salesPerson || "—")}</td>
-        <td>${r.committedDate ? esc(fmtDate(r.committedDate)) : "<span class='t-muted'>no date</span>"}</td>
-        <td class="num">${typeof r.dueDays === "number" ? r.dueDays : "—"}</td>
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
-        <td class="num">${rupee(r.committed)}</td>
-        <td class="num">${rupee(r.received)}</td>
         <td class="num">${r.pending ? rupee(r.pending) : "—"}</td>
         <td>${mst}</td>
         <td><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></td>
-        <td class="t-muted">${esc(r.remark || "")}</td>
-        <td>${r.receivedDate ? esc(fmtDate(r.receivedDate)) : "<span class='t-muted'>—</span>"}</td>
         <td class="t-muted">${esc(r.emi || "")}</td></tr>`;
     }).join("");
   }
 
-  // Totals footer for the detailed report — Total Commitment / Received / Pending.
+  // Totals footer for the detailed report — Sales value & Pending totals.
   function payTotalsRow(rows) {
-    const c = rows.reduce((a, r) => a + r.committed, 0);
-    const rec = rows.reduce((a, r) => a + r.received, 0);
     const pen = rows.reduce((a, r) => a + r.pending, 0);
     const sv = rows.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
     return `<tr class="pay-totals">
-      <td colspan="9" class="num"><b>Total — ${rows.length} commitment${rows.length === 1 ? "" : "s"}</b></td>
+      <td colspan="7" class="num"><b>Total — ${rows.length} commitment${rows.length === 1 ? "" : "s"}</b></td>
       <td class="num"><b>${sv ? rupee(sv) : "—"}</b></td>
-      <td class="num"><b>${rupee(c)}</b></td>
-      <td class="num"><b>${rupee(rec)}</b></td>
       <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td>
-      <td colspan="5"></td></tr>`;
+      <td colspan="3"></td></tr>`;
   }
 
   // Record the just-imported data as a dated snapshot: total outstanding + a
@@ -3308,7 +3292,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table class="pay-report">
-        <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th>Committed date</th><th class="num">Due days</th><th class="num">Sales value</th><th class="num">Committed</th><th class="num">Received</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>Remark</th><th>Received date</th><th>EMI</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th class="num">Sales value</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>EMI</th></tr></thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
