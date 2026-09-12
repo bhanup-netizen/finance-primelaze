@@ -2893,16 +2893,11 @@
     switch (ci) {
       case 0: return r.customer || "";
       case 1: return r.product || "";
-      case 2: return r.invoiceNo || "";
-      case 3: return r.invoiceDate ? fmtDate(r.invoiceDate) : "";
-      case 4: return r.category || "";
-      case 5: return r.hq || "";
-      case 6: return r.salesPerson || "";
-      case 7: return r.salesValue ? String(r.salesValue) : "";
-      case 8: return String(r.pending || "");
-      case 9: return r.machineStatus || "";
-      case 10: return (PAY_STATUS[r.status] || {}).label || "";
-      case 11: return r.emi || "";
+      case 2: return r.salesPerson || "";
+      case 3: return r.salesValue ? String(r.salesValue) : "";
+      case 4: return r.machineStatus || "";
+      case 5: return String(r.received || "");
+      case 6: return String(r.pending || "");
       default: return "";
     }
   }
@@ -2924,25 +2919,32 @@
       if (ra !== rb) return ra - rb;
       return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
     });
-    if (!sorted.length) return `<tr><td colspan="5" class="empty" style="text-align:center;padding:18px">No records match the current filters.</td></tr>`;
+    if (!sorted.length) return `<tr><td colspan="7" class="empty" style="text-align:center;padding:18px">No records match the current filters.</td></tr>`;
     return sorted.map((r) => {
-      const m = PAY_STATUS[r.status];
+      const inst = r.machineStatus;
+      const instBadge = inst ? `<span class="pay-badge ${inst === "Installed" ? "pay-green" : "pay-yellow"}">${esc(inst)}</span>` : "<span class='t-muted'>—</span>";
       return `<tr class="pay-rowlink" data-payid="${esc(payRowId(r))}">
         <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button></td>
         <td>${r.product ? esc(r.product) : "<span class='t-muted'>—</span>"}</td>
         <td>${esc(r.salesPerson || "—")}</td>
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
-        <td><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></td></tr>`;
+        <td>${instBadge}</td>
+        <td class="num">${r.received ? rupee(r.received) : "<span class='t-muted'>—</span>"}</td>
+        <td class="num">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}</td></tr>`;
     }).join("");
   }
 
-  // Totals footer for the list — record count + total sale value.
+  // Totals footer for the list — count + sale value, received & pending totals.
   function payTotalsRow(rows) {
     const sv = rows.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
+    const rec = rows.reduce((a, r) => a + (r.received || 0), 0);
+    const pen = rows.reduce((a, r) => a + (r.pending || 0), 0);
     return `<tr class="pay-totals">
       <td colspan="3"><b>Total — ${rows.length} record${rows.length === 1 ? "" : "s"}</b></td>
       <td class="num"><b>${sv ? rupee(sv) : "—"}</b></td>
-      <td></td></tr>`;
+      <td></td>
+      <td class="num"><b>${rec ? rupee(rec) : "—"}</b></td>
+      <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td></tr>`;
   }
   // Full record popup: all install details + commitment / received / remark
   // history, and (for Finance) controls to add a commitment date, record a
@@ -3346,7 +3348,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table class="pay-report">
-        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Status</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Status</th><th class="num">Received</th><th class="num">Pending</th></tr></thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
