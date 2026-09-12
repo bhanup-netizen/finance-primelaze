@@ -2684,6 +2684,17 @@
   let payClearBefore = ""; // admin: hide commitments committed before this date
   let payHideAll = false;  // admin: "clear all" — hide every commitment
   let payHideBase = false; // after a Replace import: show only imported rows (hide the 232 built-in)
+  // Per-record working data managed IN the dashboard (not imported): commitment
+  // dates, received payments and remarks are appended here as HISTORY so nothing
+  // is overwritten. Keyed by a stable record id. Persisted in the edits doc.
+  const payTrack = {}; // id -> { history: [ {at, by, kind:"commit"|"received"|"remark", date?, amount?, text?} ] }
+  function payRowId(r) { return r.id || ("p:" + [r.customer, r.invoiceNo, r.product, r.salesValue].join("|")); }
+  function payTrackOf(id) { return payTrack[id] || (payTrack[id] = { history: [] }); }
+  function payTrackAdd(id, entry) {
+    const t = payTrackOf(id);
+    t.history = (t.history || []).concat(Object.assign({ at: Date.now(), by: (sessionUser && sessionUser.email) || "" }, entry));
+    saveEdits("Payment · " + (entry.kind || "update"));
+  }
   const PAY_STATUS = {
     green: { label: "Received", cls: "pay-green" },
     yellow: { label: "Partial", cls: "pay-yellow" },
@@ -2717,44 +2728,38 @@
     return Array.from(s).sort().reverse();
   }
   function payEnrich(r) {
-    const received = payNum(r.received);
-    const out = payNum(r.outstanding);
-    const ca = payNum(r.committedAmount);
-    // Pending (balance still to collect). Finance sheets put the NET balance in
-    // the Outstanding column (it differs from Committed Amount, which is often
-    // blank); base data puts the GROSS commitment in both, so there we net off
-    // what's received. This makes Pending match the sheet's Outstanding total.
-    let pending;
-    if (out > 0 && (ca === 0 || out !== ca)) pending = out;                 // net balance given
-    else pending = Math.max(Math.max(ca, out) - received, 0);              // gross − received
-    // Committed = the sheet's Committed Amount column when it's filled in,
-    // otherwise derive it (pending + received). This uses the real committed
-    // figure the finance sheet provides rather than always inferring it.
-    const committed = ca > 0 ? ca : pending + received;                     // total billed/committed
+    const id = payRowId(r);
+    const hist = (payTrack[id] && payTrack[id].history) || [];
+    const sv = payNum(r.salesValue);
+    // Received = the payments Finance has recorded in the dashboard (fall back
+    // to the row's own value only if none recorded yet).
+    const recEvents = hist.filter((h) => h.kind === "received");
+    const received = recEvents.length ? recEvents.reduce((a, h) => a + (payNum(h.amount) || 0), 0) : payNum(r.received);
+    // Committed date = the latest commitment Finance set in the dashboard.
+    const commitEvents = hist.filter((h) => h.kind === "commit" && h.date);
+    const committedDate = commitEvents.length ? commitEvents[commitEvents.length - 1].date : (r.committedDate || "");
+    // Latest remark (full history kept in the record's timeline).
+    const remEvents = hist.filter((h) => h.kind === "remark" && h.text);
+    const remark = remEvents.length ? remEvents[remEvents.length - 1].text : (r.remark || "");
+    const committed = sv;                              // total deal value = sale value
+    const pending = Math.max(sv - received, 0);        // balance still to collect
     let status = "grey", daysOverdue = 0;
-    if (committed <= 0) status = "grey";
-    else if (pending <= 0) status = "green";       // fully collected
-    else if (received > 0) status = "yellow";      // partial
-    else if (!r.committedDate) status = "grey";
+    if (sv <= 0) status = "grey";
+    else if (pending <= 0) status = "green";           // fully collected
+    else if (received > 0) status = "yellow";          // partial
+    else if (!committedDate) status = "grey";          // no commitment date yet
     else {
-      const cd = new Date(r.committedDate);
-      const diff = Math.round((payToday() - cd) / 86400000);
+      const diff = Math.round((payToday() - new Date(committedDate)) / 86400000);
       if (diff > 0) { status = "red"; daysOverdue = diff; } else status = "blue";
     }
-    // Due days: use the sheet value if given, else compute from committed date.
-    let dueDays;
-    if (r.dueDays !== "" && r.dueDays != null && !isNaN(parseFloat(r.dueDays))) dueDays = Math.round(parseFloat(r.dueDays));
-    else if (r.committedDate) dueDays = Math.round((payToday() - new Date(r.committedDate)) / 86400000);
-    else dueDays = 0;
+    const dueDays = committedDate ? Math.round((payToday() - new Date(committedDate)) / 86400000) : 0;
     // Machine install status → "Installed" / "Pending" / "".
     const ms = String(r.machineStatus || "");
     const machineStatus = /install/i.test(ms) ? "Installed" : /pend/i.test(ms) ? "Pending" : "";
-    // Normalize the salesperson to the proper roster name (imports + base data),
-    // merging known spelling variants (e.g. Vamsi / Vamshi Krishna) into one.
-    // Check both the raw value and the roster-normalised value so no variant slips through.
+    // Normalize the salesperson to the proper roster name, merging spelling variants.
     let salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
     salesPerson = paySpMerge(salesPerson) || salesPerson;
-    return Object.assign({}, r, { salesPerson, committed, received, pending, status, daysOverdue, dueDays, machineStatus });
+    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, remark, status, daysOverdue, dueDays, machineStatus, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -2919,35 +2924,75 @@
       if (ra !== rb) return ra - rb;
       return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
     });
-    if (!sorted.length) return `<tr><td colspan="12" class="empty" style="text-align:center;padding:18px">No commitments match the current filters.</td></tr>`;
+    if (!sorted.length) return `<tr><td colspan="5" class="empty" style="text-align:center;padding:18px">No records match the current filters.</td></tr>`;
     return sorted.map((r) => {
       const m = PAY_STATUS[r.status];
-      const mst = r.machineStatus ? `<span class="pay-badge ${r.machineStatus === "Installed" ? "pay-green" : "pay-yellow"}">${esc(r.machineStatus)}</span>` : "<span class='t-muted'>—</span>";
-      return `<tr>
-        <td class="t-name">${esc(r.customer || "—")}</td>
+      return `<tr class="pay-rowlink" data-payid="${esc(payRowId(r))}">
+        <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button></td>
         <td>${r.product ? esc(r.product) : "<span class='t-muted'>—</span>"}</td>
-        <td>${r.invoiceNo ? esc(r.invoiceNo) : "<span class='t-muted'>—</span>"}</td>
-        <td>${r.invoiceDate ? esc(fmtDate(r.invoiceDate)) : "<span class='t-muted'>—</span>"}</td>
-        <td>${esc(r.category || "—")}</td>
-        <td>${esc(r.hq || "—")}</td>
         <td>${esc(r.salesPerson || "—")}</td>
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
-        <td class="num">${r.pending ? rupee(r.pending) : "—"}</td>
-        <td>${mst}</td>
-        <td><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></td>
-        <td class="t-muted">${esc(r.emi || "")}</td></tr>`;
+        <td><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></td></tr>`;
     }).join("");
   }
 
-  // Totals footer for the detailed report — Sales value & Pending totals.
+  // Totals footer for the list — record count + total sale value.
   function payTotalsRow(rows) {
-    const pen = rows.reduce((a, r) => a + r.pending, 0);
     const sv = rows.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
     return `<tr class="pay-totals">
-      <td colspan="7" class="num"><b>Total — ${rows.length} commitment${rows.length === 1 ? "" : "s"}</b></td>
+      <td colspan="3"><b>Total — ${rows.length} record${rows.length === 1 ? "" : "s"}</b></td>
       <td class="num"><b>${sv ? rupee(sv) : "—"}</b></td>
-      <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td>
-      <td colspan="3"></td></tr>`;
+      <td></td></tr>`;
+  }
+  // Full record popup: all install details + commitment / received / remark
+  // history, and (for Finance) controls to add a commitment date, record a
+  // payment, or add a remark. Everything is appended as history — nothing lost.
+  function payDetailDialog(id) {
+    const r = payAll().find((x) => payRowId(x) === id); if (!r) return;
+    const admin = canEditPayments();
+    const hist = (r.history || []).slice().sort((a, b) => b.at - a.at);
+    const m = PAY_STATUS[r.status];
+    const info = (label, val) => `<div class="ld-field"><span>${label}</span><div class="ld-val">${val || "—"}</div></div>`;
+    const evLine = (h) => {
+      const when = esc(fmtWhen(h.at)); const by = h.by ? " · " + esc(h.by) : "";
+      if (h.kind === "received") return `<li><span class="peh-when">${when}</span> — <b>Received ${rupee(payNum(h.amount))}</b>${h.date ? " on " + esc(fmtDate(h.date)) : ""}${by}</li>`;
+      if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Commitment date ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
+      return `<li><span class="peh-when">${when}</span> — ${esc(h.text || "")}${by}</li>`;
+    };
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card lead-detail-card">
+      <div class="lead-tl-topline"><h3>${esc(r.customer || "—")}</h3><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></div>
+      <div class="ld-grid">
+        ${info("Product", esc(r.product || ""))}
+        ${info("Invoice No.", esc(r.invoiceNo || ""))}
+        ${info("Invoice date", r.invoiceDate ? esc(fmtDate(r.invoiceDate)) : "")}
+        ${info("Category", esc(r.category || ""))}
+        ${info("HQ", esc(r.hq || ""))}
+        ${info("Sales person", esc(r.salesPerson || ""))}
+        ${info("Sale value", r.salesValue ? rupee(r.salesValue) : "")}
+        ${info("Machine", esc(r.machineStatus || ""))}
+        ${info("EMI", esc(r.emi || ""))}
+      </div>
+      <div class="ld-meta"><b>Committed:</b> ${r.committedDate ? esc(fmtDate(r.committedDate)) : "—"} · <b>Received:</b> ${rupee(r.received)} · <b>Pending:</b> ${r.pending ? rupee(r.pending) : "₹0"}</div>
+      ${admin ? `<div class="pay-actions">
+        <div class="pay-act"><label>Set commitment date</label><span class="pay-act-row"><input type="date" id="pdCommit"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
+        <div class="pay-act"><label>Record payment received</label><span class="pay-act-row"><input type="number" id="pdRecvAmt" placeholder="₹ amount"><input type="date" id="pdRecvDate" value="${esc(leadToday())}"><button type="button" class="mini-btn" id="pdRecvBtn">Add</button></span></div>
+        <div class="pay-act"><label>Add remark</label><span class="pay-act-row"><input type="text" id="pdRemark" placeholder="note / follow-up"><button type="button" class="mini-btn" id="pdRemarkBtn">Add</button></span></div>
+      </div>` : ""}
+      <h4 class="ld-h">History</h4>
+      <ol class="lead-tl pay-hist">${hist.length ? hist.map(evLine).join("") : '<li class="t-muted">No commitments or payments recorded yet.</li>'}</ol>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="pdClose">Close</button></div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("pdClose").onclick = close;
+    const reopen = () => { close(); payDetailDialog(id); payRepaint(); };
+    if (admin) {
+      const cb = document.getElementById("pdCommitBtn"); if (cb) cb.onclick = () => { const d = (document.getElementById("pdCommit").value || "").trim(); if (!d) { window.alert("Pick a commitment date."); return; } payTrackAdd(id, { kind: "commit", date: d }); reopen(); };
+      const rb = document.getElementById("pdRecvBtn"); if (rb) rb.onclick = () => { const a = parseFloat(String(document.getElementById("pdRecvAmt").value).replace(/[^0-9.]/g, "")) || 0; const d = (document.getElementById("pdRecvDate").value || "").trim(); if (!(a > 0)) { window.alert("Enter the amount received."); return; } payTrackAdd(id, { kind: "received", amount: a, date: d }); reopen(); };
+      const rm = document.getElementById("pdRemarkBtn"); if (rm) rm.onclick = () => { const t = (document.getElementById("pdRemark").value || "").trim(); if (!t) { window.alert("Enter a remark."); return; } payTrackAdd(id, { kind: "remark", text: t }); reopen(); };
+    }
   }
 
   // Record the just-imported data as a dated snapshot: total outstanding + a
@@ -3063,7 +3108,13 @@
     const dr = document.getElementById("payDateRange"); if (dr) dr.innerHTML = payDateRangeNote(rep);
     const ss = document.getElementById("payStatusSel"); if (ss) ss.value = payFilter.status; // keep in sync with chips
     wirePayChips();
+    wirePayRows();
     enhanceTables(); // re-add the "Filter this table…" box to the re-rendered breakdown tables
+  }
+  // Open the detail popup when a record's customer name (or row) is clicked.
+  function wirePayRows() {
+    document.querySelectorAll(".pay-open").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); payDetailDialog(b.dataset.payid); }));
+    document.querySelectorAll("tr.pay-rowlink").forEach((tr) => (tr.onclick = () => payDetailDialog(tr.dataset.payid)));
   }
   function wirePayChips() {
     document.querySelectorAll("[data-paystatus]").forEach((b) => {
@@ -3075,7 +3126,9 @@
   }
 
   // ---- Excel / CSV import (append) + template ----
-  const PAY_HEADERS = ["Category", "HQ", "Sales Person", "Customer", "Committed Date", "Invoice No.", "Invoice Date", "Due Days", "Machine Status", "Product Sold", "Sales Value", "Outstanding", "Committed Amount", "Received", "Received Date", "EMI", "Remark", "Line Items"];
+  // Import = only the basic install record. Commitment dates, received amounts
+  // and remarks are added in the dashboard afterwards (kept as history).
+  const PAY_HEADERS = ["Customer", "Product", "Invoice No.", "Invoice Date", "Category", "HQ", "Sales Person", "Sales Value", "Machine", "EMI"];
   function payNormDate(v) {
     if (!v) return "";
     if (v instanceof Date && !isNaN(v)) {
@@ -3105,7 +3158,7 @@
       invoiceNo: String(g("invoiceno", "invoice", "invno", "billno", "invoicenumber") || "").trim(),
       invoiceDate: payNormDate(g("invoicedate", "billdate", "invdate")),
       dueDays: g("duedays", "creditdays", "days", "outstandingdays"),
-      machineStatus: String(g("machinestatus", "installstatus", "installationstatus", "machineinstalledorpending", "installedpending") || "").trim(),
+      machineStatus: String(g("machine", "machinestatus", "installstatus", "installationstatus", "machineinstalledorpending", "installedpending") || "").trim(),
       product: String(g("productsold", "productname", "product", "item", "description", "itemname") || "").trim(),
       salesValue: payNum(g("salesvalue", "salevalue", "sales", "dealvalue", "ordervalue", "invoicevalue")),
       outstanding: payNum(g("outstanding", "balance", "outstandingamount")),
@@ -3169,8 +3222,8 @@
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
   function payDownloadTemplate() {
-    const sample = ["Consumables", "Telangana", "Vamsi", "Sample Clinic (delete this row)", "2026-09-15", "INV-001", "2026-08-15", 25, "", "Hydrojelly Mask 850ml", 60000, 50000, 50000, 0, "2026-09-20", "", "By mid September", 2];
-    const sample2 = ["Machine", "Karnataka", "Sushma S", "Sample Hospital (delete this row)", "2026-07-10", "INV-002", "2026-07-10", 45, "Pending", "Celluma Pro", 4500000, 4000000, 4000000, 0, "", "6 EMIs × ₹5L/month", "Awaiting installation", 1];
+    const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, "Pending", "6 EMIs"];
+    const sample2 = ["Sample Hospital (delete this row)", "Celluma Pro", "INV-002", "2026-09-10", "Machine", "Karnataka", "Vamshi Krishna", 4500000, "Installed", "Non-EMI"];
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample, sample2]);
       ws["!cols"] = PAY_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
@@ -3226,6 +3279,7 @@
         const handler = () => { payColFilters[el.dataset.ci] = el.value; payRepaint(); };
         if (el.tagName === "SELECT") el.onchange = handler; else el.oninput = handler;
       });
+      wirePayRows();
       const clr = document.getElementById("payClearFilters");
       if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "" }; payColFilters = {}; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
@@ -3292,7 +3346,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table class="pay-report">
-        <thead><tr><th>Customer</th><th>Product</th><th>Invoice No.</th><th>Invoice date</th><th>Category</th><th>HQ</th><th>Sales Person</th><th class="num">Sales value</th><th class="num">Pending</th><th>Machine</th><th>Status</th><th>EMI</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Status</th></tr></thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
@@ -6469,6 +6523,7 @@
         const ids = paymentAdds.map((r) => +String(r.id).replace(/^u/, "")).filter((n) => !isNaN(n));
         paySeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
+      if (e.payTrack && typeof e.payTrack === "object") { Object.keys(payTrack).forEach((k) => delete payTrack[k]); Object.assign(payTrack, e.payTrack); }
       if (Array.isArray(e.expenseAdds)) {
         expenseAdds.length = 0; e.expenseAdds.forEach((r) => expenseAdds.push(r));
         expSeq = expenseAdds.reduce((m, r) => Math.max(m, +r.sr || 0), 0);
@@ -6550,7 +6605,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {

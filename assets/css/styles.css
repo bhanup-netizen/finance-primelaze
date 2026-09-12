@@ -130,6 +130,18 @@ a { color: var(--accent); text-decoration: none; }
 .pay-report td:nth-child(16), .pay-report th:nth-child(16) { white-space: normal; max-width: 116px; } /* Remark */
 .pay-report td:nth-child(18), .pay-report th:nth-child(18) { white-space: normal; max-width: 100px; } /* EMI */
 .pay-report .pay-cf input, .pay-report .pay-cf.select, .pay-report select.pay-cf { min-width: 60px; font-size: 11px; padding: 2px 4px; }
+/* Clickable record list + detail popup */
+tr.pay-rowlink { cursor: pointer; }
+tr.pay-rowlink:hover td { background: var(--surface-2); }
+.pay-open { font-weight: 700; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; font: inherit; text-align: left; }
+.pay-open:hover { text-decoration: underline; }
+.pay-actions { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 4px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.pay-act { display: flex; flex-direction: column; gap: 4px; }
+.pay-act > label { font-size: 12px; font-weight: 700; color: var(--text-2); }
+.pay-act-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pay-act-row input { padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; flex: 1 1 120px; min-width: 0; }
+.pay-act-row .mini-btn { flex: 0 0 auto; padding: 8px 14px; }
+.pay-hist li { font-size: 13px; }
 /* Expense tab — category / payee breakdown bars + transaction table */
 .exp-break { display: flex; flex-direction: column; gap: 7px; }
 .exp-row { display: grid; grid-template-columns: minmax(120px, 1.4fr) 3fr auto 42px; align-items: center; gap: 10px; font-size: 13px; }
