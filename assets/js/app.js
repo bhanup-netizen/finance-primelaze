@@ -113,8 +113,8 @@
     { id: "targets", label: "HQ Targets", group: "Primelaze Sales", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Primelaze Sales", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Primelaze Sales", render: renderPricing },
-    { id: "leads", label: "Casovil Sales", group: "Casovil Sales", render: renderLeads },
-    { id: "payments", label: "Outstanding Payment", group: "Finance", render: renderPayments },
+    { id: "leads", label: "Casovil Sale", group: "Casovil Sales", render: renderLeads },
+    { id: "payments", label: "Primelaze Sale", group: "Finance", render: renderPayments },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
     { id: "team", label: "HR", group: "HR", render: renderTeam },
     { id: "registration", label: "Registration", group: "Admin", render: renderReg },
@@ -3395,7 +3395,7 @@
     const sel = (id, cur, values, allLabel) => `<label class="ord-field"><span>${esc(allLabel)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => opt(v, cur)).join("")}</select></label>`;
     return `
       <div class="section-head">
-        <h1>Outstanding Payments</h1>
+        <h1>Primelaze Sales</h1>
         <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Import replaces the data with your uploaded sheet, so re-importing never creates duplicates — always upload your full current sheet." : "Read-only."}</p>
         <div class="callout" style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:14px">📅 <span><b>Period of this data:</b> ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records</span></div>
       </div>
@@ -6720,7 +6720,7 @@
   // previous name) still show after a tab is renamed.
   const TAB_PAST_LABELS = {
     team: ["Team Roster"],
-    leads: ["Casovil Leads", "Leads"],
+    leads: ["Casovil Sales", "Casovil Leads", "Leads"],
     targets: ["HQ Targets"],
     order: ["Inventory"],
     payments: ["Outstanding Payment", "Payments"],
