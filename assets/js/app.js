@@ -2672,7 +2672,13 @@
   // (old data is always kept). Status is derived live against today's date.
   const paymentAdds = [];            // finance-uploaded appended rows
   let paySeq = 0;
-  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" };
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "" };
+  // Selecting a month sets the internal from/to bounds the filter runs on.
+  function paySetMonth(m) {
+    payFilter.month = m || "";
+    if (m) { const b = payMonthBounds(m); payFilter.from = b.from; payFilter.to = b.to; }
+    else { payFilter.from = ""; payFilter.to = ""; }
+  }
   let payColFilters = {}; // Excel-style per-column filters on the detailed report
   let paySnapshots = [];  // [{at, by, total, rows, cust:{name:outstanding}}] — one per import, for collection tracking
   let payClearBefore = ""; // admin: hide commitments committed before this date
@@ -2701,15 +2707,16 @@
     if (n.indexOf("vamsi") >= 0 || n.indexOf("vamshi") >= 0) return "Vamshi Krishna";
     return null;
   }
-  // Committed-date correction: any Aug or Sep 2026 date is booked to 28-Sep-2026
-  // (per finance — commitments in those months are due on the 28th).
-  function payFixCommitDate(d) {
-    const s = d ? String(d).slice(0, 10) : "";
-    return /^2026-(08|09)-/.test(s) ? "2026-09-28" : d;
+  // Month helpers for the month-wise filter.
+  const payMonthKey = (d) => { const s = d ? String(d).slice(0, 7) : ""; return /^\d{4}-\d{2}$/.test(s) ? s : ""; };
+  const payMonthLabel = (m) => { const [y, mo] = m.split("-").map(Number); return new Date(y, mo - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "numeric" }); };
+  const payMonthBounds = (m) => { const [y, mo] = m.split("-").map(Number); const last = new Date(y, mo, 0).getDate(); return { from: `${m}-01`, to: `${m}-${String(last).padStart(2, "0")}` }; };
+  function payMonthsInData(rows) {
+    const s = new Set();
+    rows.forEach((r) => { const c = payMonthKey(r.committedDate); if (c) s.add(c); const rd = payMonthKey(r.receivedDate); if (rd) s.add(rd); });
+    return Array.from(s).sort().reverse();
   }
   function payEnrich(r) {
-    const committedDate = payFixCommitDate(r.committedDate);
-    r = Object.assign({}, r, { committedDate });
     const received = payNum(r.received);
     const out = payNum(r.outstanding);
     const ca = payNum(r.committedAmount);
@@ -3205,8 +3212,7 @@
       wire("paySp", (e) => { payFilter.sp = e.target.value; payRepaint(); });
       wire("payStatusSel", (e) => { payFilter.status = e.target.value; payRepaint(); });
       wire("payDueSel", (e) => { payFilter.due = e.target.value; payRepaint(); });
-      wire("payFrom", (e) => { payFilter.from = e.target.value; payRepaint(); });
-      wire("payTo", (e) => { payFilter.to = e.target.value; payRepaint(); });
+      wire("payMonth", (e) => { paySetMonth(e.target.value); payRepaint(); });
       const s = document.getElementById("paySearch");
       if (s) s.oninput = (e) => { payFilter.q = e.target.value.toLowerCase(); payRepaint(); };
       // Explicit Apply — re-reads every control and applies (works even if a
@@ -3216,7 +3222,7 @@
         const gv = (id) => { const el = document.getElementById(id); return el ? el.value : ""; };
         payFilter.cat = gv("payCat"); payFilter.hq = gv("payHq"); payFilter.sp = gv("paySp");
         payFilter.status = gv("payStatusSel"); payFilter.due = gv("payDueSel");
-        payFilter.from = gv("payFrom"); payFilter.to = gv("payTo");
+        paySetMonth(gv("payMonth"));
         payFilter.q = (gv("paySearch") || "").toLowerCase();
         payRepaint();
       };
@@ -3237,7 +3243,7 @@
         if (el.tagName === "SELECT") el.onchange = handler; else el.oninput = handler;
       });
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", from: "", to: "", due: "", emi: "" }; payColFilters = {}; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "" }; payColFilters = {}; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
@@ -3285,8 +3291,7 @@
         <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Due period</span><select id="payDueSel" class="select"><option value="">All</option><option value="below30"${payFilter.due === "below30" ? " selected" : ""}>Below 30 days / Pending machines</option><option value="above30"${payFilter.due === "above30" ? " selected" : ""}>Above 30 days / Installed machines</option></select></label>
-        <label class="ord-field"><span>Committed from</span><input id="payFrom" type="date" class="select" value="${esc(payFilter.from)}" title="Filters by committed date"></label>
-        <label class="ord-field"><span>Committed to</span><input id="payTo" type="date" class="select" value="${esc(payFilter.to)}" title="Filters by committed date"></label>
+        <label class="ord-field"><span>Month</span><select id="payMonth" class="select" title="Show commitments / receipts for one month"><option value="">All months</option>${payMonthsInData(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
         <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
