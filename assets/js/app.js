@@ -2705,9 +2705,6 @@
     grey: { label: "No date", cls: "pay-grey" },
   };
   const PAY_ORDER = ["red", "yellow", "blue", "grey", "green"];
-  // Fresh-start baseline: every record's commitment date starts here (so nothing
-  // is overdue) until Finance sets a new "Next payment commitment date".
-  const PAY_BASELINE_COMMIT = "2026-09-28";
   const canEditPayments = () => isAdmin(); // full/page admins can upload
 
   const payToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -2740,12 +2737,13 @@
     // to the row's own value only if none recorded yet).
     const recEvents = hist.filter((h) => h.kind === "received");
     const received = recEvents.length ? recEvents.reduce((a, h) => a + (payNum(h.amount) || 0), 0) : payNum(r.received);
-    // Committed date = the latest commitment Finance set in the dashboard.
-    // Fresh start: until Finance sets one, everything is baselined to
-    // PAY_BASELINE_COMMIT (28 Sep 2026) so nothing shows as overdue. Past
-    // imported dates are ignored for the status; new commitments override it.
+    // Next commitment = the latest one Finance set (date + amount for the next
+    // installment). Falls back to an imported Committed Date / Committed Value.
+    // Nothing is committed until she enters it, so "committed" ≠ total pending.
     const commitEvents = hist.filter((h) => h.kind === "commit" && h.date);
-    const committedDate = commitEvents.length ? commitEvents[commitEvents.length - 1].date : PAY_BASELINE_COMMIT;
+    let committedDate, commitAmount;
+    if (commitEvents.length) { const last = commitEvents[commitEvents.length - 1]; committedDate = last.date; commitAmount = payNum(last.amount) || 0; }
+    else { committedDate = r.committedDate || ""; commitAmount = payNum(r.committedValue) || payNum(r.committedAmount) || 0; }
     // Latest remark (full history kept in the record's timeline).
     const remEvents = hist.filter((h) => h.kind === "remark" && h.text);
     const remark = remEvents.length ? remEvents[remEvents.length - 1].text : (r.remark || "");
@@ -2771,7 +2769,7 @@
     // Normalize the salesperson to the proper roster name, merging spelling variants.
     let salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
     salesPerson = paySpMerge(salesPerson) || salesPerson;
-    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, remark, installDate, status, daysOverdue, dueDays, machineStatus, history: hist });
+    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, daysOverdue, dueDays, machineStatus, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -2837,9 +2835,9 @@
     const label = payMonthLabel(targetMonth);
     const totalSold = rows.length;
     const pending = rows.reduce((a, r) => a + r.pending, 0);
-    // Money committed to come in this month = pending on records whose
-    // commitment date falls in the month.
-    const committedThisMonth = rows.reduce((a, r) => a + (payMonthKey(r.committedDate) === targetMonth ? r.pending : 0), 0);
+    // Money committed to come in this month = the installment amounts Finance
+    // has committed (date + value) whose commitment date falls in the month.
+    const committedThisMonth = rows.reduce((a, r) => a + (payMonthKey(r.committedDate) === targetMonth ? (r.commitAmount || 0) : 0), 0);
     // Money already collected this month = payments recorded with a date in the month.
     let receivedThisMonth = 0;
     rows.forEach((r) => (r.history || []).forEach((h) => { if (h.kind === "received" && payMonthKey(h.date) === targetMonth) receivedThisMonth += payNum(h.amount) || 0; }));
@@ -2976,7 +2974,7 @@
     const evLine = (h) => {
       const when = esc(fmtWhen(h.at)); const by = h.by ? " · " + esc(h.by) : "";
       if (h.kind === "received") return `<li><span class="peh-when">${when}</span> — <b>Received ${rupee(payNum(h.amount))}</b>${h.date ? " on " + esc(fmtDate(h.date)) : ""}${by}</li>`;
-      if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Next payment committed for ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
+      if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Committed ${payNum(h.amount) ? rupee(payNum(h.amount)) + " " : ""}for ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       if (h.kind === "install") return `<li><span class="peh-when">${when}</span> — <b>Machine installed ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       return `<li><span class="peh-when">${when}</span> — ${esc(h.text || "")}${by}</li>`;
     };
@@ -2994,10 +2992,10 @@
         ${info("Machine", esc(r.machineStatus || ""))}
         ${info("EMI", esc(r.emi || ""))}
       </div>
-      <div class="ld-meta"><b>Installed:</b> ${r.installDate ? esc(fmtDate(r.installDate)) : "NA"} · <b>Next commitment:</b> ${r.committedDate ? esc(fmtDate(r.committedDate)) : "—"} · <b>Received:</b> ${rupee(r.received)} · <b>Pending:</b> ${r.pending ? rupee(r.pending) : "₹0"}</div>
+      <div class="ld-meta"><b>Installed:</b> ${r.installDate ? esc(fmtDate(r.installDate)) : "NA"} · <b>Next commitment:</b> ${r.committedDate ? esc(fmtDate(r.committedDate)) + (r.commitAmount ? " (" + rupee(r.commitAmount) + ")" : "") : "—"} · <b>Received:</b> ${rupee(r.received)} · <b>Pending:</b> ${r.pending ? rupee(r.pending) : "₹0"}</div>
       ${admin ? `<div class="pay-actions">
         <div class="pay-act"><label>Machine installed date</label><span class="pay-act-row"><input type="date" id="pdInstall" value="${esc(r.installDate || "")}"><button type="button" class="mini-btn" id="pdInstallBtn">Save</button></span></div>
-        <div class="pay-act"><label>Next payment commitment date</label><span class="pay-act-row"><input type="date" id="pdCommit"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
+        <div class="pay-act"><label>Next payment commitment (date + amount)</label><span class="pay-act-row"><input type="date" id="pdCommit"><input type="number" id="pdCommitAmt" placeholder="₹ committed"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
         <div class="pay-act"><label>Record payment received</label><span class="pay-act-row"><input type="number" id="pdRecvAmt" placeholder="₹ amount"><input type="date" id="pdRecvDate" value="${esc(leadToday())}"><button type="button" class="mini-btn" id="pdRecvBtn">Add</button></span></div>
         <div class="pay-act"><label>Add remark</label><span class="pay-act-row"><input type="text" id="pdRemark" placeholder="note / follow-up"><button type="button" class="mini-btn" id="pdRemarkBtn">Add</button></span></div>
       </div>` : ""}
@@ -3012,7 +3010,7 @@
     const reopen = () => { close(); payDetailDialog(id); payRepaint(); };
     if (admin) {
       const ib = document.getElementById("pdInstallBtn"); if (ib) ib.onclick = () => { const d = (document.getElementById("pdInstall").value || "").trim(); if (!d) { window.alert("Pick the install date."); return; } payTrackAdd(id, { kind: "install", date: d }); reopen(); };
-      const cb = document.getElementById("pdCommitBtn"); if (cb) cb.onclick = () => { const d = (document.getElementById("pdCommit").value || "").trim(); if (!d) { window.alert("Pick a commitment date."); return; } payTrackAdd(id, { kind: "commit", date: d }); reopen(); };
+      const cb = document.getElementById("pdCommitBtn"); if (cb) cb.onclick = () => { const d = (document.getElementById("pdCommit").value || "").trim(); const amt = parseFloat(String(document.getElementById("pdCommitAmt").value).replace(/[^0-9.]/g, "")) || 0; if (!d) { window.alert("Pick a commitment date."); return; } payTrackAdd(id, { kind: "commit", date: d, amount: amt }); reopen(); };
       const rb = document.getElementById("pdRecvBtn"); if (rb) rb.onclick = () => { const a = parseFloat(String(document.getElementById("pdRecvAmt").value).replace(/[^0-9.]/g, "")) || 0; const d = (document.getElementById("pdRecvDate").value || "").trim(); if (!(a > 0)) { window.alert("Enter the amount received."); return; } payTrackAdd(id, { kind: "received", amount: a, date: d }); reopen(); };
       const rm = document.getElementById("pdRemarkBtn"); if (rm) rm.onclick = () => { const t = (document.getElementById("pdRemark").value || "").trim(); if (!t) { window.alert("Enter a remark."); return; } payTrackAdd(id, { kind: "remark", text: t }); reopen(); };
     }
@@ -3192,7 +3190,7 @@
   // ---- Excel / CSV import (append) + template ----
   // Import = only the basic install record. Commitment dates, received amounts
   // and remarks are added in the dashboard afterwards (kept as history).
-  const PAY_HEADERS = ["Customer", "Product", "Invoice No.", "Invoice Date", "Category", "HQ", "Sales Person", "Sales Value", "Machine", "Install Date", "EMI"];
+  const PAY_HEADERS = ["Customer", "Product", "Invoice No.", "Invoice Date", "Category", "HQ", "Sales Person", "Sales Value", "Machine", "Install Date", "EMI", "Committed Date", "Committed Value"];
   function payNormDate(v) {
     if (!v) return "";
     if (v instanceof Date && !isNaN(v)) {
@@ -3230,6 +3228,7 @@
       salesValue: payNum(g("salesvalue", "salevalue", "sales", "dealvalue", "ordervalue", "invoicevalue")),
       outstanding: payNum(g("outstanding", "balance", "outstandingamount")),
       committedAmount: payNum(g("committedamount", "committed", "promisedamount", "amount")),
+      committedValue: payNum(g("committedvalue", "commitvalue", "installmentamount", "nextinstallment", "commitamount")),
       received: payNum(g("received", "amountreceived", "collected", "receivedamount")),
       receivedDate: payNormDate(g("receiveddate", "paymentreceiveddate", "paymentdate", "collecteddate", "receiptdate")),
       emi: String(g("emi", "emidetails", "emiplan", "installment") || "").trim(),
@@ -3289,8 +3288,8 @@
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
   function payDownloadTemplate() {
-    const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, "Pending", "", "6 EMIs"];
-    const sample2 = ["Sample Hospital (delete this row)", "Celluma Pro", "INV-002", "2026-09-10", "Machine", "Karnataka", "Vamshi Krishna", 4500000, "Installed", "2026-09-12", "Non-EMI"];
+    const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, "Pending", "", "6 EMIs", "2026-09-28", 250000];
+    const sample2 = ["Sample Hospital (delete this row)", "Celluma Pro", "INV-002", "2026-09-10", "Machine", "Karnataka", "Vamshi Krishna", 4500000, "Installed", "2026-09-12", "Non-EMI", "2026-09-30", 4500000];
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample, sample2]);
       ws["!cols"] = PAY_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
@@ -3315,8 +3314,8 @@
       "Invoice Date": r.invoiceDate || "", "Category": r.category || "", "HQ": r.hq || "",
       "Sales Person": r.salesPerson || "", "Sales Value": payNum(r.salesValue) || 0,
       "Machine": r.machineStatus || "", "Install Date": r.installDate || "", "EMI": r.emi || "",
-      "Committed Date": r.committedDate || "", "Received": r.received || 0, "Pending": r.pending || 0,
-      "Remark": r.remark || "",
+      "Committed Date": r.committedDate || "", "Committed Value": r.commitAmount || 0,
+      "Received": r.received || 0, "Pending": r.pending || 0, "Remark": r.remark || "",
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
