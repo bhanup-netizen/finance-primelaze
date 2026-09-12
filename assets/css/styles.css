@@ -443,6 +443,11 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 .kpi .kpi-label { font-size: 12.5px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
 .kpi .kpi-value { font-size: 34px; font-weight: 800; letter-spacing: -1px; margin: 6px 0 2px; }
 .kpi .kpi-note { font-size: 12.5px; color: var(--text-2); }
+.kpi .kpi-sub { font-size: 12.5px; color: var(--text-2); margin-top: 1px; }
+/* Finance summary cards: label on top, big value, sub-note under it. */
+.pay-kpis .kpi { padding: 16px 18px; }
+.pay-kpis .kpi-value { font-size: 30px; margin: 4px 0 2px; }
+@media (max-width: 680px) { .pay-kpis .kpi-value { font-size: 24px; } }
 
 .stat-row { display: flex; flex-wrap: wrap; gap: 10px 22px; }
 .stat { display: flex; flex-direction: column; }

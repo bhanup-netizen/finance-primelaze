@@ -2840,9 +2840,8 @@
       { cls: "k-bad", label: "Committed in " + label, value: rupeeShort(committedThisMonth), note: "due to come this month" },
       { cls: "k-good", label: "Received in " + label, value: rupeeShort(receivedThisMonth), note: "collected this month" },
     ];
-    return `<div class="grid kpi-grid">${cards.map((k) => `
-      <div class="kpi ${k.cls}"><div class="kpi-value">${k.value}</div>
-      <div class="kpi-label">${esc(k.label)}</div><div class="kpi-note">${esc(k.note)}</div></div>`).join("")}</div>`;
+    return `<div class="grid kpi-grid pay-kpis">${cards.map((k) => `
+      <div class="card kpi ${k.cls}"><div class="kpi-label">${esc(k.label)}</div><div class="kpi-value">${k.value}</div><div class="kpi-sub">${esc(k.note)}</div></div>`).join("")}</div>`;
   }
 
   // Status chips (also act as filters) with count + pending amount each.
@@ -3403,6 +3402,7 @@
       <div id="payKpis">${payKpis(rows0)}</div>
       <div class="controls" style="margin-top:14px">
         <label class="ord-field"><span>Month</span><select id="payMonth" class="select" title="Show sales / commitments / receipts for one month"><option value="">All months</option>${payMonthsInData(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <input id="paySearch" class="search" type="search" placeholder="Search customer, product, rep…" value="${esc(payFilter.q)}">
         <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
