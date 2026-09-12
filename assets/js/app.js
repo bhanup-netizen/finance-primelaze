@@ -2705,6 +2705,9 @@
     grey: { label: "No date", cls: "pay-grey" },
   };
   const PAY_ORDER = ["red", "yellow", "blue", "grey", "green"];
+  // Fresh-start baseline: every record's commitment date starts here (so nothing
+  // is overdue) until Finance sets a new "Next payment commitment date".
+  const PAY_BASELINE_COMMIT = "2026-09-28";
   const canEditPayments = () => isAdmin(); // full/page admins can upload
 
   const payToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -2738,8 +2741,11 @@
     const recEvents = hist.filter((h) => h.kind === "received");
     const received = recEvents.length ? recEvents.reduce((a, h) => a + (payNum(h.amount) || 0), 0) : payNum(r.received);
     // Committed date = the latest commitment Finance set in the dashboard.
+    // Fresh start: until Finance sets one, everything is baselined to
+    // PAY_BASELINE_COMMIT (28 Sep 2026) so nothing shows as overdue. Past
+    // imported dates are ignored for the status; new commitments override it.
     const commitEvents = hist.filter((h) => h.kind === "commit" && h.date);
-    const committedDate = commitEvents.length ? commitEvents[commitEvents.length - 1].date : (r.committedDate || "");
+    const committedDate = commitEvents.length ? commitEvents[commitEvents.length - 1].date : PAY_BASELINE_COMMIT;
     // Latest remark (full history kept in the record's timeline).
     const remEvents = hist.filter((h) => h.kind === "remark" && h.text);
     const remark = remEvents.length ? remEvents[remEvents.length - 1].text : (r.remark || "");
