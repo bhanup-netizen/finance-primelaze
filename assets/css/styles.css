@@ -142,6 +142,8 @@ tr.pay-rowlink:hover td { background: var(--surface-2); }
 .pay-act-row input { padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; flex: 1 1 120px; min-width: 0; }
 .pay-act-row .mini-btn { flex: 0 0 auto; padding: 8px 14px; }
 .pay-hist li { font-size: 13px; }
+.pay-overdue { color: var(--bad); font-weight: 700; }
+.pay-od { display: inline-block; font-size: 10px; font-weight: 700; color: #fff; background: var(--bad); padding: 1px 6px; border-radius: 10px; margin-left: 4px; white-space: nowrap; }
 /* Expense tab — category / payee breakdown bars + transaction table */
 .exp-break { display: flex; flex-direction: column; gap: 7px; }
 .exp-row { display: grid; grid-template-columns: minmax(120px, 1.4fr) 3fr auto 42px; align-items: center; gap: 10px; font-size: 13px; }

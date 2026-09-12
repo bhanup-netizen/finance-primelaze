@@ -2705,9 +2705,6 @@
     grey: { label: "No date", cls: "pay-grey" },
   };
   const PAY_ORDER = ["red", "yellow", "blue", "grey", "green"];
-  // Commitment months offered in the filter. Add the next month here as it
-  // starts (e.g. { key: "2026-10", label: "Oct 2026" }, then Nov, …).
-  const PAY_COMMIT_MONTHS = [{ key: "2026-09", label: "Sept 2026" }];
   const canEditPayments = () => isAdmin(); // full/page admins can upload
 
   const payToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -2731,6 +2728,13 @@
     const s = new Set();
     rows.forEach((r) => { const c = payMonthKey(r.committedDate); if (c) s.add(c); const rd = payMonthKey(r.receivedDate); if (rd) s.add(rd); });
     return Array.from(s).sort().reverse();
+  }
+  // Commitment months present in the data (from next-commitment dates only),
+  // oldest first — grows automatically as commitments for future months are set.
+  function payCommitMonths(rows) {
+    const s = new Set();
+    rows.forEach((r) => { const m = payMonthKey(r.committedDate); if (m) s.add(m); });
+    return Array.from(s).sort();
   }
   function payEnrich(r) {
     const id = payRowId(r);
@@ -2801,9 +2805,10 @@
       if (payFilter.product && d.product !== payFilter.product) return false;
       // Commitment month: show records whose next-commitment date is in the month.
       if (payFilter.month && payMonthKey(d.committedDate) !== payFilter.month) return false;
-      // Fulfilment: fully collected (pending <= 0) vs still pending.
+      // Fulfilment: fully collected / still pending / overdue.
       if (payFilter.fulfil === "yes" && d.pending > 0) return false;
       if (payFilter.fulfil === "no" && d.pending <= 0) return false;
+      if (payFilter.fulfil === "overdue" && d.status !== "red") return false;
       // 30-day due filter: Consumables & Esthemax by due days; Machines by
       // install status (Pending = below 30 group, Installed = above 30 group).
       if (payFilter.due) {
@@ -2943,7 +2948,7 @@
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
         <td>${inst}</td>
         <td class="num">${r.received ? rupee(r.received) : "<span class='t-muted'>—</span>"}</td>
-        <td class="num">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}</td></tr>`;
+        <td class="num${r.status === "red" ? " pay-overdue" : ""}">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}${r.status === "red" ? ` <span class="pay-od">⚠ ${r.daysOverdue}d overdue</span>` : ""}</td></tr>`;
     }).join("");
   }
 
@@ -3144,6 +3149,7 @@
       if (except !== "month" && f.month && payMonthKey(d.committedDate) !== f.month) return false;
       if (except !== "fulfil" && f.fulfil === "yes" && d.pending > 0) return false;
       if (except !== "fulfil" && f.fulfil === "no" && d.pending <= 0) return false;
+      if (except !== "fulfil" && f.fulfil === "overdue" && d.status !== "red") return false;
       return true;
     });
   }
@@ -3159,10 +3165,12 @@
     fill("payCat", payUniq(payRowsExcept("cat"), "category"), payFilter.cat);
     fill("paySp", payUniq(payRowsExcept("sp"), "salesPerson"), payFilter.sp, spLabel);
     fill("payProduct", payUniq(payRowsExcept("product"), "product"), payFilter.product);
-    // Commitment-month options are a fixed, controlled list (not derived).
+    // Commitment-month options grow automatically from the commitment dates set.
     const ms = document.getElementById("payMonth");
     if (ms) {
-      ms.innerHTML = `<option value="">All</option>` + PAY_COMMIT_MONTHS.map((m) => `<option value="${m.key}"${payFilter.month === m.key ? " selected" : ""}>${esc(m.label)}</option>`).join("");
+      const months = payCommitMonths(payRowsExcept("month"));
+      const list = months.slice(); if (payFilter.month && list.indexOf(payFilter.month) < 0) list.push(payFilter.month);
+      ms.innerHTML = `<option value="">All</option>` + list.map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("");
       ms.value = payFilter.month || "";
     }
   }
@@ -3447,8 +3455,8 @@
       </div>
       <div id="payKpis">${payKpis(rows0)}</div>
       <div class="controls" style="margin-top:14px">
-        <label class="ord-field"><span>Commitment Month</span><select id="payMonth" class="select" title="Show records whose next-commitment date is in this month"><option value="">All</option>${PAY_COMMIT_MONTHS.map((m) => `<option value="${m.key}"${payFilter.month === m.key ? " selected" : ""}>${esc(m.label)}</option>`).join("")}</select></label>
-        <label class="ord-field"><span>Fulfilment</span><select id="payFulfil" class="select"><option value="">All</option><option value="no"${payFilter.fulfil === "no" ? " selected" : ""}>Not fulfilled</option><option value="yes"${payFilter.fulfil === "yes" ? " selected" : ""}>Fulfilled</option></select></label>
+        <label class="ord-field"><span>Commitment Month</span><select id="payMonth" class="select" title="Show records whose next-commitment date is in this month"><option value="">All</option>${payCommitMonths(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Fulfilment</span><select id="payFulfil" class="select"><option value="">All</option><option value="no"${payFilter.fulfil === "no" ? " selected" : ""}>Not fulfilled</option><option value="overdue"${payFilter.fulfil === "overdue" ? " selected" : ""}>Overdue</option><option value="yes"${payFilter.fulfil === "yes" ? " selected" : ""}>Fulfilled</option></select></label>
         <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Category</span><select id="payCat" class="select"><option value="">All</option>${payUniq(rows0, "category").map((v) => `<option value="${esc(v)}"${v === payFilter.cat ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Product</span><select id="payProduct" class="select"><option value="">All</option>${payUniq(rows0, "product").map((v) => `<option value="${esc(v)}"${v === payFilter.product ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
