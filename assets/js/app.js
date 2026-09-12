@@ -2967,7 +2967,7 @@
     const evLine = (h) => {
       const when = esc(fmtWhen(h.at)); const by = h.by ? " · " + esc(h.by) : "";
       if (h.kind === "received") return `<li><span class="peh-when">${when}</span> — <b>Received ${rupee(payNum(h.amount))}</b>${h.date ? " on " + esc(fmtDate(h.date)) : ""}${by}</li>`;
-      if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Commitment date ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
+      if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Next payment committed for ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       if (h.kind === "install") return `<li><span class="peh-when">${when}</span> — <b>Machine installed ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       return `<li><span class="peh-when">${when}</span> — ${esc(h.text || "")}${by}</li>`;
     };
@@ -2985,10 +2985,10 @@
         ${info("Machine", esc(r.machineStatus || ""))}
         ${info("EMI", esc(r.emi || ""))}
       </div>
-      <div class="ld-meta"><b>Installed:</b> ${r.installDate ? esc(fmtDate(r.installDate)) : "NA"} · <b>Committed:</b> ${r.committedDate ? esc(fmtDate(r.committedDate)) : "—"} · <b>Received:</b> ${rupee(r.received)} · <b>Pending:</b> ${r.pending ? rupee(r.pending) : "₹0"}</div>
+      <div class="ld-meta"><b>Installed:</b> ${r.installDate ? esc(fmtDate(r.installDate)) : "NA"} · <b>Next commitment:</b> ${r.committedDate ? esc(fmtDate(r.committedDate)) : "—"} · <b>Received:</b> ${rupee(r.received)} · <b>Pending:</b> ${r.pending ? rupee(r.pending) : "₹0"}</div>
       ${admin ? `<div class="pay-actions">
         <div class="pay-act"><label>Machine installed date</label><span class="pay-act-row"><input type="date" id="pdInstall" value="${esc(r.installDate || "")}"><button type="button" class="mini-btn" id="pdInstallBtn">Save</button></span></div>
-        <div class="pay-act"><label>Set commitment date</label><span class="pay-act-row"><input type="date" id="pdCommit"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
+        <div class="pay-act"><label>Next payment commitment date</label><span class="pay-act-row"><input type="date" id="pdCommit"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
         <div class="pay-act"><label>Record payment received</label><span class="pay-act-row"><input type="number" id="pdRecvAmt" placeholder="₹ amount"><input type="date" id="pdRecvDate" value="${esc(leadToday())}"><button type="button" class="mini-btn" id="pdRecvBtn">Add</button></span></div>
         <div class="pay-act"><label>Add remark</label><span class="pay-act-row"><input type="text" id="pdRemark" placeholder="note / follow-up"><button type="button" class="mini-btn" id="pdRemarkBtn">Add</button></span></div>
       </div>` : ""}
