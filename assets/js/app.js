@@ -2698,7 +2698,7 @@
   // (Going forward, whoever uploads should keep one consistent spelling.)
   function paySpMerge(name) {
     const n = String(name || "").toLowerCase().replace(/[^a-z]/g, "");
-    if (n.indexOf("vamsi") >= 0 || n.indexOf("vamshi") >= 0) return "Vamsi";
+    if (n.indexOf("vamsi") >= 0 || n.indexOf("vamshi") >= 0) return "Vamshi Krishna";
     return null;
   }
   // Committed-date correction: any Aug or Sep 2026 date is booked to 28-Sep-2026
@@ -2720,7 +2720,10 @@
     let pending;
     if (out > 0 && (ca === 0 || out !== ca)) pending = out;                 // net balance given
     else pending = Math.max(Math.max(ca, out) - received, 0);              // gross − received
-    const committed = pending + received;                                  // total billed/committed
+    // Committed = the sheet's Committed Amount column when it's filled in,
+    // otherwise derive it (pending + received). This uses the real committed
+    // figure the finance sheet provides rather than always inferring it.
+    const committed = ca > 0 ? ca : pending + received;                     // total billed/committed
     let status = "grey", daysOverdue = 0;
     if (committed <= 0) status = "grey";
     else if (pending <= 0) status = "green";       // fully collected
@@ -2741,7 +2744,9 @@
     const machineStatus = /install/i.test(ms) ? "Installed" : /pend/i.test(ms) ? "Pending" : "";
     // Normalize the salesperson to the proper roster name (imports + base data),
     // merging known spelling variants (e.g. Vamsi / Vamshi Krishna) into one.
-    const salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
+    // Check both the raw value and the roster-normalised value so no variant slips through.
+    let salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
+    salesPerson = paySpMerge(salesPerson) || salesPerson;
     return Object.assign({}, r, { salesPerson, committed, received, pending, status, daysOverdue, dueDays, machineStatus });
   }
   const payAll = () => {
@@ -2770,9 +2775,11 @@
       if (payFilter.emi === "nonemi" && String(d.emi || "").trim()) return false;
       // Date range: show a row if its COMMITTED date OR its RECEIVED date falls
       // in the window (so you can see what was committed or collected in that
-      // period). Rows with neither date in range are hidden.
+      // period). A reversed range (from > to) is auto-swapped so it still works.
       if (payFilter.from || payFilter.to) {
-        const inRange = (dt) => dt && (!payFilter.from || dt >= payFilter.from) && (!payFilter.to || dt <= payFilter.to);
+        let lo = payFilter.from, hi = payFilter.to;
+        if (lo && hi && lo > hi) { const t = lo; lo = hi; hi = t; }
+        const inRange = (dt) => dt && (!lo || dt >= lo) && (!hi || dt <= hi);
         const cd = payCommitCd(d);
         const rd = d.receivedDate ? String(d.receivedDate).slice(0, 10) : "";
         if (!(inRange(cd) || inRange(rd))) return false;
