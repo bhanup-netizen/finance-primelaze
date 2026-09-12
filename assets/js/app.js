@@ -2823,15 +2823,22 @@
   }
 
   function payKpis(rows) {
-    const sum = (f) => rows.reduce((a, r) => a + payNum(r[f]), 0);
-    const committed = sum("committed"), received = sum("received"), pending = sum("pending");
-    const overdue = rows.filter((r) => r.status === "red");
-    const overdueAmt = overdue.reduce((a, r) => a + r.pending, 0);
+    // "This month" = the month picked in the filter, else the current month.
+    const targetMonth = payFilter.month || new Date().toISOString().slice(0, 7);
+    const label = payMonthLabel(targetMonth);
+    const totalSold = rows.length;
+    const pending = rows.reduce((a, r) => a + r.pending, 0);
+    // Money committed to come in this month = pending on records whose
+    // commitment date falls in the month.
+    const committedThisMonth = rows.reduce((a, r) => a + (payMonthKey(r.committedDate) === targetMonth ? r.pending : 0), 0);
+    // Money already collected this month = payments recorded with a date in the month.
+    let receivedThisMonth = 0;
+    rows.forEach((r) => (r.history || []).forEach((h) => { if (h.kind === "received" && payMonthKey(h.date) === targetMonth) receivedThisMonth += payNum(h.amount) || 0; }));
     const cards = [
-      { cls: "", label: "Committed", value: rupeeShort(committed), note: rows.length + " commitments" },
-      { cls: "k-good", label: "Received", value: rupeeShort(received), note: committed ? Math.round(received / committed * 100) + "% of committed" : "—" },
-      { cls: "k-warn", label: "Pending", value: rupeeShort(pending), note: "yet to collect" },
-      { cls: "k-bad", label: "Overdue", value: rupeeShort(overdueAmt), note: overdue.length + " past due" },
+      { cls: "", label: "Total sold", value: totalSold, note: "machines / items" },
+      { cls: "k-warn", label: "Total pending", value: rupeeShort(pending), note: "yet to collect" },
+      { cls: "k-bad", label: "Committed in " + label, value: rupeeShort(committedThisMonth), note: "due to come this month" },
+      { cls: "k-good", label: "Received in " + label, value: rupeeShort(receivedThisMonth), note: "collected this month" },
     ];
     return `<div class="grid kpi-grid">${cards.map((k) => `
       <div class="kpi ${k.cls}"><div class="kpi-value">${k.value}</div>
@@ -3394,15 +3401,9 @@
         <div class="callout" style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:14px">📅 <span><b>Period of this data:</b> ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records</span></div>
       </div>
       <div id="payKpis">${payKpis(rows0)}</div>
-      <div id="payChips">${payStatusChips(rows0)}</div>
       <div class="controls" style="margin-top:14px">
-        <input id="paySearch" class="search" type="search" placeholder="Search customer, HQ, rep, remark…" value="${esc(payFilter.q)}">
-        ${sel("payCat", payFilter.cat, payUniq(rows0, "category"), "Category")}
-        ${sel("payHq", payFilter.hq, payUniq(rows0, "hq"), "HQ")}
-        <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
-        <label class="ord-field"><span>Status</span><select id="payStatusSel" class="select"><option value="">All</option>${PAY_ORDER.map((s) => `<option value="${s}"${payFilter.status === s ? " selected" : ""}>${esc(PAY_STATUS[s].label)}</option>`).join("")}</select></label>
-        <label class="ord-field"><span>Due period</span><select id="payDueSel" class="select"><option value="">All</option><option value="below30"${payFilter.due === "below30" ? " selected" : ""}>Below 30 days / Pending machines</option><option value="above30"${payFilter.due === "above30" ? " selected" : ""}>Above 30 days / Installed machines</option></select></label>
-        <label class="ord-field"><span>Month</span><select id="payMonth" class="select" title="Show commitments / receipts for one month"><option value="">All months</option>${payMonthsInData(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Month</span><select id="payMonth" class="select" title="Show sales / commitments / receipts for one month"><option value="">All months</option>${payMonthsInData(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
+        <input id="paySearch" class="search" type="search" placeholder="Search customer, product, rep…" value="${esc(payFilter.q)}">
         <button id="payApply" class="dl-btn" type="button">Apply</button>
         <button id="payClearFilters" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
