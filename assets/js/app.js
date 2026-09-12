@@ -2741,6 +2741,10 @@
     // Latest remark (full history kept in the record's timeline).
     const remEvents = hist.filter((h) => h.kind === "remark" && h.text);
     const remark = remEvents.length ? remEvents[remEvents.length - 1].text : (r.remark || "");
+    // Machine installed date — set in the dashboard when the machine is installed
+    // (falls back to an imported install-date column if present).
+    const instEvents = hist.filter((h) => h.kind === "install" && h.date);
+    const installDate = instEvents.length ? instEvents[instEvents.length - 1].date : (r.installDate || "");
     const committed = sv;                              // total deal value = sale value
     const pending = Math.max(sv - received, 0);        // balance still to collect
     let status = "grey", daysOverdue = 0;
@@ -2759,7 +2763,7 @@
     // Normalize the salesperson to the proper roster name, merging spelling variants.
     let salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
     salesPerson = paySpMerge(salesPerson) || salesPerson;
-    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, remark, status, daysOverdue, dueDays, machineStatus, history: hist });
+    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, remark, installDate, status, daysOverdue, dueDays, machineStatus, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -2895,7 +2899,7 @@
       case 1: return r.product || "";
       case 2: return r.salesPerson || "";
       case 3: return r.salesValue ? String(r.salesValue) : "";
-      case 4: return r.machineStatus || "";
+      case 4: return r.installDate ? fmtDate(r.installDate) : "NA";
       case 5: return String(r.received || "");
       case 6: return String(r.pending || "");
       default: return "";
@@ -2921,14 +2925,13 @@
     });
     if (!sorted.length) return `<tr><td colspan="7" class="empty" style="text-align:center;padding:18px">No records match the current filters.</td></tr>`;
     return sorted.map((r) => {
-      const inst = r.machineStatus;
-      const instBadge = inst ? `<span class="pay-badge ${inst === "Installed" ? "pay-green" : "pay-yellow"}">${esc(inst)}</span>` : "<span class='t-muted'>—</span>";
+      const inst = r.installDate ? esc(fmtDate(r.installDate)) : "<span class='t-muted'>NA</span>";
       return `<tr class="pay-rowlink" data-payid="${esc(payRowId(r))}">
         <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button></td>
         <td>${r.product ? esc(r.product) : "<span class='t-muted'>—</span>"}</td>
         <td>${esc(r.salesPerson || "—")}</td>
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
-        <td>${instBadge}</td>
+        <td>${inst}</td>
         <td class="num">${r.received ? rupee(r.received) : "<span class='t-muted'>—</span>"}</td>
         <td class="num">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}</td></tr>`;
     }).join("");
@@ -2959,6 +2962,7 @@
       const when = esc(fmtWhen(h.at)); const by = h.by ? " · " + esc(h.by) : "";
       if (h.kind === "received") return `<li><span class="peh-when">${when}</span> — <b>Received ${rupee(payNum(h.amount))}</b>${h.date ? " on " + esc(fmtDate(h.date)) : ""}${by}</li>`;
       if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Commitment date ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
+      if (h.kind === "install") return `<li><span class="peh-when">${when}</span> — <b>Machine installed ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       return `<li><span class="peh-when">${when}</span> — ${esc(h.text || "")}${by}</li>`;
     };
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
@@ -2975,8 +2979,9 @@
         ${info("Machine", esc(r.machineStatus || ""))}
         ${info("EMI", esc(r.emi || ""))}
       </div>
-      <div class="ld-meta"><b>Committed:</b> ${r.committedDate ? esc(fmtDate(r.committedDate)) : "—"} · <b>Received:</b> ${rupee(r.received)} · <b>Pending:</b> ${r.pending ? rupee(r.pending) : "₹0"}</div>
+      <div class="ld-meta"><b>Installed:</b> ${r.installDate ? esc(fmtDate(r.installDate)) : "NA"} · <b>Committed:</b> ${r.committedDate ? esc(fmtDate(r.committedDate)) : "—"} · <b>Received:</b> ${rupee(r.received)} · <b>Pending:</b> ${r.pending ? rupee(r.pending) : "₹0"}</div>
       ${admin ? `<div class="pay-actions">
+        <div class="pay-act"><label>Machine installed date</label><span class="pay-act-row"><input type="date" id="pdInstall" value="${esc(r.installDate || "")}"><button type="button" class="mini-btn" id="pdInstallBtn">Save</button></span></div>
         <div class="pay-act"><label>Set commitment date</label><span class="pay-act-row"><input type="date" id="pdCommit"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
         <div class="pay-act"><label>Record payment received</label><span class="pay-act-row"><input type="number" id="pdRecvAmt" placeholder="₹ amount"><input type="date" id="pdRecvDate" value="${esc(leadToday())}"><button type="button" class="mini-btn" id="pdRecvBtn">Add</button></span></div>
         <div class="pay-act"><label>Add remark</label><span class="pay-act-row"><input type="text" id="pdRemark" placeholder="note / follow-up"><button type="button" class="mini-btn" id="pdRemarkBtn">Add</button></span></div>
@@ -2991,6 +2996,7 @@
     document.getElementById("pdClose").onclick = close;
     const reopen = () => { close(); payDetailDialog(id); payRepaint(); };
     if (admin) {
+      const ib = document.getElementById("pdInstallBtn"); if (ib) ib.onclick = () => { const d = (document.getElementById("pdInstall").value || "").trim(); if (!d) { window.alert("Pick the install date."); return; } payTrackAdd(id, { kind: "install", date: d }); reopen(); };
       const cb = document.getElementById("pdCommitBtn"); if (cb) cb.onclick = () => { const d = (document.getElementById("pdCommit").value || "").trim(); if (!d) { window.alert("Pick a commitment date."); return; } payTrackAdd(id, { kind: "commit", date: d }); reopen(); };
       const rb = document.getElementById("pdRecvBtn"); if (rb) rb.onclick = () => { const a = parseFloat(String(document.getElementById("pdRecvAmt").value).replace(/[^0-9.]/g, "")) || 0; const d = (document.getElementById("pdRecvDate").value || "").trim(); if (!(a > 0)) { window.alert("Enter the amount received."); return; } payTrackAdd(id, { kind: "received", amount: a, date: d }); reopen(); };
       const rm = document.getElementById("pdRemarkBtn"); if (rm) rm.onclick = () => { const t = (document.getElementById("pdRemark").value || "").trim(); if (!t) { window.alert("Enter a remark."); return; } payTrackAdd(id, { kind: "remark", text: t }); reopen(); };
@@ -3130,7 +3136,7 @@
   // ---- Excel / CSV import (append) + template ----
   // Import = only the basic install record. Commitment dates, received amounts
   // and remarks are added in the dashboard afterwards (kept as history).
-  const PAY_HEADERS = ["Customer", "Product", "Invoice No.", "Invoice Date", "Category", "HQ", "Sales Person", "Sales Value", "Machine", "EMI"];
+  const PAY_HEADERS = ["Customer", "Product", "Invoice No.", "Invoice Date", "Category", "HQ", "Sales Person", "Sales Value", "Machine", "Install Date", "EMI"];
   function payNormDate(v) {
     if (!v) return "";
     if (v instanceof Date && !isNaN(v)) {
@@ -3161,6 +3167,7 @@
       invoiceDate: payNormDate(g("invoicedate", "billdate", "invdate")),
       dueDays: g("duedays", "creditdays", "days", "outstandingdays"),
       machineStatus: String(g("machine", "machinestatus", "installstatus", "installationstatus", "machineinstalledorpending", "installedpending") || "").trim(),
+      installDate: payNormDate(g("installdate", "installeddate", "installationdate", "machineinstalleddate", "installedon")),
       product: String(g("productsold", "productname", "product", "item", "description", "itemname") || "").trim(),
       salesValue: payNum(g("salesvalue", "salevalue", "sales", "dealvalue", "ordervalue", "invoicevalue")),
       outstanding: payNum(g("outstanding", "balance", "outstandingamount")),
@@ -3224,8 +3231,8 @@
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
   function payDownloadTemplate() {
-    const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, "Pending", "6 EMIs"];
-    const sample2 = ["Sample Hospital (delete this row)", "Celluma Pro", "INV-002", "2026-09-10", "Machine", "Karnataka", "Vamshi Krishna", 4500000, "Installed", "Non-EMI"];
+    const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, "Pending", "", "6 EMIs"];
+    const sample2 = ["Sample Hospital (delete this row)", "Celluma Pro", "INV-002", "2026-09-10", "Machine", "Karnataka", "Vamshi Krishna", 4500000, "Installed", "2026-09-12", "Non-EMI"];
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample, sample2]);
       ws["!cols"] = PAY_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
@@ -3348,7 +3355,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table class="pay-report">
-        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Status</th><th class="num">Received</th><th class="num">Pending</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Installed on</th><th class="num">Received</th><th class="num">Pending</th></tr></thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
