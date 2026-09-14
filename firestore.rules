@@ -67,7 +67,7 @@ service cloud.firestore {
     // per-user editPages mismatches blocking legitimate challan creation).
     match /challans/{doc} {
       allow read, create, update: if isSignedIn();
-      allow delete: if canEditPage('challan');
+      allow delete: if isAdmin() || isPageEditor();
     }
 
     // User permission docs.
