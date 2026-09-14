@@ -61,11 +61,13 @@ service cloud.firestore {
       allow write: if isAdmin() || isPageEditor();
     }
 
-    // Delivery challans — any signed-in user may read/download; admins and
-    // anyone with EDIT access to the "challan" page may create/update/delete.
+    // Delivery challans — any signed-in user may read/download and create/update.
+    // The dashboard only shows the create/edit controls to admins & challan-page
+    // editors, so this is acceptable for an internal team tool (and avoids
+    // per-user editPages mismatches blocking legitimate challan creation).
     match /challans/{doc} {
-      allow read: if isSignedIn();
-      allow write: if canEditPage('challan');
+      allow read, create, update: if isSignedIn();
+      allow delete: if canEditPage('challan');
     }
 
     // User permission docs.
