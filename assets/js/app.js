@@ -5048,11 +5048,22 @@
   };
   const regDocs = {}; // "<group>:<slug>:<docType>" -> {name,url,path,size,at,by} | {url,link:true,at,by}
   const regTrack = {}; // "<group>:<slug>" -> {status, expected, actual, remarks:[{at,by,text}]}
+  const regItemEdits = {}; // "<group>:<slug>:<field>" -> corrected value for an item's own detail
   const regAdds = { cdsco: [], gem: [], products: [], celluma: [], cosmetic: [] }; // items moved/added into a tab
   const regMoved = []; // "<group>:<slug>" hidden from that tab (moved out)
   let regTab = "cdsco", regQ = "", regStatusF = "";
   const canEditReg = () => isAdmin();
   const regSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  // Effective value of an item's own field (corrected value overrides the seed).
+  const regItemVal = (g, item, field) => { const v = regItemEdits[g + ":" + regSlug(item.name) + ":" + field]; return v != null ? v : (item[field] || ""); };
+  function regItemSet(g, item, field, val) { regItemEdits[g + ":" + regSlug(item.name) + ":" + field] = val; saveEdits("Registration item " + field + " · " + item.name); }
+  // Fields a registration editor may correct, per group kind (name is the key,
+  // so it stays fixed; everything else is editable).
+  const REG_ITEM_FIELDS = {
+    device: [["generic", "Generic name"], ["models", "Models"], ["cls", "Class"], ["manufacturer", "Manufacturer"], ["country", "Country"], ["regNo", "Reg No"]],
+    cosmetic: [["type", "Type"], ["certNo", "Cert No"], ["manufacturer", "Manufacturer"], ["country", "Country"]],
+    product: [["group", "Group"], ["sku", "SKU"], ["category", "Category"], ["manufacturer", "Manufacturer"], ["country", "Country"]],
+  };
   const regBaseItems = (g) => {
     const k = regGroup(g).kind;
     if (k === "device") return window.REG_DEVICES || [];
@@ -5159,16 +5170,18 @@
       const actCell = admin ? `<input type="date" class="reg-act" data-g="${g}" data-name="${esc(it.name)}" value="${esc(tr.actual || "")}">` : (tr.actual ? esc(fmtDate(tr.actual)) : "—");
       const rmN = regRemarks(g, it).length;
       const rmBtn = `<button type="button" class="ghost-btn reg-rem-btn" data-g="${g}" data-name="${esc(it.name)}" title="Remarks &amp; history">📝 <b>${rmN}</b></button>`;
-      const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>${admin ? ` <button type="button" class="ghost-btn reg-move-btn" data-g="${g}" data-name="${esc(it.name)}" title="Move to another tab">↔</button>` : ""}`;
-      const mfrCell = `<td>${esc(it.manufacturer || "—")}${it.country ? `<div class="t-muted" title="Country of origin">${esc(it.country)}</div>` : ""}</td>`;
+      const editBtn = admin ? ` <button type="button" class="ghost-btn reg-edit-btn" data-g="${g}" data-name="${esc(it.name)}" title="Edit item details">✏</button>` : "";
+      const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>${admin ? ` <button type="button" class="ghost-btn reg-move-btn" data-g="${g}" data-name="${esc(it.name)}" title="Move to another tab">↔</button>` : ""}${editBtn}`;
+      const iv = (f) => esc(regItemVal(g, it, f) || "");
+      const mfrCell = `<td>${regItemVal(g, it, "manufacturer") ? iv("manufacturer") : "—"}${regItemVal(g, it, "country") ? `<div class="t-muted" title="Country of origin">${iv("country")}</div>` : ""}</td>`;
       let nameCols;
       if (grp.kind === "device") {
         const licLinks = REG_CDSCO_LICENCES.map((dt) => { const rec = regDocGet(g, it, dt); return rec ? `<a href="${esc(rec.url)}" target="_blank" rel="noopener" class="reg-lic-link" title="${esc(dt)}">${esc(regShortLic(dt))}</a>` : ""; }).filter(Boolean);
         const licLink = licLinks.length ? `<div class="reg-lic-row">📄 ${licLinks.join(" · ")}</div>` : "";
-        nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.generic ? `<div class="t-muted">${esc(it.generic)}</div>` : ""}${licLink}</td><td>${esc(it.models || "—")}</td><td>${it.cls ? `<span class="badge b-neutral">${esc(it.cls)}</span>` : "—"}</td>${mfrCell}`;
+        nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${regItemVal(g, it, "generic") ? `<div class="t-muted">${iv("generic")}</div>` : ""}${licLink}</td><td>${regItemVal(g, it, "models") ? iv("models") : "—"}</td><td>${regItemVal(g, it, "cls") ? `<span class="badge b-neutral">${iv("cls")}</span>` : "—"}</td>${mfrCell}`;
       }
-      else if (grp.kind === "cosmetic") nameCols = `<td class="t-name"><b>${esc(it.name)}</b></td><td>${esc(it.type || "—")}</td><td>${esc(it.certNo || "—")}</td>${mfrCell}`;
-      else nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${it.group ? `<div class="t-muted">${esc(it.group)}</div>` : ""}</td><td>${esc(it.sku || "—")}</td><td>${it.category ? `<span class="badge b-neutral">${esc(it.category)}</span>` : "—"}</td>${mfrCell}`;
+      else if (grp.kind === "cosmetic") nameCols = `<td class="t-name"><b>${esc(it.name)}</b></td><td>${regItemVal(g, it, "type") ? iv("type") : "—"}</td><td>${regItemVal(g, it, "certNo") ? iv("certNo") : "—"}</td>${mfrCell}`;
+      else nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${regItemVal(g, it, "group") ? `<div class="t-muted">${iv("group")}</div>` : ""}</td><td>${regItemVal(g, it, "sku") ? iv("sku") : "—"}</td><td>${regItemVal(g, it, "category") ? `<span class="badge b-neutral">${iv("category")}</span>` : "—"}</td>${mfrCell}`;
       return `<tr>${nameCols}<td>${statusCell}</td><td>${expCell}</td><td>${actCell}</td><td>${rmBtn}</td><td>${docBtn}</td></tr>`;
     }).join("");
   }
@@ -5192,6 +5205,37 @@
     document.querySelectorAll(".reg-rem-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regRemarksDialog(b.dataset.g, it); }));
     document.querySelectorAll(".reg-docs-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regDocsDialog(b.dataset.g, it); }));
     document.querySelectorAll(".reg-move-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regMoveDialog(b.dataset.g, it); }));
+    document.querySelectorAll(".reg-edit-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regEditItemDialog(b.dataset.g, it); }));
+  }
+  // Edit an item's own details (manufacturer, class, models, …). The name is
+  // the item's key, so it stays fixed; the rest are corrected via an overlay.
+  function regEditItemDialog(g, item) {
+    const grp = regGroup(g);
+    const fields = REG_ITEM_FIELDS[grp.kind] || REG_ITEM_FIELDS.product;
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card" style="width:min(520px,100%)">
+      <h3>Edit details — ${esc(item.name)}</h3>
+      <p class="lead-tl-sub">Correct this item's values. (The name is fixed — it links the status, dates &amp; documents. To rename, tell the admin.)</p>
+      <div class="lead-form-grid">
+        ${fields.map(([f, lbl]) => `<label>${esc(lbl)}<input type="text" id="ri_${f}" value="${esc(regItemVal(g, item, f) || "")}"></label>`).join("")}
+      </div>
+      <div class="lead-modal-actions">
+        <button type="button" class="ghost-btn" id="riCancel">Cancel</button>
+        <button type="button" class="dl-btn" id="riSave">Save details</button>
+      </div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("riCancel").onclick = close;
+    document.getElementById("riSave").onclick = () => {
+      fields.forEach(([f]) => {
+        const el = document.getElementById("ri_" + f); if (!el) return;
+        const v = (el.value || "").trim();
+        if (v !== String(regItemVal(g, item, f) || "")) regItemSet(g, item, f, v);
+      });
+      close(); regRepaint();
+    };
   }
   // Remarks + history modal for one item.
   function regRemarksDialog(g, item) {
@@ -6648,6 +6692,7 @@
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
       if (e.regDocs && typeof e.regDocs === "object") { Object.keys(regDocs).forEach((k) => delete regDocs[k]); Object.assign(regDocs, e.regDocs); }
       if (e.regTrack && typeof e.regTrack === "object") { Object.keys(regTrack).forEach((k) => delete regTrack[k]); Object.assign(regTrack, e.regTrack); }
+      if (e.regItemEdits && typeof e.regItemEdits === "object") { Object.keys(regItemEdits).forEach((k) => delete regItemEdits[k]); Object.assign(regItemEdits, e.regItemEdits); }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
@@ -6741,7 +6786,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
