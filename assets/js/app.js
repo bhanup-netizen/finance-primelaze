@@ -1322,6 +1322,16 @@
     deviceNames().forEach((n) => s.add(n));
     return Array.from(s);
   };
+  // The machines the sales team actually targets — the ONLY products offered in
+  // the HQ target / sales-achieved product pickers. The full device price book
+  // and Esthemax skincare SKUs are intentionally kept out so the list stays
+  // short and relevant. Any product already saved in a target is preserved.
+  const SALE_TARGET_PRODUCTS = ["Cellina PR", "Biaxis", "Vossman", "Magic Pulse", "Blaumman", "Torr RF", "Polylase", "Earbrium Glass", "Celluma"];
+  const saleTargetProducts = () => {
+    const s = new Set(SALE_TARGET_PRODUCTS);
+    Object.values(hqSpTargets).forEach((rows) => (rows || []).forEach((r) => { if (r && r.product) s.add(String(r.product).trim()); }));
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  };
   // Salesperson name suggestions for the "sold by" field (roster + refs + custom).
   const salesPeopleList = () => {
     const s = new Set();
@@ -1343,12 +1353,20 @@
     return Array.from(s).sort((a, b) => a.localeCompare(b));
   };
   const newDevices = []; // admin-added devices for the Device (price book) tab
+  // Devices seeded at the code level (always present for everyone), on top of the
+  // encrypted price book. Prices in ₹ Lakhs; Quotation is stored EXCLUDING GST.
+  const EXTRA_DEVICES = [
+    { device: "Vossman Blauman Blue laser (without Handpiece)", landingCost: null, quotation: 19, standard: 16, minimum: 15 },
+  ];
+  // GST helpers — Quotation is stored excl. GST; customer-facing column adds 5%.
+  const GST_RATE = 0.05;
+  const gstInc = (v) => (v == null || v === "" || isNaN(+v)) ? v : Math.round((+v) * (1 + GST_RATE) * 100) / 100;
   const idfor = (s) => s.replace(/[^a-z0-9]/gi, "_");
 
   // All devices available for pricing & target selection = price book + added.
   // Admin price edits (ovEdits "pdev:<device>:<field>") are merged in.
   const DEVICE_PRICE_FIELDS = ["landingCost", "quotation", "standard", "minimum"];
-  const deviceList = () => (D && D.costs ? D.costs.device : []).concat(newDevices).map((r) => {
+  const deviceList = () => (D && D.costs ? D.costs.device : []).concat(EXTRA_DEVICES).concat(newDevices).map((r) => {
     let o = null;
     DEVICE_PRICE_FIELDS.forEach((f) => { const v = ovEdits["pdev:" + r.device + ":" + f]; if (v != null) { o = o || Object.assign({}, r); o[f] = v; } });
     return o || r;
@@ -1512,7 +1530,7 @@
     const key = h.sheet;
     const list = (isEsth ? hqEsthSales : hqSales)[key] || [];
     const admin = isAdmin();
-    const prodOpts = isEsth ? esthemaxProductNames() : hqProductNames(h);
+    const prodOpts = isEsth ? esthemaxProductNames() : saleTargetProducts();
     const da = (rec, field) => `data-store="${store}" data-id="${rec.id}" data-field="${field}"`;
     const sel = (rec) => admin
       ? `<select class="sale-in" ${da(rec, "product")}><option value=""${rec.product ? "" : " selected"}>— product —</option>${prodOpts.concat(rec.product && !prodOpts.includes(rec.product) ? [rec.product] : []).map((n) => `<option${n === rec.product ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>`
@@ -1598,12 +1616,9 @@
 
   // Hide monetary (Value in Lakhs / Std Value) figures — units only on screen.
   const isMoney = (label) => /value|lakh|inr|₹/i.test(String(label));
-  // Combined product list for a target row: HQ plan products + devices + Esthemax.
+  // Product list for a target row = the curated sales-target machines only.
   function hqAllProducts(h) {
-    const s = new Set();
-    hqProductNames(h).forEach((n) => n && s.add(n));
-    esthemaxProductNames().forEach((n) => n && s.add(n));
-    return Array.from(s).sort((a, b) => a.localeCompare(b));
+    return saleTargetProducts();
   }
   function hqDetail(h) {
     const admin = isAdmin();
@@ -1793,7 +1808,7 @@
     const dg = who === "manager" ? "dmgr" : "dsp";
     const devTbl = pTable(
       [{ label: "Device" }, { label: "Standard (L)", num: 1 }, { label: "Minimum (L)", num: 1 }, { label: "Std Incentive", num: 1 }, { label: "Min Incentive", num: 1 }, { label: "Above Standard" }],
-      (D.incentives.device[who] || []).map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${ovGet(`${dg}:${r.device}:standard`, r.standard) ?? "—"}</td><td class="num">${ovGet(`${dg}:${r.device}:minimum`, r.minimum) ?? "—"}</td><td class="num">${rupee(ovGet(`${dg}:${r.device}:stdIncentive`, r.stdIncentive))}</td><td class="num">${rupee(ovGet(`${dg}:${r.device}:minIncentive`, r.minIncentive))}</td><td>${esc(ovGet(`${dg}:${r.device}:aboveStd`, r.aboveStd) || "—")}</td></tr>`).join(""));
+      (D.incentives.device[who] || []).concat(EXTRA_INC_DEVICES).map((r) => `<tr><td>${esc(r.device)}</td><td class="num">${ovGet(`${dg}:${r.device}:standard`, r.standard) ?? "—"}</td><td class="num">${ovGet(`${dg}:${r.device}:minimum`, r.minimum) ?? "—"}</td><td class="num">${rupee(ovGet(`${dg}:${r.device}:stdIncentive`, r.stdIncentive))}</td><td class="num">${rupee(ovGet(`${dg}:${r.device}:minIncentive`, r.minIncentive))}</td><td>${esc(ovGet(`${dg}:${r.device}:aboveStd`, r.aboveStd) || "—")}</td></tr>`).join(""));
     const celKey = who === "manager" ? "managerIncentive" : "salespersonIncentive";
     const celTbl = pTable(
       [{ label: "Celluma model" }, { label: "Selling", num: 1 }, { label: label + " incentive", num: 1 }],
@@ -1859,7 +1874,7 @@
     return `
       <div class="section-head">
         <h1>Incentive Plans</h1>
-        <p>Device value-slab, Celluma per-model and Esthemax tier-based incentive structures, plus the master terms &amp; conditions. All figures excl. GST; incentives paid on the Standard/selling basis.</p>
+        <p>Device value-slab, Celluma per-model and Esthemax tier-based incentive structures, plus the master terms &amp; conditions. Quotation shown includes 5% GST; Standard &amp; Minimum prices are GST-inclusive. Incentive amounts are excl. GST and paid on the Standard/selling basis.</p>
       </div>
       <div class="controls">
         <div class="seg">
@@ -1887,13 +1902,18 @@
     return termsView();
   }
 
+  // Extra device rows always shown in the incentive tables (incentive amounts
+  // left blank for admins to fill). Quotation stored EXCL GST; shown incl. GST.
+  const EXTRA_INC_DEVICES = [
+    { device: "Vossman Blauman Blue laser (without Handpiece)", quotation: 19, standard: 16, minimum: 15, stdIncentive: null, minIncentive: null, aboveStd: "" },
+  ];
   function deviceIncentive() {
     const mk = (rows, g) => {
-      const head = ["Device", "Quotation (L)", "Standard (L)", "Minimum (L)", "Std Incentive", "Min Incentive", "Above-Std"]
+      const head = ["Device", "Quotation incl. GST (L)", "Standard (L)", "Minimum (L)", "Std Incentive", "Min Incentive", "Above-Std"]
         .map((x, i) => `<th class="${i >= 1 && i <= 5 ? "num" : ""}">${x}</th>`).join("");
       const body = rows.map((r) => `<tr>
         <td class="t-name">${esc(r.device)}</td>
-        <td class="num">${r.quotation ?? "—"}</td>
+        <td class="num">${gstInc(r.quotation) ?? "—"}</td>
         ${ovNumCell(`${g}:${r.device}:standard`, r.standard)}
         ${ovNumCell(`${g}:${r.device}:minimum`, r.minimum)}
         ${ovNumCell(`${g}:${r.device}:stdIncentive`, r.stdIncentive, true)}
@@ -1902,11 +1922,12 @@
       return table(head, body);
     };
     const mgr = incMgr();
+    const note = `<div class="muted-note" style="margin-top:8px">Quotation shown <b>includes 5% GST</b>. GST is <b>already included</b> in the Standard and Minimum prices. Incentive amounts are excl. GST.</div>`;
     return `
       ${isAdmin() ? `<div class="muted-note" style="margin-bottom:8px">Admin: incentive amounts below are editable — changes save for everyone and appear in the incentive PDFs.</div>` : ""}
       ${mgr
-        ? `<div class="block"><h2>Sales Manager plan</h2>${mk(D.incentives.device.manager, "dmgr")}</div>`
-        : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson, "dsp")}</div>`}`;
+        ? `<div class="block"><h2>Sales Manager plan</h2>${mk(D.incentives.device.manager.concat(EXTRA_INC_DEVICES), "dmgr")}${note}</div>`
+        : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson.concat(EXTRA_INC_DEVICES), "dsp")}${note}</div>`}`;
   }
 
   function cellumaIncentive() {
@@ -2038,14 +2059,14 @@
   function buildPricePdf() {
     const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
     const adm = priceAdmin();
-    const devHead = [{ label: "Device" }].concat(adm ? [{ label: "Landing (L)", num: 1 }] : []).concat([{ label: "Quotation (L)", num: 1 }, { label: "Standard (L)", num: 1 }, { label: "Minimum (L)", num: 1 }]);
-    const devBody = deviceList().map((r) => `<tr><td>${esc(r.device)}</td>${adm ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}<td class="num">${r.quotation ?? "—"}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
+    const devHead = [{ label: "Device" }].concat(adm ? [{ label: "Landing (L)", num: 1 }] : []).concat([{ label: "Quotation incl. GST (L)", num: 1 }, { label: "Standard (L)", num: 1 }, { label: "Minimum (L)", num: 1 }]);
+    const devBody = deviceList().map((r) => `<tr><td>${esc(r.device)}</td>${adm ? `<td class="num">${r.landingCost ?? "—"}</td>` : ""}<td class="num">${gstInc(r.quotation) ?? "—"}</td><td class="num">${r.standard ?? "—"}</td><td class="num">${r.minimum ?? "—"}</td></tr>`).join("");
     const celBody = (D.costs.celluma || []).map((r) => `<tr><td>${esc(r.model)}</td><td class="num">${rupee(r.quotation)}</td><td class="num">${rupee(r.selling)}</td></tr>`).join("");
     return `
       <div class="p-section">
         <h1>${esc(D.meta.company)} — Price List</h1>
         <div class="p-sub">Devices &amp; Celluma · FY 2026-27</div>
-        <p class="p-meta">Generated ${esc(stamp)} · All values excl. GST${adm ? "" : " · Selling prices"}</p>
+        <p class="p-meta">Generated ${esc(stamp)} · Quotation incl. 5% GST · Standard &amp; Minimum GST-inclusive${adm ? "" : " · Selling prices"}</p>
         <h2>Devices (₹ Lakhs)</h2>${pTable(devHead, devBody)}
         <h2>Celluma (₹)</h2>${pTable([{ label: "Model" }, { label: "Quotation", num: 1 }, { label: "Selling", num: 1 }], celBody)}
       </div>`;
@@ -2084,7 +2105,7 @@
     return `
       <div class="section-head">
         <h1>Device</h1>
-        <p>${priceAdmin() ? "Admin view — landing cost plus quotation, standard and minimum prices, with a profit calculator." : "Sales view — quotation, standard and minimum selling prices."} All values excl. GST.</p>
+        <p>${priceAdmin() ? "Admin view — landing cost plus quotation, standard and minimum prices, with a profit calculator." : "Sales view — quotation, standard and minimum selling prices."} Quotation shown includes 5% GST; Standard &amp; Minimum prices are GST-inclusive.</p>
       </div>
       <div class="controls">
         ${priceModeToggle()}
@@ -2110,12 +2131,23 @@
       return `<div class="callout teal">Quotation includes the +₹50K FY26-27 uplift. Selling = standard customer price. Excl. GST.</div>${table(head, body)}`;
     }
     // devices
-    const cols = ["Device"].concat(adm ? ["Landing Cost (L)"] : []).concat(["Quotation (L)", "Standard (L)", "Minimum (L)"]);
+    // Quotation is stored EXCL GST. Admins edit that base value (with the
+    // GST-inclusive amount shown beneath); everyone else sees the incl-GST figure.
+    const pQuoteCell = (r) => {
+      const key = `pdev:${r.device}:quotation`;
+      const base = ovGet(key, r.quotation);
+      const inc = gstInc(base);
+      const incTxt = (inc == null || inc === "") ? "—" : esc(inc);
+      return isAdmin()
+        ? `<td class="num"><input class="ov-in" data-key="${esc(key)}" data-t="num" type="number" step="any" value="${base == null || base === "" ? "" : esc(base)}" style="max-width:108px"><div class="cell-sub">incl. GST: ${incTxt}</div></td>`
+        : `<td class="num">${incTxt}</td>`;
+    };
+    const cols = ["Device"].concat(adm ? ["Landing Cost (L)"] : []).concat(["Quotation incl. GST (L)", "Standard (L)", "Minimum (L)"]);
     const head = cols.map((x, i) => `<th class="${i >= 1 ? "num" : ""}">${x}</th>`).join("");
     const body = deviceList().map((r) => `<tr>
       <td class="t-name">${esc(r.device)}</td>
       ${adm ? ovNumCell(`pdev:${r.device}:landingCost`, r.landingCost) : ""}
-      ${ovNumCell(`pdev:${r.device}:quotation`, r.quotation)}
+      ${pQuoteCell(r)}
       ${ovNumCell(`pdev:${r.device}:standard`, r.standard)}
       ${ovNumCell(`pdev:${r.device}:minimum`, r.minimum)}</tr>`).join("");
     const addForm = (adm && isAdmin()) ? `
@@ -2134,7 +2166,8 @@
         </form>
       </div>` : "";
     const calc = adm ? profitCalcHtml() : "";
-    return `<div class="callout">${adm ? "Landing = EXW + ~30% (customs + transport). " : ""}Values in ₹ Lakhs, excl. GST.</div>${table(head, body)}${calc}${addForm}`;
+    const gstNote = `<div class="muted-note" style="margin-top:8px">Note: the Quotation column <b>includes 5% GST</b>. GST is <b>already included</b> in the Standard and Minimum prices.</div>`;
+    return `<div class="callout">${adm ? "Landing = EXW + ~30% (customs + transport). " : ""}Values in ₹ Lakhs. Quotation <b>includes 5% GST</b>; Standard &amp; Minimum are <b>GST-inclusive</b>.</div>${table(head, body)}${gstNote}${calc}${addForm}`;
   }
 
   function profitCalcHtml() {
@@ -2510,7 +2543,10 @@
   function demoTable() {
     const t = D.demoMachines[demoView];
     const ed = isAdmin();
-    const head = t.columns.map((c) => `<th>${esc(demoColLabel(c))}</th>`).join("");
+    // Remarks are confidential: only full admins / super admins see that column.
+    const hideRemark = !(roleIsAdmin() || isSuperAdmin());
+    const visIdx = t.columns.map((_, i) => i).filter((i) => !(hideRemark && /remark/i.test(String(t.columns[i]))));
+    const head = visIdx.map((i) => `<th>${esc(demoColLabel(t.columns[i]))}</th>`).join("");
     const scIdx = demoStatusColIdx();
     const gone = demoRemovals[demoView] || [];
     let ids = t.rows.map((_, i) => String(i)).filter((rid) => !gone.includes(+rid)).concat((demoAdds[demoView] || []).map((x) => x.id));
@@ -2519,8 +2555,8 @@
     }
     const body = ids.length
       ? ids.map((rid) =>
-          `<tr>${t.columns.map((colName, c) => demoCell(rid, c, colName, ed)).join("")}</tr>`).join("")
-      : `<tr><td colspan="${t.columns.length}" class="muted" style="text-align:center;padding:18px">No machines with status “${esc(demoFilter)}”.</td></tr>`;
+          `<tr>${visIdx.map((c) => demoCell(rid, c, t.columns[c], ed)).join("")}</tr>`).join("")
+      : `<tr><td colspan="${visIdx.length}" class="muted" style="text-align:center;padding:18px">No machines with status “${esc(demoFilter)}”.</td></tr>`;
     return table(head, body);
   }
 

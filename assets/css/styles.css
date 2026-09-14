@@ -506,6 +506,8 @@ tr.total-row:hover td { background: var(--surface-3); }
 .t-name { font-weight: 600; color: var(--text); }
 .t-muted { color: var(--text-3); font-size: 12.5px; }
 .cell-note { color: var(--text-3); font-size: 12px; }
+/* Small sub-line beneath an editable price cell (e.g. GST-inclusive amount). */
+.cell-sub { color: var(--text-3); font-size: 11px; margin-top: 2px; white-space: nowrap; }
 
 /* ---------- Badges ---------- */
 .badge {
