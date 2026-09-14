@@ -1845,7 +1845,7 @@
   const incMgr = () => incWho === "manager" && canSeeManagerInc();
   function renderIncentives() {
     if (incWho === "manager" && !canSeeManagerInc()) incWho = "sales";
-    const refresh = () => { $("#incBody").innerHTML = incBody(); wireAccordion(); wireTermsEditor(); wireOverrides(); };
+    const refresh = () => { $("#incBody").innerHTML = incBody(); wireAccordion(); wireTermsEditor(); wireOverrides(); wireIncCalc(); };
     setTimeout(() => {
       document.querySelectorAll("[data-inc]").forEach((b) => {
         b.onclick = () => {
@@ -1869,6 +1869,7 @@
       wireAccordion();
       wireTermsEditor();
       wireOverrides();
+      wireIncCalc();
     }, 0);
 
     return `
@@ -1927,7 +1928,112 @@
       ${isAdmin() ? `<div class="muted-note" style="margin-bottom:8px">Admin: incentive amounts below are editable — changes save for everyone and appear in the incentive PDFs.</div>` : ""}
       ${mgr
         ? `<div class="block"><h2>Sales Manager plan</h2>${mk(D.incentives.device.manager.concat(EXTRA_INC_DEVICES), "dmgr")}${note}</div>`
-        : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson.concat(EXTRA_INC_DEVICES), "dsp")}${note}</div>`}`;
+        : `<div class="block"><h2>Sales Person plan</h2>${mk(D.incentives.device.salesperson.concat(EXTRA_INC_DEVICES), "dsp")}${note}</div>`}
+      ${incExamples(mgr)}`;
+  }
+
+  // ---- Incentive-by-selling-price examples & calculator ----
+  // Rules (from the incentive T&C):
+  //  • Sold at / above Standard → Standard incentive + 10% of the ₹ amount above
+  //    Standard.
+  //  • Sold below Standard but at / above Minimum → the reduced Minimum incentive.
+  //  • Sold below Minimum → not eligible; payable only if management specially
+  //    approves.
+  let incExDevice = null;
+  const incRowEff = (r, g) => ({
+    device: r.device,
+    standard: +ovGet(`${g}:${r.device}:standard`, r.standard),
+    minimum: +ovGet(`${g}:${r.device}:minimum`, r.minimum),
+    stdInc: +ovGet(`${g}:${r.device}:stdIncentive`, r.stdIncentive),
+    minInc: +ovGet(`${g}:${r.device}:minIncentive`, r.minIncentive),
+  });
+  const incEligibleRows = (mgr) => {
+    const g = mgr ? "dmgr" : "dsp";
+    return (mgr ? D.incentives.device.manager : D.incentives.device.salesperson)
+      .concat(EXTRA_INC_DEVICES).map((r) => incRowEff(r, g))
+      .filter((e) => isFinite(e.standard) && isFinite(e.minimum) && isFinite(e.stdInc) && isFinite(e.minInc) && e.standard > 0);
+  };
+  // Incentive (₹) for a selling price (₹ Lakhs) given a device's effective figures.
+  function incFor(e, saleL) {
+    if (!isFinite(saleL)) return { amount: null, band: "—" };
+    if (saleL < e.minimum) return { amount: null, band: "Below Minimum — not eligible*" };
+    if (saleL >= e.standard) {
+      const bonus = Math.round((saleL - e.standard) * 10000); // 10% of the ₹ above Standard
+      return { amount: e.stdInc + bonus, band: saleL > e.standard ? "Above Standard" : "At Standard", bonus };
+    }
+    return { amount: e.minInc, band: "Below Standard (at / above Minimum)" };
+  }
+  function incExampleTable(e) {
+    const round1 = (n) => Math.round(n * 10) / 10;
+    const mid = round1((e.standard + e.minimum) / 2);
+    const rows = [
+      ["Sold above Standard", round1(e.standard + 2)],
+      ["Sold at Standard", e.standard],
+      ["Sold below Standard (above Minimum)", mid],
+      ["Sold at Minimum", e.minimum],
+      ["Sold below Minimum", round1(Math.max(e.minimum - 1, 0))],
+    ];
+    const body = rows.map(([label, saleL]) => {
+      const res = incFor(e, saleL);
+      const amt = res.amount == null
+        ? `<span class="t-muted">Nil*</span>`
+        : rupee(res.amount) + (res.bonus ? ` <span class="t-muted">(₹${inr(e.stdInc)} + ₹${inr(res.bonus)})</span>` : "");
+      return `<tr><td>${esc(label)}</td><td class="num">₹${inr(saleL, { decimals: 2 })} L</td><td>${esc(res.band)}</td><td class="num">${amt}</td></tr>`;
+    }).join("");
+    const head = ["Scenario", "Selling price", "Band", "Incentive (₹)"].map((x, i) => `<th class="${i >= 1 && i !== 2 ? "num" : ""}">${x}</th>`).join("");
+    return table(head, body);
+  }
+  function incExamples(mgr) {
+    const rows = incEligibleRows(mgr);
+    if (!rows.length) return "";
+    if (!incExDevice || !rows.some((e) => e.device === incExDevice)) incExDevice = rows[0].device;
+    const opts = rows.map((e) => `<option${e.device === incExDevice ? " selected" : ""}>${esc(e.device)}</option>`).join("");
+    return `
+      <div class="card" style="margin-top:18px">
+        <h2 style="margin-top:0">Incentive by selling price — worked examples</h2>
+        <p style="margin-top:0;color:var(--text-2)">
+          Sell <b>at or above Standard</b> → the Standard incentive <b>plus 10%</b> of the amount above Standard.
+          Sell <b>below Standard but at/above Minimum</b> → the reduced <b>Minimum</b> incentive.
+          Sell <b>below Minimum</b> → <b>not eligible</b>, and payable only if management specially approves.
+        </p>
+        <div class="ch-grid">
+          <label class="ord-field"><span>Device</span><select id="incExDev" class="select">${opts}</select></label>
+          <label class="ord-field"><span>Selling price (₹ Lakhs)</span><input id="incExPrice" type="number" step="0.01" placeholder="e.g. 17.5"></label>
+        </div>
+        <div id="incExOut" class="stat-row" style="margin-top:12px"></div>
+        <div id="incExTable" style="margin-top:14px"></div>
+        <div class="muted-note" style="margin-top:8px">
+          Amounts are illustrative, excl. GST, and per unit sold. <b>*Below Minimum:</b> no incentive unless management specially approves.
+          Above-Standard bonus = 10% of the ₹ sold above Standard (₹1 L above Standard = ₹10,000 extra).
+        </div>
+      </div>`;
+  }
+  function wireIncCalc() {
+    const sel = document.getElementById("incExDev");
+    if (!sel) return;
+    const price = document.getElementById("incExPrice");
+    const out = document.getElementById("incExOut");
+    const tbl = document.getElementById("incExTable");
+    const rows = incEligibleRows(incMgr());
+    const find = () => rows.find((e) => e.device === sel.value) || rows[0];
+    const paint = () => {
+      const e = find(); if (!e) return;
+      tbl.innerHTML = incExampleTable(e);
+      const p = parseFloat(price.value);
+      if (isNaN(p)) {
+        out.innerHTML = `<div class="stat"><b>Std ₹${inr(e.standard, { decimals: 2 })} L · Min ₹${inr(e.minimum, { decimals: 2 })} L</b><span>Enter a selling price to calculate the incentive</span></div>`;
+        return;
+      }
+      const res = incFor(e, p);
+      const cls = res.amount == null ? "k-warn" : "k-good";
+      out.innerHTML = `
+        <div class="stat ${cls}"><b>${res.amount == null ? "Nil*" : "₹" + inr(res.amount)}</b><span>Incentive at ₹${inr(p, { decimals: 2 })} L</span></div>
+        <div class="stat"><b>${esc(res.band)}</b><span>Band</span></div>
+        <div class="stat"><b>₹${inr(e.standard, { decimals: 2 })} L / ₹${inr(e.minimum, { decimals: 2 })} L</b><span>Standard / Minimum</span></div>`;
+    };
+    sel.onchange = () => { incExDevice = sel.value; paint(); };
+    price.oninput = paint;
+    paint();
   }
 
   function cellumaIncentive() {
