@@ -5692,8 +5692,9 @@
         <h2 style="margin-top:8px">Online marketing structure</h2>
         <div class="callout teal">Owned by <b>${esc(M.onlineOwners)}</b> — ${esc(M.scope)} Agencies: ${esc(M.agencies)}. Escalation: Arjun → Bhanu.</div>
 
-        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Who runs which page</h3>
-          ${tbl(["Brand", "Model", "Our owners"], pageRows)}
+        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 2px">Who runs which page <span class="t-muted" style="font-weight:400">· Instagram page</span></h3>
+          <div class="muted-note" style="margin:0 0 8px">Refers to the Instagram page for each brand.</div>
+          ${tbl(["Brand", "Instagram page", "Our owners"], pageRows)}
           <ul class="soc-addr">${M.models.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Monthly content calendar</h3>
