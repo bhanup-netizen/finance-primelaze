@@ -121,6 +121,7 @@
     { id: "order", label: "Inventory", group: "Admin", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Admin", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin", render: renderChallan },
+    { id: "social", label: "Social Media", group: "Admin", render: renderSocial },
     { id: "admin", label: "⚙ Admin", group: "Admin", render: renderAdmin },
   ];
 
@@ -5580,6 +5581,83 @@
   let challanUnsub = null;
 
   function challanStore() { return db ? db.collection("challans") : null; }
+
+  /* ================= SOCIAL MEDIA ================= */
+  function renderSocial() {
+    const S = window.SOCIAL_SEED || { presence: [], credentials: [] };
+    const canSeePass = roleIsAdmin() || isSuperAdmin(); // passwords: admins/super only
+    const yn = (v) => {
+      const t = String(v || "").trim().toLowerCase();
+      if (t === "yes") return `<span class="badge b-good">Yes</span>`;
+      if (t === "no") return `<span class="badge b-bad">No</span>`;
+      return esc(v || "—");
+    };
+    const activeBadge = (v) => /not/i.test(String(v)) ? `<span class="badge b-bad">Not Active</span>` : `<span class="badge b-good">Active</span>`;
+    const acctBadge = (v) => /not/i.test(String(v)) ? `<span class="badge b-neutral">Not Available</span>` : `<span class="badge b-teal">Available</span>`;
+
+    const activeCount = S.presence.filter((r) => !/not/i.test(String(r.active))).length;
+    const head = ["#", "Media", "Account", "Status", "Leads Managed By", "Primelaze", "Esthemax", "Celluma"]
+      .map((x, i) => `<th class="${i === 0 ? "num" : ""}">${x}</th>`).join("");
+    const body = S.presence.map((r) => `<tr>
+      <td class="num">${esc(r.n)}</td>
+      <td class="t-name">${esc(r.media)}</td>
+      <td>${acctBadge(r.account)}</td>
+      <td>${activeBadge(r.active)}</td>
+      <td>${esc(r.managedBy || "—")}</td>
+      <td>${yn(r.primelaze)}</td>
+      <td>${yn(r.esthemax)}</td>
+      <td>${yn(r.celluma)}</td>
+    </tr>`).join("");
+
+    // Credentials block — admins / super admins only. Passwords are masked until
+    // the viewer clicks "Show".
+    let creds = "";
+    if (canSeePass) {
+      const blocks = (S.credentials || []).map((c) => {
+        const rows = c.rows.map((r) => `<tr>
+          <td class="t-name">${esc(r.user)}${r.note ? ` <span class="t-muted">(${esc(r.note)})</span>` : ""}</td>
+          <td><span class="soc-pass" data-pass="${esc(r.pass)}">••••••••</span></td>
+        </tr>`).join("");
+        return `<div class="block" style="margin-top:16px">
+          <h3 style="margin:0 0 8px">${esc(c.group)}</h3>
+          ${table(["Username / handle", "Password"].map((x) => `<th>${x}</th>`).join(""), rows)}
+        </div>`;
+      }).join("");
+      creds = `
+        <div class="callout warn" style="margin-top:26px">🔒 Account logins — visible to admins &amp; super admins only. Do not share outside the team.</div>
+        <div class="hq-actions" style="margin:10px 0"><button id="socReveal" class="dl-btn" type="button">👁 Show all passwords</button></div>
+        ${blocks}`;
+    }
+
+    setTimeout(() => {
+      const btn = document.getElementById("socReveal");
+      if (btn) {
+        let shown = false;
+        btn.onclick = () => {
+          shown = !shown;
+          document.querySelectorAll(".soc-pass").forEach((el) => { el.textContent = shown ? el.dataset.pass : "••••••••"; });
+          btn.textContent = shown ? "🙈 Hide passwords" : "👁 Show all passwords";
+        };
+      }
+      document.querySelectorAll(".soc-pass").forEach((el) => {
+        el.style.cursor = "pointer";
+        el.title = "Click to reveal / hide";
+        el.onclick = () => { el.textContent = el.textContent.indexOf("•") === 0 ? el.dataset.pass : "••••••••"; };
+      });
+    }, 0);
+
+    return `
+      <div class="section-head">
+        <h1>Social Media Presence</h1>
+        <p>Where Primelaze, Esthemax and Celluma are present online, who manages leads, and (for admins) the account logins.</p>
+      </div>
+      <div class="card" style="margin-bottom:14px"><div class="stat-row">
+        <div class="stat"><b>${S.presence.length}</b><span>Platforms tracked</span></div>
+        <div class="stat k-good"><b>${activeCount}</b><span>Active accounts</span></div>
+      </div></div>
+      ${table(head, body)}
+      ${creds}`;
+  }
 
   function renderChallan() {
     setTimeout(initChallanUI, 0);
