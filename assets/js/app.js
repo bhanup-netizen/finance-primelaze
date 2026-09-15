@@ -5672,13 +5672,17 @@
       const ia = PLAT_ORDER.indexOf(a), ib = PLAT_ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
     });
-    const acctHead = ["Brand", "Account", "Owner", "Notes"].map((x) => `<th>${x}</th>`).join("");
+    // Social pages get DM replies & post engagement from Sparsha (Lead Collection).
+    const SOC_DM_PLATFORMS = { Instagram: 1, Threads: 1, Facebook: 1, YouTube: 1, LinkedIn: 1, Pinterest: 1 };
+    const acctHead = ["Brand", "Account", "Content posted by", "DM reply & engagement", "Notes"].map((x) => `<th>${x}</th>`).join("");
     const platSections = platOrdered.map((pl) => {
       const rows = platGroups[pl];
+      const dmBy = SOC_DM_PLATFORMS[pl] ? "Sparsha" : "";
       const body = rows.map((a) => `<tr>
         <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
         <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
-        ${ownerCell(acctKey(a), a.owner)}
+        <td>${esc(a.owner || "—")}</td>
+        <td>${dmBy || "—"}</td>
         <td>${a.fn ? fnBadge(a.fn) + " " : ""}${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : (a.fn ? "" : "—")}</td>
       </tr>`).join("");
       return `<div class="block" style="margin-top:16px">
@@ -5720,7 +5724,7 @@
     }
     const websites = (S.accounts || []).length
       ? `<h2 style="margin-top:28px">Pages &amp; accounts by platform</h2>
-         <p class="muted-note" style="margin-top:2px"><b>Owner = who posts / manages that page</b> (company brands: Rashmi + Avedan; agency brands: ClanConnect / Buzzfied). Reading &amp; replying to DMs and enquiries is handled by Lead Collection (Sparsha).${canEditSocial ? " Owner is editable (the account id can't be changed) — saved for everyone." : ""} Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only).</p>
+         <p class="muted-note" style="margin-top:2px"><b>Content posted by</b> the company team (Rashmi + Avedan) or the agency (ClanConnect / Buzzfied); <b>DM replies &amp; post engagement</b> are handled by Sparsha (Lead Collection). Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only).</p>
          ${platSections}${addrBlocks}`
       : "";
 
@@ -5769,12 +5773,13 @@
         <p>Every enquiry across all four brands — DMs, WhatsApp, calls and forms — collected, qualified and passed to sales.</p>
       </div>
       <div class="callout teal">Owned by <b>${esc(T.owner || "—")}</b> — ${esc(T.note || "")}</div>
+      ${(T.flow || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">How a lead is collected</h3><ol class="soc-addr">${T.flow.map((s) => `<li>${esc(s)}</li>`).join("")}</ol></div>` : ""}
       ${(T.sources || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Where Sparsha collects leads from</h3><ul class="soc-addr">${T.sources.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
       ${acctSection}
       ${(T.standards || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Standards</h3><ul class="soc-addr">${T.standards.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
-      ${L.owner ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry into Bigin <span class="t-muted" style="font-weight:400">· ${esc(L.owner)}</span></h3>
+      ${L.owner ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry <span class="t-muted" style="font-weight:400">· ${esc(L.owner)}</span></h3>
         <p style="margin:0 0 8px;color:var(--text-2)">${esc(L.note || "")}</p>
-        ${tbl(["Leads for", "Route to"], routeRows)}</div>` : ""}`;
+        ${tbl(["Leads for", "Entered in"], routeRows)}</div>` : ""}`;
   }
 
   /* ================= PASSWORDS (super admin only) ================= */

@@ -112,7 +112,13 @@ window.SOCIAL_SEED = {
     // 3. Telemarketing (across all channels, online enquiries + WhatsApp + calls)
     telemarketing: {
       owner: "Sparsha",
-      note: "Sparsha collects every lead across all four brands — reads and replies to DMs, answers the calls and WhatsApp messages, talks to whoever enquires, qualifies them, and passes them on. Dedicated number stays with her and does not rotate.",
+      note: "Sparsha handles DM replies and post engagement on every page, collects the leads, qualifies them, and passes the contact details to Mayank for entry.",
+      flow: [
+        "Someone DMs or comments on a post — interested in a machine or device.",
+        "Sparsha talks to them, shares the brochure, and gets their contact details.",
+        "Sparsha passes the contact details to Mayank.",
+        "Mayank enters the lead — Bigin CRM for Primelaze, Primelaze Dashboard (Casovil Sale) for Casovil.",
+      ],
       sources: [
         "Instagram & Threads — DMs, comments, story replies (all brands)",
         "Facebook — page messages and comments",
@@ -131,12 +137,10 @@ window.SOCIAL_SEED = {
     // 4. Lead entry into Bigin + routing to sales
     leadEntry: {
       owner: "Mayank",
-      note: "Dedicated resource for entering every company lead into Bigin CRM — all channels, tagged by source. Sparsha audits completeness, accuracy, no duplicates, correct source tag.",
+      note: "Mayank enters every lead Sparsha passes on, tagged by source, into the right system.",
       routing: [
-        { brand: "Primelaze Meditech", to: "Vikas" },
-        { brand: "Celluma India", to: "Vikas" },
-        { brand: "Esthemax India", to: "Vikas" },
-        { brand: "Casovil", to: "Lubhda / Ashutosh" },
+        { brand: "Primelaze / Celluma / Esthemax", to: "Bigin CRM" },
+        { brand: "Casovil", to: "Primelaze Dashboard (Casovil Sale)" },
       ],
     },
   },
