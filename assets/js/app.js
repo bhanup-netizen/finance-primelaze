@@ -5643,44 +5643,42 @@
         ? `<td><input class="soc-owner-in" data-id="${esc(id)}" value="${esc(val)}" placeholder="owner…" style="min-width:120px"></td>`
         : `<td>${esc(val || "—")}</td>`;
     };
-    const webBlock = (w) => {
-      const emails = (w.emails || []).slice().sort((a, b) => SOC_FN_ORDER.indexOf(a.fn) - SOC_FN_ORDER.indexOf(b.fn));
-      const phones = (w.phones || []).slice().sort((a, b) => SOC_FN_ORDER.indexOf(a.fn) - SOC_FN_ORDER.indexOf(b.fn));
-      const emailHasWhere = emails.some((e) => e.where);
-      const emailHead = ["Function", "Email", "Owner", "Responsible for"].concat(emailHasWhere ? ["Where it appears"] : []).map((x) => `<th>${x}</th>`).join("");
-      const emailBody = emails.map((e) => `<tr>
-        <td>${fnBadge(e.fn)}</td>
-        <td class="t-name">${esc(e.addr)}</td>
-        ${ownerCell("mail:" + e.addr, e.owner)}
-        <td>${esc(e.purpose || "")}</td>
-        ${emailHasWhere ? `<td class="cell-note">${esc(e.where || "—")}</td>` : ""}</tr>`).join("");
-      const phoneBody = phones.map((p) => `<tr>
-        <td>${fnBadge(p.fn)}</td><td class="t-name">${esc(p.num)}</td>${ownerCell("tel:" + p.num, p.owner)}<td>${esc(p.purpose || "")}</td></tr>`).join("");
-      const socBody = (w.social || []).map((s) => `<tr>
-        <td class="t-name">${esc(s.platform)}</td>
-        <td>${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.handle)}</a>` : esc(s.handle)}</td>
-        ${ownerCell("soc:" + s.handle, s.owner)}</tr>`).join("");
-      const siteBody = `<tr>
-        <td class="t-name">${esc(w.site)}</td>
-        <td><a href="https://${esc(w.site)}" target="_blank" rel="noopener">${esc(w.site)}</a></td>
-        ${ownerCell("site:" + w.site, w.siteOwner)}</tr>`;
-      const addr = (w.addresses || []).length
-        ? `<h4 class="ld-h">🏢 Addresses</h4><ul class="soc-addr">${w.addresses.map((a) => `<li><b>${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul>`
-        : "";
-      return `<div class="block" style="margin-top:18px">
-        <h3 style="margin:0 0 2px">${esc(w.brand)}</h3>
-        <div class="t-muted" style="margin-bottom:10px">${esc(w.site)}</div>
-        <h4 class="ld-h">🌍 Website</h4>${table(["Website", "URL", "Owner"].map((x) => `<th>${x}</th>`).join(""), siteBody)}
-        <h4 class="ld-h">📧 Emails</h4>${table(emailHead, emailBody)}
-        ${phoneBody ? `<h4 class="ld-h">📞 Phone / WhatsApp</h4>${table(["Function", "Number", "Owner", "Purpose"].map((x) => `<th>${x}</th>`).join(""), phoneBody)}` : ""}
-        ${socBody ? `<h4 class="ld-h">🌐 Social</h4>${table(["Platform", "Link / handle", "Owner"].map((x) => `<th>${x}</th>`).join(""), socBody)}` : ""}
-        ${addr}
+    // Flatten every account (website, email, phone, social) across all brands,
+    // then group PLATFORM-WISE (Facebook, Instagram, Website, …).
+    const PLAT_ORDER = ["Facebook", "Instagram", "Threads", "YouTube", "LinkedIn", "Pinterest", "Website", "Email", "WhatsApp", "Phone", "Indiamart"];
+    const PLAT_ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
+    const flat = [];
+    (S.websites || []).forEach((w) => {
+      if (w.site) flat.push({ platform: "Website", brand: w.brand, id: w.site, link: "https://" + w.site, ownerKey: "site:" + w.site, ownerDef: w.siteOwner });
+      (w.emails || []).forEach((e) => flat.push({ platform: "Email", brand: w.brand, id: e.addr, ownerKey: "mail:" + e.addr, ownerDef: e.owner, fn: e.fn, note: e.purpose }));
+      (w.phones || []).forEach((p) => flat.push({ platform: p.fn === "WhatsApp" ? "WhatsApp" : "Phone", brand: w.brand, id: p.num, ownerKey: "tel:" + p.num, ownerDef: p.owner, fn: p.fn, note: p.purpose }));
+      (w.social || []).forEach((s) => flat.push({ platform: String(s.platform).replace(/\s*\(company\)/i, "").trim(), brand: w.brand, id: s.handle, link: s.link, ownerKey: "soc:" + s.handle, ownerDef: s.owner }));
+    });
+    const platGroups = {};
+    flat.forEach((a) => { (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
+    const platOrdered = Object.keys(platGroups).sort((a, b) => {
+      const ia = PLAT_ORDER.indexOf(a), ib = PLAT_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+    });
+    const platSections = platOrdered.map((pl) => {
+      const rows = platGroups[pl];
+      const body = rows.map((a) => `<tr>
+        <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
+        <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
+        ${ownerCell(a.ownerKey, a.ownerDef)}
+        <td>${a.fn ? fnBadge(a.fn) + " " : ""}${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : (a.fn ? "" : "—")}</td>
+      </tr>`).join("");
+      return `<div class="block" style="margin-top:16px">
+        <h3 style="margin:0 0 8px">${PLAT_ICON[pl] || "🔗"} ${esc(pl)} <span class="t-muted" style="font-weight:400">· ${rows.length} account${rows.length > 1 ? "s" : ""}</span></h3>
+        ${table(["Brand", "Account", "Owner", "Notes"].map((x) => `<th>${x}</th>`).join(""), body)}
       </div>`;
-    };
-    const websites = (S.websites || []).length
+    }).join("");
+    const addrBlocks = (S.websites || []).filter((w) => (w.addresses || []).length).map((w) =>
+      `<div class="block" style="margin-top:14px"><h4 class="ld-h">🏢 ${esc(w.brand)} addresses</h4><ul class="soc-addr">${w.addresses.map((a) => `<li><b>${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul></div>`).join("");
+    const websites = flat.length
       ? `<h2 style="margin-top:28px">Accounts &amp; Owners</h2>
-         <p class="muted-note" style="margin-top:0">Every website, email, number and social handle is a separate row. ${canEditSocial ? "The <b>Owner</b> is editable (the id itself can't be changed) — changes save for everyone." : "Owners are set by an administrator."}</p>
-         ${S.websites.map(webBlock).join("")}`
+         <p class="muted-note" style="margin-top:0">Grouped by platform. Every account is its own row across brands. ${canEditSocial ? "The <b>Owner</b> is editable (the id itself can't be changed) — changes save for everyone." : "Owners are set by an administrator."}</p>
+         ${platSections}${addrBlocks}`
       : "";
 
     // Credentials block — admins / super admins only. Passwords are masked until
