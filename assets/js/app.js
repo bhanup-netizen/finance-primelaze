@@ -131,7 +131,7 @@
     { id: "order", label: "Inventory", group: "Admin & Logistics", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
-    { id: "admin", label: "⚙ Admin", group: "Admin & Logistics", render: renderAdmin },
+    { id: "admin", label: "⚙ Admin", group: "⚙ Admin", render: renderAdmin },
   ];
 
   // rupees → short ₹ Cr / ₹ L / ₹ form
