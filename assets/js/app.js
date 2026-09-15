@@ -915,14 +915,18 @@
     document.querySelectorAll("#teamBody td[contenteditable]").forEach((td) => {
       td.onblur = () => {
         const val = td.textContent.trim(), field = td.dataset.field;
+        // A blank name breaks the org chart and expense name-matching — reject it.
+        if (field === "name" && !val) { td.textContent = td.dataset.prev || ""; return; }
         if (td.dataset.aid) {
           const p = rosterAdds.find((x) => x._aid === td.dataset.aid);
           if (p) p[field] = val;
         } else {
           rosterEdits[td.dataset.num + "#" + field] = val;
         }
+        td.dataset.prev = val;
         saveEdits(rosterWhat(td.dataset.num, td.dataset.aid, field, val));
       };
+      td.addEventListener("focus", () => { td.dataset.prev = td.textContent.trim(); });
     });
     document.querySelectorAll("#teamBody .roster-sel").forEach((sel) => {
       sel.onchange = () => {
@@ -969,13 +973,17 @@
     });
     const add = document.getElementById("rosterAddBtn");
     if (add) add.onclick = () => {
+      // Ask for the name up front so an abandoned add doesn't leave a junk
+      // "New person" row in the shared doc.
+      const name = (window.prompt("New team member's name:") || "").trim();
+      if (!name) return;
       const aid = "r" + (rosterAddSeq++);
       // New person joins the current department; under the Sales Director for
       // Sales, otherwise as a top-level card in that department.
       const parent = orgDept === "Sales" ? "Arjun" : (orgNsm.name || "Arjun");
       const ndiv = orgDept === "Sales" ? orgSalesDiv : "Derma";
-      rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: ndiv, dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
-      saveEdits("Added a person");
+      rosterAdds.push({ _aid: aid, name, designation: "", division: ndiv, dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
+      saveEdits("Added a person: " + name);
       orgEditId = "aid:" + aid;
       mountOrgChart();
     };

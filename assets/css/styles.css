@@ -297,6 +297,10 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
   background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 14px; resize: vertical;
 }
 .ch-item { display: grid; grid-template-columns: 1fr 140px 36px; gap: 8px; margin-bottom: 8px; }
+@media (max-width: 680px) {
+  .ch-item { grid-template-columns: 1fr 40px; }
+  .ch-item .ch-desc { grid-column: 1 / -1; }
+}
 .ch-item input {
   padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); font-family: inherit; font-size: 14px;
@@ -513,8 +517,8 @@ tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--surface-2); }
 
-/* Cleaner look: hide descriptive/explanatory text, keep data. */
-.section-head > p { display: none; }
+/* Section intro / help text — muted so it guides without cluttering. */
+.section-head > p { color: var(--text-2); font-size: 13.5px; line-height: 1.55; margin: 5px 0 0; max-width: 940px; }
 .kpi-note { display: none; }
 .zone-hqs { display: none; }
 
@@ -694,6 +698,7 @@ textarea.mk-in { resize: vertical; line-height: 1.45; }
 .mk-li { display: flex; align-items: center; gap: 8px; list-style: none; margin-bottom: 6px; }
 .mk-li .mk-in { flex: 1; }
 .mk-del { color: var(--bad); font-weight: 700; }
+@media (max-width: 560px) { .mk-in { min-width: 60px; font-size: 12px; padding: 4px 6px; } }
 /* Clickable Active / Not Active status pill for an online page. */
 .soc-status { border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .soc-status.on { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
