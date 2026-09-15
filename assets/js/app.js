@@ -5665,9 +5665,11 @@
     const PLAT_ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
     const acctKey = socAcctKey;
     const platGroups = {};
-    // Sparsha's accounts (enquiry emails / phones / WhatsApp) live on the Lead
-    // Collection tab, so exclude them here.
-    (S.accounts || []).forEach((a) => { if (socIsSparsha(a)) return; (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
+    // Online Marketing shows the social PAGES only. Emails, phone numbers and
+    // WhatsApp all live together on the Lead Collection tab; websites are not
+    // listed here.
+    const PAGE_PLATFORMS = { Instagram: 1, Facebook: 1, YouTube: 1, LinkedIn: 1, Pinterest: 1, Indiamart: 1 };
+    (S.accounts || []).forEach((a) => { if (!PAGE_PLATFORMS[a.platform]) return; (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
     const platOrdered = Object.keys(platGroups).sort((a, b) => {
       const ia = PLAT_ORDER.indexOf(a), ib = PLAT_ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
@@ -5722,10 +5724,10 @@
           ${tbl(["Deliverable", "Owner", "Frequency"], cadRows)}
           <div class="muted-note">${esc(M.escalation)}</div></div>`;
     }
-    const websites = (S.accounts || []).length
-      ? `<h2 style="margin-top:28px">Pages &amp; accounts by platform</h2>
-         <p class="muted-note" style="margin-top:2px"><b>Content posted by</b> the company team (Rashmi + Avedan) or the agency (ClanConnect / Buzzfied); <b>DM replies &amp; post engagement</b> are handled by Sparsha (Lead Collection). Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only).</p>
-         ${platSections}${addrBlocks}`
+    const websites = platOrdered.length
+      ? `<h2 style="margin-top:28px">Pages by platform</h2>
+         <p class="muted-note" style="margin-top:2px"><b>Content posted by</b> the company team (Rashmi + Avedan) or the agency (ClanConnect / Buzzfied); <b>DM replies &amp; post engagement</b> are handled by Sparsha (Lead Collection). Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only). Emails &amp; phone numbers are on the Lead Collection tab.</p>
+         ${platSections}`
       : "";
 
     setTimeout(() => {
@@ -5754,18 +5756,22 @@
     const T = M.telemarketing || {}, L = M.leadEntry || {};
     const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
     const routeRows = (L.routing || []).map((r) => `<tr><td class="t-name">${esc(r.brand)}</td><td>${esc(r.to)}</td></tr>`).join("");
-    // Sparsha's own accounts/channels (moved here from Online Marketing).
-    const mine = (S.accounts || []).filter(socIsSparsha).slice().sort((a, b) => socPlatSort(a.platform, b.platform) || String(a.brand).localeCompare(b.brand));
-    const acctRows = mine.map((a) => `<tr>
+    // All emails + phone numbers + WhatsApp (both brands) in one consolidated
+    // table — Sparsha's enquiry lines plus the service / HR / IT inboxes.
+    const CONTACT_PLATFORMS = { Email: 1, Phone: 1, WhatsApp: 1 };
+    const contacts = (S.accounts || []).filter((a) => CONTACT_PLATFORMS[a.platform])
+      .slice().sort((a, b) => socPlatSort(a.platform, b.platform) || String(a.brand).localeCompare(b.brand) || String(a.id).localeCompare(b.id));
+    const cRows = contacts.map((a) => `<tr>
       <td>${SOC_PLAT_ICON[a.platform] || "🔗"} ${esc(a.platform)}</td>
       <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
-      <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
+      <td class="t-name">${esc(a.id)}</td>
+      <td>${esc(a.owner || "—")}</td>
       <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
     </tr>`).join("");
-    const acctSection = mine.length
-      ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Sparsha's channels &amp; accounts</h3>
-          ${tbl(["Channel", "Brand", "Account", "Notes"], acctRows)}
-          <div class="muted-note">Logins for these are on the 🔑 Passwords tab (super admin only).</div></div>`
+    const acctSection = contacts.length
+      ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">All emails &amp; phone numbers <span class="t-muted" style="font-weight:400">· Primelaze &amp; Casovil</span></h3>
+          ${tbl(["Type", "Brand", "Email / Number", "Owner", "Purpose"], cRows)}
+          <div class="muted-note">Logins are on the 🔑 Passwords tab (super admin only).</div></div>`
       : "";
     return `
       <div class="section-head">

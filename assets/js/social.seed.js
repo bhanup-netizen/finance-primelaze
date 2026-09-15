@@ -8,7 +8,6 @@ window.SOCIAL_SEED = {
   // type: Social | Video | Marketplace | Owned | Messaging | Community
   presence: [
     { n: 1,  media: "Instagram",   type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",         primelaze: "Yes", esthemax: "Yes", celluma: "Yes", casovil: "Yes" },
-    { n: 2,  media: "Threads",     type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",         primelaze: "Yes", esthemax: "Yes", celluma: "Yes", casovil: "Yes" },
     { n: 3,  media: "Facebook",    type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",         primelaze: "Yes", esthemax: "Yes", celluma: "No",  casovil: "No"  },
     { n: 5,  media: "LinkedIn",    type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha/Avedan",  primelaze: "Yes", esthemax: "No",  celluma: "No",  casovil: "No"  },
     { n: 6,  media: "Pinterest",   type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",         primelaze: "Yes", esthemax: "No",  celluma: "No",  casovil: "No"  },
@@ -44,11 +43,6 @@ window.SOCIAL_SEED = {
     { platform: "Instagram", brand: "Celluma",   id: "Celluma_india",     link: "https://instagram.com/Celluma_india",     owner: "Rashmi + Avedan", login: "Celluma_india",       pass: "Primelaze@Zirakhpur" },
     { platform: "Instagram", brand: "Esthemax",  id: "esthemax.india",    link: "https://instagram.com/esthemax.india",    owner: "ClanConnect (agency)", login: "esthemax.india",      pass: "plmesth12!@" },
     { platform: "Instagram", brand: "Casovil",   id: "@casovil.world",    link: "https://instagram.com/casovil.world",     owner: "Buzzfied (agency)", login: "Casovil / 9701382034", pass: "plmesth12!@" },
-    // Threads (same logins as Instagram)
-    { platform: "Threads", brand: "Primelaze", id: "primelazemeditech", owner: "Rashmi + Avedan", login: "primelazemeditech",   pass: "Ju5645@P",          note: "Same login as Instagram" },
-    { platform: "Threads", brand: "Esthemax",  id: "esthemax.india",    owner: "ClanConnect (agency)", login: "esthemax.india",      pass: "plmesth12!@",       note: "Same login as Instagram" },
-    { platform: "Threads", brand: "Celluma",   id: "Celluma_india",     owner: "Rashmi + Avedan", login: "Celluma_india",       pass: "Primelaze@Zirakhpur", note: "Same login as Instagram" },
-    { platform: "Threads", brand: "Casovil",   id: "@casovil.world",    owner: "Buzzfied (agency)", login: "Casovil / 9701382034", pass: "plmesth12!@",      note: "Same login as Instagram" },
     // Facebook
     { platform: "Facebook", brand: "Primelaze", id: "facebook.com/primelaze", link: "https://facebook.com/primelaze", owner: "Rashmi + Avedan", login: "er.arjun1987@gmail.com", pass: "Primelazefacebook#-123" },
     { platform: "Facebook", brand: "Esthemax",  id: "Esthemax page",          owner: "ClanConnect (agency)", login: "esthemaxindia@gmail.com", pass: "Hju537&@9FG" },
