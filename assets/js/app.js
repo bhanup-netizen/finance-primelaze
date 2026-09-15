@@ -5202,6 +5202,13 @@
   const regTrack = {}; // "<group>:<slug>" -> {status, expected, actual, remarks:[{at,by,text}]}
   const regItemEdits = {}; // "<group>:<slug>:<field>" -> corrected value for an item's own detail
   const socOwners = {}; // Social Media accounts: "<account id>" -> owner override (editable)
+  // Effective owner of a social account, and whether it's Sparsha's (lead-collection).
+  const socAcctKey = (a) => a.platform + "::" + a.id;
+  const socOwnerOf = (a) => socOwners[socAcctKey(a)] != null ? socOwners[socAcctKey(a)] : (a.owner || "");
+  const socIsSparsha = (a) => /sparsha/i.test(socOwnerOf(a));
+  const SOC_PLAT_ORDER = ["Facebook", "Instagram", "Threads", "YouTube", "LinkedIn", "Pinterest", "Website", "Email", "WhatsApp", "Phone", "Indiamart"];
+  const SOC_PLAT_ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
+  const socPlatSort = (a, b) => { const ia = SOC_PLAT_ORDER.indexOf(a), ib = SOC_PLAT_ORDER.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b); };
   const regAdds = { cdsco: [], gem: [], products: [], celluma: [], cosmetic: [] }; // items moved/added into a tab
   const regMoved = []; // "<group>:<slug>" hidden from that tab (moved out)
   let regTab = "cdsco", regQ = "", regStatusF = "";
@@ -5656,9 +5663,11 @@
     // & Password (admins/super only, shown in the same row) · Notes.
     const PLAT_ORDER = ["Facebook", "Instagram", "Threads", "YouTube", "LinkedIn", "Pinterest", "Website", "Email", "WhatsApp", "Phone", "Indiamart"];
     const PLAT_ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
-    const acctKey = (a) => a.platform + "::" + a.id;
+    const acctKey = socAcctKey;
     const platGroups = {};
-    (S.accounts || []).forEach((a) => { (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
+    // Sparsha's accounts (enquiry emails / phones / WhatsApp) live on the Lead
+    // Collection tab, so exclude them here.
+    (S.accounts || []).forEach((a) => { if (socIsSparsha(a)) return; (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
     const platOrdered = Object.keys(platGroups).sort((a, b) => {
       const ia = PLAT_ORDER.indexOf(a), ib = PLAT_ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
@@ -5736,10 +5745,24 @@
 
   /* ================= LEAD COLLECTION ================= */
   function renderTelemarketing() {
-    const M = (window.SOCIAL_SEED || {}).marketing || {};
+    const S = window.SOCIAL_SEED || { accounts: [] };
+    const M = S.marketing || {};
     const T = M.telemarketing || {}, L = M.leadEntry || {};
     const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
     const routeRows = (L.routing || []).map((r) => `<tr><td class="t-name">${esc(r.brand)}</td><td>${esc(r.to)}</td></tr>`).join("");
+    // Sparsha's own accounts/channels (moved here from Online Marketing).
+    const mine = (S.accounts || []).filter(socIsSparsha).slice().sort((a, b) => socPlatSort(a.platform, b.platform) || String(a.brand).localeCompare(b.brand));
+    const acctRows = mine.map((a) => `<tr>
+      <td>${SOC_PLAT_ICON[a.platform] || "🔗"} ${esc(a.platform)}</td>
+      <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
+      <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
+      <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
+    </tr>`).join("");
+    const acctSection = mine.length
+      ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Sparsha's channels &amp; accounts</h3>
+          ${tbl(["Channel", "Brand", "Account", "Notes"], acctRows)}
+          <div class="muted-note">Logins for these are on the 🔑 Passwords tab (super admin only).</div></div>`
+      : "";
     return `
       <div class="section-head">
         <h1>Lead Collection</h1>
@@ -5747,6 +5770,7 @@
       </div>
       <div class="callout teal">Owned by <b>${esc(T.owner || "—")}</b> — ${esc(T.note || "")}</div>
       ${(T.sources || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Where Sparsha collects leads from</h3><ul class="soc-addr">${T.sources.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
+      ${acctSection}
       ${(T.standards || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Standards</h3><ul class="soc-addr">${T.standards.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
       ${L.owner ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry into Bigin <span class="t-muted" style="font-weight:400">· ${esc(L.owner)}</span></h3>
         <p style="margin:0 0 8px;color:var(--text-2)">${esc(L.note || "")}</p>
