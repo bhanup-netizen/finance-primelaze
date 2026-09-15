@@ -104,6 +104,75 @@ window.SOCIAL_SEED = {
       { deliverable: "Agency strategy call (Esthemax, Casovil)", owner: "Avedan", freq: "Monthly, per contract" },
     ],
     escalation: "Agencies (ClanConnect & Buzzfied): email is the channel of record — not WhatsApp. If a committed deliverable is missed, Avedan raises it in writing the same day. Two unanswered reminders, then escalate to Bhanu. A missed calendar or undelivered activation does not ride to month-end unreported.",
+    // 5 & 6. Offline marketing — exhibitions, conferences, doctor events, installs
+    offline: {
+      owners: "Sparsha (coordinate) + Akshay (execute)",
+      scope: "Exhibitions, conferences, doctor events, and device installation at events. No event starts without going through Sparsha — if Akshay hears of an event from any other direction, he routes it back to her before acting. Escalation: Arjun → Bhanu.",
+      entry: [
+        { route: "Conferences & exhibitions", flow: "Sparsha decides which to attend with Arjun & Dhinesh → updates Akshay → Akshay begins execution." },
+        { route: "Doctor events", flow: "A doctor requests an event → the sales person / Arjun / Dhinesh informs Vikas → Vikas updates Sparsha → Sparsha updates Akshay → Akshay executes." },
+      ],
+      sparshaDoes: [
+        "Runs the event-selection discussion with Arjun and Dhinesh.",
+        "Checks the budget with Arjun — Arjun decides. She takes the numbers to him and gets his answer; she does not approve spend or confirm figures to vendors.",
+        "Sets up every call — negotiation, design review, vendor discussion, pre-event check.",
+        "Keeps the event tracker: every step, who owns it, when it is due, where it stands.",
+        "Chases anything that slips, the day it slips.",
+        "Gives Bhanu and Arjun a single status update on any live event.",
+      ],
+      akshayDoes: [
+        "Stall design, and getting it approved by Arjun / Dhinesh.",
+        "Vendor selection and stall build.",
+        "Support staff — photographer, anchor, hostess, models.",
+        "Visitor engagement activities at the stall.",
+        "Marketing material — creating and updating.",
+        "Device installation and on-ground setup at the event.",
+        "Vendor payments through finance.",
+      ],
+      plan: [
+        { when: "4 weeks before — decide & approve", note: "Nothing moves forward until Arjun has approved the budget. If this week slips, the event date is at risk — flag it to Bhanu immediately.", tasks: [
+          { task: "Decide which conference / event we are doing", who: "Sparsha, with Arjun & Dhinesh" },
+          { task: "Tell Akshay it is confirmed, so he can start", who: "Sparsha" },
+          { task: "Get the stall package options and pricing", who: "Sparsha" },
+          { task: "Negotiate the package — derma", who: "Ayush (Bhanu on the call)" },
+          { task: "Negotiate the package — salon / spa", who: "Lubhda (Bhanu on the call)" },
+          { task: "Take the final numbers to Arjun and get approval", who: "Sparsha asks, Arjun decides" },
+          { task: "Confirm who is attending and which machines are going", who: "Arjun decides, Ayush confirms" },
+          { task: "Tell Vikas the schedule so he can brief the sales team", who: "Ayush" },
+        ] },
+        { when: "3 weeks before — design & start building", tasks: [
+          { task: "Stall design ready and shown to Arjun / Dhinesh", who: "Akshay" },
+          { task: "Design approved", who: "Arjun / Dhinesh (Sparsha sets up the call)" },
+          { task: "Vendor confirmed and stall build started", who: "Akshay" },
+          { task: "Marketing material finalised and sent to print", who: "Akshay" },
+        ] },
+        { when: "2 weeks before — book everything", tasks: [
+          { task: "Photographer, anchor, hostess, models booked", who: "Akshay" },
+          { task: "Flights and hotel booked for the team", who: "Ayush" },
+          { task: "Visitor engagement activities planned", who: "Akshay (+ Lubhda for salon/spa)" },
+          { task: "Check the stall build is on schedule with the vendor", who: "Akshay, tracked by Sparsha" },
+        ] },
+        { when: "1 week before — pack & dispatch", tasks: [
+          { task: "Machines, display units, Esthemax stock, visitor forms, stationery dispatched", who: "Ayush" },
+          { task: "Printed material received and checked", who: "Akshay" },
+          { task: "Readiness call — everyone confirms their part is done", who: "Sparsha runs it; Akshay & Ayush confirm" },
+        ] },
+        { when: "Event days", tasks: [
+          { task: "Device installation and stall setup", who: "Akshay" },
+          { task: "Run the stall and engagement activities", who: "Akshay + attending team" },
+          { task: "Collect visitor forms", who: "Attending sales team" },
+        ] },
+      ],
+      after: [
+        { task: "Visitor form photos shared, physical copies to office", when: "Within 2 days", who: "Attending sales team" },
+        { task: "All forms entered into Bigin", when: "Within 3 days", who: "Mayank" },
+        { task: "Entry checked for errors and duplicates", when: "Within 4 days", who: "Sparsha" },
+        { task: "Leads passed to sales (Vikas or Lubhda / Ashutosh)", when: "Within 5 days", who: "Sparsha" },
+        { task: "Report: what we spent, how many leads, what converted", when: "Within 1 week", who: "Sparsha + Akshay" },
+        { task: "Vendor payments cleared", when: "Within 2 weeks", who: "Akshay" },
+      ],
+      doctorNote: "Doctor events: same steps, shorter runway — usually two weeks from request to event. Sparsha compresses the chart when Vikas passes the request: decide & approve in the first three days, build & book in week one, dispatch & set up in week two.",
+    },
     // 3. Telemarketing (across all channels, online enquiries + WhatsApp + calls)
     telemarketing: {
       owner: "Sparsha",

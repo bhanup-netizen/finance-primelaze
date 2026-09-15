@@ -123,6 +123,7 @@
     { id: "team", label: "HR", group: "HR", render: renderTeam },
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
+    { id: "offline", label: "Offline Marketing", group: "Marketing", render: renderOffline },
     { id: "telemarketing", label: "Lead Collection", group: "Marketing", render: renderTelemarketing },
     { id: "passwords", label: "🔑 Passwords", group: "Marketing", render: renderPasswords },
     // Admin & Logistics
@@ -5809,6 +5810,44 @@
       saveEdits("Added online page · " + plat + "::" + id);
       close(); go("social");
     };
+  }
+
+  /* ================= OFFLINE MARKETING ================= */
+  function renderOffline() {
+    const O = ((window.SOCIAL_SEED || {}).marketing || {}).offline;
+    if (!O) return `<div class="section-head"><h1>Offline Marketing</h1><p>No data.</p></div>`;
+    const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
+    const entryRows = (O.entry || []).map((e) => `<tr><td class="t-name">${esc(e.route)}</td><td>${esc(e.flow)}</td></tr>`).join("");
+    const planBlocks = (O.plan || []).map((p) => {
+      const rows = p.tasks.map((t) => `<tr><td class="t-name">${esc(t.task)}</td><td>${esc(t.who)}</td></tr>`).join("");
+      return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">${esc(p.when)}</h3>
+        ${tbl(["What must be done", "Who does it"], rows)}
+        ${p.note ? `<div class="muted-note">${esc(p.note)}</div>` : ""}</div>`;
+    }).join("");
+    const afterRows = (O.after || []).map((a) => `<tr><td class="t-name">${esc(a.task)}</td><td><span class="badge b-info">${esc(a.when)}</span></td><td>${esc(a.who)}</td></tr>`).join("");
+    return `
+      <div class="section-head">
+        <h1>Offline Marketing</h1>
+        <p>Exhibitions, conferences, doctor events and on-ground device installation — the one-month event playbook.</p>
+      </div>
+      <div class="callout teal">Owned by <b>${esc(O.owners)}</b> — ${esc(O.scope)}</div>
+
+      <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">How an event enters the system</h3>
+        ${tbl(["Route", "Flow"], entryRows)}</div>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:16px">
+        <div class="block"><h3 style="margin:0 0 8px">Sparsha — coordinate</h3><ul class="soc-addr">${O.sparshaDoes.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>
+        <div class="block"><h3 style="margin:0 0 8px">Akshay — execute</h3><ul class="soc-addr">${O.akshayDoes.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>
+      </div>
+
+      <h2 style="margin-top:26px">The one-month event plan</h2>
+      <p class="muted-note" style="margin-top:0">Read as: how many weeks are left before the event. Sparsha keeps this chart and checks it every Monday.</p>
+      ${planBlocks}
+
+      <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">After the event</h3>
+        ${tbl(["What must be done", "When", "Who does it"], afterRows)}</div>
+
+      <div class="callout" style="margin-top:16px">${esc(O.doctorNote)}</div>`;
   }
 
   /* ================= LEAD COLLECTION ================= */
