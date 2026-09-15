@@ -2650,8 +2650,9 @@
   function demoTable() {
     const t = D.demoMachines[demoView];
     const ed = isAdmin();
-    // Remarks are confidential: only full admins / super admins see that column.
-    const hideRemark = !(roleIsAdmin() || isSuperAdmin());
+    // Remarks are hidden from view-only users, but page editors (edit rights on
+    // demo), full admins and super admins can see and edit them.
+    const hideRemark = !(canEditPage("demo") || roleIsAdmin() || isSuperAdmin());
     const visIdx = t.columns.map((_, i) => i).filter((i) => !(hideRemark && /remark/i.test(String(t.columns[i]))));
     const head = visIdx.map((i) => `<th>${esc(demoColLabel(t.columns[i]))}</th>`).join("");
     const scIdx = demoStatusColIdx();
