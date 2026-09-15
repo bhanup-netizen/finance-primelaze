@@ -115,7 +115,15 @@ window.SOCIAL_SEED = {
     // 3. Telemarketing (across all channels, online enquiries + WhatsApp + calls)
     telemarketing: {
       owner: "Sparsha",
-      note: "Owns telemarketing across every social-media channel for all four brands — inbound enquiries, WhatsApp, and outbound calls. Dedicated number stays with Sparsha and does not rotate.",
+      note: "Owns telemarketing across every social-media channel for all four brands — inbound enquiries, WhatsApp, and outbound calls. Dedicated number stays with Sparsha and does not rotate. Training is product-level, not brand-level.",
+      setup: [
+        { action: "Issue dedicated telemarketing phone number to Sparsha", owner: "Ayush", priority: "Immediate" },
+        { action: "Set up WhatsApp Business on that number", owner: "Ayush → Sparsha", priority: "With #1" },
+        { action: "Basic product training — all products across the portfolio", owner: "Arjun", priority: "Before go-live" },
+        { action: "Set up Bigin CRM for Casovil", owner: "Ayush", priority: "Before Casovil go-live" },
+        { action: "Bigin access and training — Sparsha and Mayank", owner: "Ayush", priority: "Before go-live" },
+        { action: "Call script and objection handling", owner: "Arjun + Sparsha", priority: "Week 1" },
+      ],
       standards: [
         "First response within 4 working hours.",
         "Handover to sales within 24 hours of qualification.",

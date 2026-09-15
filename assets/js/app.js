@@ -44,6 +44,7 @@
   const roAttr = () => (isAdmin() ? "" : "disabled");
   const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
   const canSeePage = (id) => {
+    if (id === "passwords") return isSuperAdmin(); // account passwords: super admin only
     if (id === "admin") {
       if (isSuperAdmin() && appMode === "admin") return true; // full user management
       if (isPageAdmin()) return true;                          // scoped page-admin manager
@@ -122,6 +123,8 @@
     { id: "demo", label: "Demo Machines", group: "Admin", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin", render: renderChallan },
     { id: "social", label: "Online Marketing", group: "Admin", render: renderSocial },
+    { id: "telemarketing", label: "Telemarketing", group: "Admin", render: renderTelemarketing },
+    { id: "passwords", label: "🔑 Passwords", group: "Admin", render: renderPasswords },
     { id: "admin", label: "⚙ Admin", group: "Admin", render: renderAdmin },
   ];
 
@@ -5655,16 +5658,13 @@
       const ia = PLAT_ORDER.indexOf(a), ib = PLAT_ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
     });
-    const acctCols = ["Brand", "Account", "Owner"].concat(canSeePass ? ["Login", "Password"] : []).concat(["Notes"]);
-    const acctHead = acctCols.map((x) => `<th>${x}</th>`).join("");
+    const acctHead = ["Brand", "Account", "Owner", "Notes"].map((x) => `<th>${x}</th>`).join("");
     const platSections = platOrdered.map((pl) => {
       const rows = platGroups[pl];
       const body = rows.map((a) => `<tr>
         <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
         <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
         ${ownerCell(acctKey(a), a.owner)}
-        ${canSeePass ? `<td class="cell-note">${a.login ? esc(a.login) : "—"}</td>` : ""}
-        ${canSeePass ? `<td>${a.pass ? `<span class="soc-pass" data-pass="${esc(a.pass)}">••••••••</span>` : "—"}</td>` : ""}
         <td>${a.fn ? fnBadge(a.fn) + " " : ""}${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : (a.fn ? "" : "—")}</td>
       </tr>`).join("");
       return `<div class="block" style="margin-top:16px">
@@ -5683,7 +5683,6 @@
       const pageRows = M.pages.map((p) => `<tr><td class="t-name">${esc(p.brand)}</td><td>${esc(p.model)}</td><td>${esc(p.owners)}</td></tr>`).join("");
       const calRows = M.calendar.map((c) => `<tr><td class="t-name">${esc(c.brand)}</td><td>${esc(c.prepared)}</td><td>${esc(c.approved)}</td><td>${esc(c.due)}</td></tr>`).join("");
       const cadRows = M.cadence.map((c) => `<tr><td class="t-name">${esc(c.deliverable)}</td><td>${esc(c.owner)}</td><td>${esc(c.freq)}</td></tr>`).join("");
-      const routeRows = M.leadEntry.routing.map((r) => `<tr><td class="t-name">${esc(r.brand)}</td><td>${esc(r.to)}</td></tr>`).join("");
       marketing = `
         <h2 style="margin-top:8px">Online marketing structure</h2>
         <div class="callout teal">Owned by <b>${esc(M.onlineOwners)}</b> — ${esc(M.scope)} Agencies: ${esc(M.agencies)}. Escalation: Arjun → Bhanu.</div>
@@ -5702,38 +5701,15 @@
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Fixed cadence</h3>
           ${tbl(["Deliverable", "Owner", "Frequency"], cadRows)}
-          <div class="muted-note">${esc(M.escalation)}</div></div>
-
-        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Telemarketing <span class="t-muted" style="font-weight:400">· ${esc(M.telemarketing.owner)}</span></h3>
-          <p style="margin:0 0 8px;color:var(--text-2)">${esc(M.telemarketing.note)}</p>
-          <ul class="soc-addr">${M.telemarketing.standards.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>
-
-        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry into Bigin <span class="t-muted" style="font-weight:400">· ${esc(M.leadEntry.owner)}</span></h3>
-          <p style="margin:0 0 8px;color:var(--text-2)">${esc(M.leadEntry.note)}</p>
-          ${tbl(["Leads for", "Route to"], routeRows)}</div>`;
+          <div class="muted-note">${esc(M.escalation)}</div></div>`;
     }
-    const revealBtn = canSeePass ? `<button id="socReveal" class="ghost-btn" type="button" style="margin-left:auto">👁 Show all passwords</button>` : "";
     const websites = (S.accounts || []).length
-      ? `<div style="display:flex;align-items:center;gap:10px;margin-top:28px;flex-wrap:wrap"><h2 style="margin:0">Accounts &amp; Owners</h2>${revealBtn}</div>
-         <p class="muted-note" style="margin-top:2px">Grouped by platform. Every account is its own row. ${canEditSocial ? "<b>Owner</b> is editable (the id can't be changed) — saved for everyone. " : ""}${canSeePass ? "Login &amp; password are visible to admins / super admins only — do not share outside the team." : ""}</p>
+      ? `<h2 style="margin-top:28px">Accounts &amp; Owners</h2>
+         <p class="muted-note" style="margin-top:2px">Grouped by platform. Every account is its own row.${canEditSocial ? " <b>Owner</b> is editable (the id can't be changed) — saved for everyone." : ""} Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only).</p>
          ${platSections}${addrBlocks}`
       : "";
 
     setTimeout(() => {
-      const btn = document.getElementById("socReveal");
-      if (btn) {
-        let shown = false;
-        btn.onclick = () => {
-          shown = !shown;
-          document.querySelectorAll(".soc-pass").forEach((el) => { el.textContent = shown ? el.dataset.pass : "••••••••"; });
-          btn.textContent = shown ? "🙈 Hide passwords" : "👁 Show all passwords";
-        };
-      }
-      document.querySelectorAll(".soc-pass").forEach((el) => {
-        el.style.cursor = "pointer";
-        el.title = "Click to reveal / hide";
-        el.onclick = () => { el.textContent = el.textContent.indexOf("•") === 0 ? el.dataset.pass : "••••••••"; };
-      });
       // Editable owner per account id (id is fixed; only the owner changes).
       document.querySelectorAll(".soc-owner-in").forEach((el) => {
         el.onchange = () => {
@@ -5747,7 +5723,7 @@
     return `
       <div class="section-head">
         <h1>Online Marketing</h1>
-        <p>Online-marketing structure and ownership, where each brand is present online, and (for admins) the account logins. Offline / events are handled separately.</p>
+        <p>Online-marketing structure and ownership, and where each brand is present online. Account logins are on the separate Passwords tab; offline / events are handled separately.</p>
       </div>
       <div class="card" style="margin-bottom:14px"><div class="stat-row">
         <div class="stat"><b>${S.presence.length}</b><span>Platforms tracked</span></div>
@@ -5758,6 +5734,78 @@
       <h2 style="margin-top:28px">Presence by platform type</h2>
       ${typeSections}
       ${websites}`;
+  }
+
+  /* ================= TELEMARKETING ================= */
+  function renderTelemarketing() {
+    const M = (window.SOCIAL_SEED || {}).marketing || {};
+    const T = M.telemarketing || {}, L = M.leadEntry || {};
+    const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
+    const setupRows = (T.setup || []).map((s, i) => `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(s.action)}</td><td>${esc(s.owner)}</td><td><span class="badge b-info">${esc(s.priority)}</span></td></tr>`).join("");
+    const routeRows = (L.routing || []).map((r) => `<tr><td class="t-name">${esc(r.brand)}</td><td>${esc(r.to)}</td></tr>`).join("");
+    return `
+      <div class="section-head">
+        <h1>Telemarketing</h1>
+        <p>Inbound enquiries, WhatsApp and outbound calls across all four brands — and how each lead reaches Bigin and sales.</p>
+      </div>
+      <div class="callout teal">Owned by <b>${esc(T.owner || "—")}</b> — ${esc(T.note || "")}</div>
+      ${setupRows ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Setup — before go-live</h3>${tbl(["#", "Action", "Owner", "Priority"], setupRows)}</div>` : ""}
+      ${(T.standards || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Standards</h3><ul class="soc-addr">${T.standards.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
+      ${L.owner ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry into Bigin <span class="t-muted" style="font-weight:400">· ${esc(L.owner)}</span></h3>
+        <p style="margin:0 0 8px;color:var(--text-2)">${esc(L.note || "")}</p>
+        ${tbl(["Leads for", "Route to"], routeRows)}</div>` : ""}`;
+  }
+
+  /* ================= PASSWORDS (super admin only) ================= */
+  function renderPasswords() {
+    if (!isSuperAdmin()) {
+      return `<div class="section-head"><h1>🔑 Passwords</h1></div>
+        <div class="callout warn">🔒 Restricted — account passwords are visible to super admins only.</div>`;
+    }
+    const S = window.SOCIAL_SEED || { accounts: [] };
+    const ORDER = ["Facebook", "Instagram", "Threads", "YouTube", "LinkedIn", "Pinterest", "Website", "Email", "WhatsApp", "Phone", "Indiamart"];
+    const ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
+    const withPass = (S.accounts || []).filter((a) => a.pass || a.login);
+    const groups = {};
+    withPass.forEach((a) => { (groups[a.platform] = groups[a.platform] || []).push(a); });
+    const ordered = Object.keys(groups).sort((a, b) => {
+      const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+    });
+    const sections = ordered.map((pl) => {
+      const body = groups[pl].map((a) => `<tr>
+        <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
+        <td class="t-name">${esc(a.id)}</td>
+        <td class="cell-note">${a.login ? esc(a.login) : "—"}</td>
+        <td>${a.pass ? `<span class="soc-pass" data-pass="${esc(a.pass)}">••••••••</span>` : "—"}</td>
+        <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
+      </tr>`).join("");
+      return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">${ICON[pl] || "🔗"} ${esc(pl)}</h3>
+        ${table(["Brand", "Account", "Login", "Password", "Notes"].map((x) => `<th>${x}</th>`).join(""), body)}</div>`;
+    }).join("");
+    setTimeout(() => {
+      const btn = document.getElementById("pwReveal");
+      if (btn) {
+        let shown = false;
+        btn.onclick = () => {
+          shown = !shown;
+          document.querySelectorAll(".soc-pass").forEach((el) => { el.textContent = shown ? el.dataset.pass : "••••••••"; });
+          btn.textContent = shown ? "🙈 Hide passwords" : "👁 Show all passwords";
+        };
+      }
+      document.querySelectorAll(".soc-pass").forEach((el) => {
+        el.style.cursor = "pointer"; el.title = "Click to reveal / hide";
+        el.onclick = () => { el.textContent = el.textContent.indexOf("•") === 0 ? el.dataset.pass : "••••••••"; };
+      });
+    }, 0);
+    return `
+      <div class="section-head"><h1>🔑 Passwords</h1>
+        <p>Logins for every online-marketing account. Super admin only — do not share outside the team.</p></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        <div class="callout warn" style="margin:0;flex:1;min-width:220px">🔒 Sensitive — stored for team continuity. Passwords are masked; click one to reveal.</div>
+        <button id="pwReveal" class="ghost-btn" type="button">👁 Show all passwords</button>
+      </div>
+      ${sections}`;
   }
 
   function renderChallan() {
