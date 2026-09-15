@@ -1,22 +1,69 @@
 /* Social-media presence seed (Admin › Social Media tab).
-   Sheet1 = platform presence (visible to anyone with the page).
-   Sheet2 = account logins — passwords are shown to admins / super admins only
-   in the UI. NOTE: this file is plaintext in the repo; treat with care. */
+   presence  = platform list (grouped by type & status in the UI).
+   websites  = public contact directory per brand (contacts tagged by function).
+   credentials = account logins — passwords shown to admins / super admins only.
+   NOTE: this file is plaintext in the repo; treat the credentials with care. */
 window.SOCIAL_SEED = {
+  // type: Social | Video | Marketplace | Owned | Messaging | Community
   presence: [
-    { n: 1,  media: "Instagram",   account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "Yes" },
-    { n: 2,  media: "Threads",     account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "Yes" },
-    { n: 3,  media: "Facebook",    account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "No"  },
-    { n: 4,  media: "Youtube",     account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "No"  },
-    { n: 5,  media: "LinkedIn",    account: "Available",     active: "Active",     managedBy: "Sparsha/Avedan", primelaze: "Yes", esthemax: "No",  celluma: "No"  },
-    { n: 6,  media: "Pinterest",   account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "No",  celluma: "No"  },
-    { n: 7,  media: "Indiamart",   account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "No",  celluma: "No"  },
-    { n: 8,  media: "Mail",        account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "No",  celluma: "No"  },
-    { n: 9,  media: "Website",     account: "Available",     active: "Active",     managedBy: "Sparsha/Vikas",  primelaze: "Yes", esthemax: "No",  celluma: "No"  },
-    { n: 10, media: "X (Twitter)", account: "Not Available", active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
-    { n: 11, media: "Quora",       account: "Not Available", active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
-    { n: 12, media: "Snapchat",    account: "Available",     active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
-    { n: 13, media: "Reddit",      account: "Not Available", active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
+    { n: 1,  media: "Instagram",   type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "Yes" },
+    { n: 2,  media: "Threads",     type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "Yes" },
+    { n: 3,  media: "Facebook",    type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "No"  },
+    { n: 5,  media: "LinkedIn",    type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha/Avedan", primelaze: "Yes", esthemax: "No",  celluma: "No"  },
+    { n: 6,  media: "Pinterest",   type: "Social",      account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "No",  celluma: "No"  },
+    { n: 10, media: "X (Twitter)", type: "Social",      account: "Not Available", active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
+    { n: 4,  media: "Youtube",     type: "Video",       account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "Yes", celluma: "No"  },
+    { n: 7,  media: "Indiamart",   type: "Marketplace", account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "No",  celluma: "No"  },
+    { n: 8,  media: "Mail",        type: "Owned",       account: "Available",     active: "Active",     managedBy: "Sparsha",        primelaze: "Yes", esthemax: "No",  celluma: "No"  },
+    { n: 9,  media: "Website",     type: "Owned",       account: "Available",     active: "Active",     managedBy: "Sparsha/Vikas",  primelaze: "Yes", esthemax: "No",  celluma: "No"  },
+    { n: 12, media: "Snapchat",    type: "Messaging",   account: "Available",     active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
+    { n: 11, media: "Quora",       type: "Community",   account: "Not Available", active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
+    { n: 13, media: "Reddit",      type: "Community",   account: "Not Available", active: "Not Active", managedBy: "-",              primelaze: "No",  esthemax: "No",  celluma: "No"  },
+  ],
+  websites: [
+    {
+      brand: "Casovil", site: "casovil.com",
+      // fn: Sales | Service | HR | General | Admin | WhatsApp
+      emails: [
+        { addr: "sales@casovil.com", fn: "Sales", purpose: "Sales & orders — contact/enquiry form and the cart's “send order request”", where: "Contact page, all footers, order flow" },
+        { addr: "info@casovil.com", fn: "General", purpose: "General enquiries (catch-all)", where: "Contact page, all footers, legal pages" },
+        { addr: "itsupport@primelaze.com", fn: "Admin", purpose: "Admin login only — internal order-management backend", where: "Not shown publicly on the site" },
+      ],
+      phones: [
+        { num: "+91 97013 82034", fn: "Sales", purpose: "Call & WhatsApp — floating “Chat on WhatsApp” button + contact page" },
+      ],
+      social: [
+        { platform: "Instagram", handle: "@casovil.world", link: "https://instagram.com/casovil.world" },
+      ],
+      addresses: [
+        { label: "Corporate Office", value: "SCO No. 23, Upper Ground Floor, Block A, Chandigarh Citi Center, VIP Road, Zirakpur, Mohali, Punjab – 140603" },
+        { label: "Head Office", value: "306, Bharathiyar Salai, Ashok Nagar, Lawspet, Puducherry – 605008" },
+        { label: "Hours", value: "Mon–Sat, 10am–7pm IST" },
+      ],
+    },
+    {
+      brand: "Primelaze Meditech", site: "primelaze.com",
+      emails: [
+        { addr: "calls@primelaze.com", fn: "Sales", purpose: "General & Sales enquiries (contact, demo, brochure forms)" },
+        { addr: "salessupport@primelaze.com", fn: "Sales", purpose: "Sales support (support portal)" },
+        { addr: "servicesupport@primelaze.com", fn: "Service", purpose: "Service / technical support" },
+        { addr: "hr@primelaze.com", fn: "HR", purpose: "HR & Careers (job applications)" },
+        { addr: "info@primelaze.com", fn: "General", purpose: "General info (support portal)" },
+      ],
+      phones: [
+        { num: "+91 74167 35111", fn: "Sales", purpose: "Sales / Demo Enquiry (main — shown in header on every page)" },
+        { num: "+91 97013 82034", fn: "Service", purpose: "Service Support" },
+        { num: "+91 78459 13001", fn: "HR", purpose: "HR & Careers" },
+        { num: "+91 99155 59151", fn: "WhatsApp", purpose: "WhatsApp (chat button + all “WhatsApp” links)" },
+      ],
+      social: [
+        { platform: "Facebook", handle: "facebook.com/primelaze", link: "https://facebook.com/primelaze" },
+        { platform: "Instagram", handle: "instagram.com/primelazemeditech", link: "https://instagram.com/primelazemeditech" },
+        { platform: "YouTube", handle: "youtube.com/@marketingprimelaze", link: "https://youtube.com/@marketingprimelaze" },
+        { platform: "LinkedIn (company)", handle: "linkedin.com/company/primelaze-meditech", link: "https://linkedin.com/company/primelaze-meditech" },
+      ],
+      addresses: [],
+    },
   ],
   credentials: [
     { group: "Instagram & Threads", rows: [
@@ -38,49 +85,5 @@ window.SOCIAL_SEED = {
     { group: "Indiamart", rows: [
       { user: "7339513001", pass: "OTP on Dhinesh sir's number" },
     ] },
-  ],
-  websites: [
-    {
-      brand: "Casovil", site: "casovil.com",
-      emails: [
-        { addr: "sales@casovil.com", purpose: "Sales & orders — contact/enquiry form and the cart's “send order request”", where: "Contact page, all footers, order flow" },
-        { addr: "info@casovil.com", purpose: "General enquiries (catch-all)", where: "Contact page, all footers, legal pages" },
-        { addr: "itsupport@primelaze.com", purpose: "Admin login only — internal order-management backend", where: "Not shown publicly on the site" },
-      ],
-      phones: [
-        { num: "+91 97013 82034", purpose: "Call & WhatsApp — floating “Chat on WhatsApp” button + contact page" },
-      ],
-      social: [
-        { platform: "Instagram", handle: "@casovil.world", link: "https://instagram.com/casovil.world" },
-      ],
-      addresses: [
-        { label: "Corporate Office", value: "SCO No. 23, Upper Ground Floor, Block A, Chandigarh Citi Center, VIP Road, Zirakpur, Mohali, Punjab – 140603" },
-        { label: "Head Office", value: "306, Bharathiyar Salai, Ashok Nagar, Lawspet, Puducherry – 605008" },
-        { label: "Hours", value: "Mon–Sat, 10am–7pm IST" },
-      ],
-    },
-    {
-      brand: "Primelaze Meditech", site: "primelaze.com",
-      emails: [
-        { addr: "calls@primelaze.com", purpose: "General & Sales enquiries (contact, demo, brochure forms)" },
-        { addr: "servicesupport@primelaze.com", purpose: "Service / technical support" },
-        { addr: "hr@primelaze.com", purpose: "HR & Careers (job applications)" },
-        { addr: "salessupport@primelaze.com", purpose: "Sales support (support portal)" },
-        { addr: "info@primelaze.com", purpose: "General info (support portal)" },
-      ],
-      phones: [
-        { num: "+91 74167 35111", purpose: "Sales / Demo Enquiry (main — shown in header on every page)" },
-        { num: "+91 97013 82034", purpose: "Service Support" },
-        { num: "+91 78459 13001", purpose: "HR & Careers" },
-        { num: "+91 99155 59151", purpose: "WhatsApp (chat button + all “WhatsApp” links)" },
-      ],
-      social: [
-        { platform: "Facebook", handle: "facebook.com/primelaze", link: "https://facebook.com/primelaze" },
-        { platform: "Instagram", handle: "instagram.com/primelazemeditech", link: "https://instagram.com/primelazemeditech" },
-        { platform: "YouTube", handle: "youtube.com/@marketingprimelaze", link: "https://youtube.com/@marketingprimelaze" },
-        { platform: "LinkedIn (company)", handle: "linkedin.com/company/primelaze-meditech", link: "https://linkedin.com/company/primelaze-meditech" },
-      ],
-      addresses: [],
-    },
   ],
 };

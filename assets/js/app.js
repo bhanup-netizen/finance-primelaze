@@ -5583,9 +5583,21 @@
   function challanStore() { return db ? db.collection("challans") : null; }
 
   /* ================= SOCIAL MEDIA ================= */
+  const SOC_TYPE_ORDER = [
+    ["Social", "🌐 Social networks"],
+    ["Video", "▶️ Video"],
+    ["Marketplace", "🛒 Marketplace / Listings"],
+    ["Owned", "✉️ Owned (Mail / Website)"],
+    ["Messaging", "💬 Messaging"],
+    ["Community", "💭 Community"],
+  ];
+  const SOC_FN_ORDER = ["Sales", "Service", "HR", "General", "Admin", "WhatsApp"];
+  const SOC_FN_BADGE = { Sales: "b-good", Service: "b-info", HR: "b-accent", General: "b-neutral", Admin: "b-warn", WhatsApp: "b-teal" };
+  const SOC_FN_LABEL = { Service: "Service / Support", General: "General / Info" };
   function renderSocial() {
-    const S = window.SOCIAL_SEED || { presence: [], credentials: [] };
+    const S = window.SOCIAL_SEED || { presence: [], credentials: [], websites: [] };
     const canSeePass = roleIsAdmin() || isSuperAdmin(); // passwords: admins/super only
+    const isActive = (r) => !/not/i.test(String(r.active));
     const yn = (v) => {
       const t = String(v || "").trim().toLowerCase();
       if (t === "yes") return `<span class="badge b-good">Yes</span>`;
@@ -5593,50 +5605,62 @@
       return esc(v || "—");
     };
     const activeBadge = (v) => /not/i.test(String(v)) ? `<span class="badge b-bad">Not Active</span>` : `<span class="badge b-good">Active</span>`;
-    const acctBadge = (v) => /not/i.test(String(v)) ? `<span class="badge b-neutral">Not Available</span>` : `<span class="badge b-teal">Available</span>`;
+    const fnBadge = (fn) => fn ? `<span class="badge ${SOC_FN_BADGE[fn] || "b-neutral"}">${esc(SOC_FN_LABEL[fn] || fn)}</span>` : "—";
 
-    const activeCount = S.presence.filter((r) => !/not/i.test(String(r.active))).length;
-    const head = ["#", "Media", "Account", "Status", "Leads Managed By", "Primelaze", "Esthemax", "Celluma"]
-      .map((x, i) => `<th class="${i === 0 ? "num" : ""}">${x}</th>`).join("");
-    const body = S.presence.map((r) => `<tr>
-      <td class="num">${esc(r.n)}</td>
-      <td class="t-name">${esc(r.media)}</td>
-      <td>${acctBadge(r.account)}</td>
-      <td>${activeBadge(r.active)}</td>
-      <td>${esc(r.managedBy || "—")}</td>
-      <td>${yn(r.primelaze)}</td>
-      <td>${yn(r.esthemax)}</td>
-      <td>${yn(r.celluma)}</td>
-    </tr>`).join("");
+    const activeCount = S.presence.filter(isActive).length;
+    const notActiveCount = S.presence.length - activeCount;
 
-    // Website contact directory (public-facing info) — one block per brand.
+    // ---- Presence grouped by platform TYPE (active first within each) ----
+    const presHead = ["Media", "Status", "Leads Managed By", "Primelaze", "Esthemax", "Celluma"].map((x) => `<th>${x}</th>`).join("");
+    const typeSections = SOC_TYPE_ORDER.map(([key, label]) => {
+      const rows = S.presence.filter((r) => r.type === key)
+        .sort((a, b) => (isActive(a) === isActive(b) ? String(a.media).localeCompare(b.media) : (isActive(a) ? -1 : 1)));
+      if (!rows.length) return "";
+      const body = rows.map((r) => `<tr>
+        <td class="t-name">${esc(r.media)}</td>
+        <td>${activeBadge(r.active)}</td>
+        <td>${esc(r.managedBy || "—")}</td>
+        <td>${yn(r.primelaze)}</td>
+        <td>${yn(r.esthemax)}</td>
+        <td>${yn(r.celluma)}</td>
+      </tr>`).join("");
+      const act = rows.filter(isActive).length;
+      return `<div class="block" style="margin-top:16px">
+        <h3 style="margin:0 0 8px">${label} <span class="t-muted" style="font-weight:400">· ${act}/${rows.length} active</span></h3>
+        ${table(presHead, body)}</div>`;
+    }).join("");
+
+    // ---- Website contact directory — per brand, contacts tagged by function ----
     const webBlock = (w) => {
-      const emailHasWhere = (w.emails || []).some((e) => e.where);
-      const emailHead = ["Email", "Responsible for"].concat(emailHasWhere ? ["Where it appears"] : []).map((x) => `<th>${x}</th>`).join("");
-      const emailBody = (w.emails || []).map((e) => `<tr>
+      const emails = (w.emails || []).slice().sort((a, b) => SOC_FN_ORDER.indexOf(a.fn) - SOC_FN_ORDER.indexOf(b.fn));
+      const phones = (w.phones || []).slice().sort((a, b) => SOC_FN_ORDER.indexOf(a.fn) - SOC_FN_ORDER.indexOf(b.fn));
+      const emailHasWhere = emails.some((e) => e.where);
+      const emailHead = ["Function", "Email", "Responsible for"].concat(emailHasWhere ? ["Where it appears"] : []).map((x) => `<th>${x}</th>`).join("");
+      const emailBody = emails.map((e) => `<tr>
+        <td>${fnBadge(e.fn)}</td>
         <td class="t-name">${esc(e.addr)}</td>
         <td>${esc(e.purpose || "")}</td>
         ${emailHasWhere ? `<td class="cell-note">${esc(e.where || "—")}</td>` : ""}</tr>`).join("");
-      const phoneBody = (w.phones || []).map((p) => `<tr>
-        <td class="t-name">${esc(p.num)}</td><td>${esc(p.purpose || "")}</td></tr>`).join("");
+      const phoneBody = phones.map((p) => `<tr>
+        <td>${fnBadge(p.fn)}</td><td class="t-name">${esc(p.num)}</td><td>${esc(p.purpose || "")}</td></tr>`).join("");
       const socBody = (w.social || []).map((s) => `<tr>
         <td class="t-name">${esc(s.platform)}</td>
         <td>${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.handle)}</a>` : esc(s.handle)}</td></tr>`).join("");
       const addr = (w.addresses || []).length
-        ? `<h4 class="ld-h">Addresses</h4><ul class="soc-addr">${w.addresses.map((a) => `<li><b>${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul>`
+        ? `<h4 class="ld-h">🏢 Addresses</h4><ul class="soc-addr">${w.addresses.map((a) => `<li><b>${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul>`
         : "";
       return `<div class="block" style="margin-top:18px">
         <h3 style="margin:0 0 2px">${esc(w.brand)}</h3>
         <div class="t-muted" style="margin-bottom:10px">${esc(w.site)}</div>
         <h4 class="ld-h">📧 Emails</h4>${table(emailHead, emailBody)}
-        ${phoneBody ? `<h4 class="ld-h">📞 Phone / WhatsApp</h4>${table(["Number", "Purpose"].map((x) => `<th>${x}</th>`).join(""), phoneBody)}` : ""}
+        ${phoneBody ? `<h4 class="ld-h">📞 Phone / WhatsApp</h4>${table(["Function", "Number", "Purpose"].map((x) => `<th>${x}</th>`).join(""), phoneBody)}` : ""}
         ${socBody ? `<h4 class="ld-h">🌐 Social</h4>${table(["Platform", "Link / handle"].map((x) => `<th>${x}</th>`).join(""), socBody)}` : ""}
         ${addr}
       </div>`;
     };
     const websites = (S.websites || []).length
       ? `<h2 style="margin-top:28px">Website Contacts</h2>
-         <p class="muted-note" style="margin-top:0">The emails, numbers and social links wired into each brand's public website.</p>
+         <p class="muted-note" style="margin-top:0">Emails and numbers are tagged by function; below are the social links and addresses wired into each brand's public website.</p>
          ${S.websites.map(webBlock).join("")}`
       : "";
 
@@ -5685,8 +5709,10 @@
       <div class="card" style="margin-bottom:14px"><div class="stat-row">
         <div class="stat"><b>${S.presence.length}</b><span>Platforms tracked</span></div>
         <div class="stat k-good"><b>${activeCount}</b><span>Active accounts</span></div>
+        <div class="stat k-warn"><b>${notActiveCount}</b><span>Not active</span></div>
       </div></div>
-      ${table(head, body)}
+      <h2 style="margin-top:8px">Presence by platform type</h2>
+      ${typeSections}
       ${websites}
       ${creds}`;
   }
