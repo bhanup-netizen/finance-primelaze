@@ -687,6 +687,10 @@ tr.total-row:hover td { background: var(--surface-3); }
 .soc-addr li { margin-bottom: 5px; color: var(--text); font-size: 13.5px; }
 /* Wrapping sub-line under a platform name (which accounts / emails / URLs). */
 .soc-detail { white-space: normal; font-weight: 400; line-height: 1.45; margin-top: 3px; max-width: 460px; }
+/* Clickable Active / Not Active status pill for an online page. */
+.soc-status { border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.soc-status.on { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.soc-status.off { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
 
 .two-col { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(0, 1.3fr); gap: 14px; align-items: start; }
 @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }

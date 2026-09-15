@@ -26,18 +26,19 @@ window.SOCIAL_SEED = {
     // Emails
     { platform: "Email", brand: "Primelaze", id: "calls@primelaze.com",        fn: "Sales",   owner: "Sparsha",         note: "General & Sales enquiries (contact, demo, brochure forms)" },
     { platform: "Email", brand: "Primelaze", id: "salessupport@primelaze.com", fn: "Sales",   owner: "Sparsha",         note: "Sales support (support portal)" },
-    { platform: "Email", brand: "Primelaze", id: "servicesupport@primelaze.com", fn: "Service", owner: "Service team", note: "Service / technical support" },
+    { platform: "Email", brand: "Primelaze", id: "servicesupport@primelaze.com", fn: "Service", owner: "Vikas", note: "Service / technical support" },
     { platform: "Email", brand: "Primelaze", id: "hr@primelaze.com",           fn: "HR",      owner: "Sandeepika (HR)", note: "HR & Careers (job applications)" },
     { platform: "Email", brand: "Primelaze", id: "info@primelaze.com",         fn: "General", owner: "Sparsha",         note: "General info (support portal)" },
     { platform: "Email", brand: "Casovil",   id: "sales@casovil.com",          fn: "Sales",   owner: "Sparsha",         note: "Sales & orders — contact form + cart" },
     { platform: "Email", brand: "Casovil",   id: "info@casovil.com",           fn: "General", owner: "Sparsha",         note: "General enquiries (catch-all)" },
-    { platform: "Email", brand: "Casovil",   id: "itsupport@primelaze.com",    fn: "Admin",   owner: "Vikas",           note: "Admin login only — order-management backend" },
+    { platform: "Email", brand: "Casovil",   id: "itsupport@primelaze.com",    fn: "Admin",   owner: "Bhanu",           note: "Admin login only — order-management backend" },
     // Phone / WhatsApp
     { platform: "Phone",    brand: "Primelaze", id: "+91 74167 35111", fn: "Sales",    owner: "Sparsha",         note: "Sales / Demo Enquiry (main — header on every page)" },
-    { platform: "Phone",    brand: "Primelaze", id: "+91 97013 82034", fn: "Service",  owner: "Service team",    note: "Service Support" },
+    { platform: "Phone",    brand: "Primelaze", id: "+91 97013 82034", fn: "Service",  owner: "Vikas",           note: "Service Support" },
     { platform: "Phone",    brand: "Primelaze", id: "+91 78459 13001", fn: "HR",       owner: "Sandeepika (HR)", note: "HR & Careers" },
     { platform: "WhatsApp", brand: "Primelaze", id: "+91 99155 59151", fn: "WhatsApp", owner: "Sparsha",         note: "WhatsApp chat button + all WhatsApp links" },
-    { platform: "Phone",    brand: "Casovil",   id: "+91 97013 82034", fn: "Sales",    owner: "Sparsha",         note: "Call & WhatsApp — chat button + contact page" },
+    { platform: "Phone",    brand: "Casovil",   id: "+91 97013 82034", fn: "Sales",    owner: "Sparsha",         note: "Call & contact page" },
+    { platform: "WhatsApp", brand: "Casovil",   id: "+91 97013 82034", fn: "Sales",    owner: "Sparsha",         note: "Casovil WhatsApp — chat button + contact page" },
     // Instagram — posting owner (company: Rashmi + Avedan; agency brands: the agency)
     { platform: "Instagram", brand: "Primelaze", id: "primelazemeditech", link: "https://instagram.com/primelazemeditech", owner: "Rashmi + Avedan", login: "primelazemeditech",   pass: "Ju5645@P" },
     { platform: "Instagram", brand: "Celluma",   id: "Celluma_india",     link: "https://instagram.com/Celluma_india",     owner: "Rashmi + Avedan", login: "Celluma_india",       pass: "Primelaze@Zirakhpur" },
@@ -124,6 +125,7 @@ window.SOCIAL_SEED = {
       standards: [
         "First response within 4 working hours.",
         "Handover to sales within 24 hours of qualification.",
+        "HR replies to careers / HR enquiries within 24 hours.",
         "No lead lives only in WhatsApp — everything reaches Bigin the same day.",
         "Source tagged on every lead: brand + channel (online / conference / doctor event).",
       ],

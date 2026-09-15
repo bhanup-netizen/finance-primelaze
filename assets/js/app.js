@@ -5202,6 +5202,10 @@
   const regTrack = {}; // "<group>:<slug>" -> {status, expected, actual, remarks:[{at,by,text}]}
   const regItemEdits = {}; // "<group>:<slug>:<field>" -> corrected value for an item's own detail
   const socOwners = {}; // Social Media accounts: "<account id>" -> owner override (editable)
+  const socPageStatus = {}; // page key -> "off" when Not Active (default Active)
+  const socPageAdds = [];   // page-admin-added online pages
+  const socPageHidden = []; // keys of seed pages removed by a page admin
+  let socPageSeq = 0;
   // Effective owner of a social account, and whether it's Sparsha's (lead-collection).
   const socAcctKey = (a) => a.platform + "::" + a.id;
   const socOwnerOf = (a) => socOwners[socAcctKey(a)] != null ? socOwners[socAcctKey(a)] : (a.owner || "");
@@ -5664,34 +5668,47 @@
     const PLAT_ORDER = ["Facebook", "Instagram", "Threads", "YouTube", "LinkedIn", "Pinterest", "Website", "Email", "WhatsApp", "Phone", "Indiamart"];
     const PLAT_ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
     const acctKey = socAcctKey;
-    const platGroups = {};
+    const ed = canEditSocial; // page admins can add / delete / toggle pages
     // Online Marketing shows the social PAGES only. Emails, phone numbers and
     // WhatsApp all live together on the Lead Collection tab; websites are not
     // listed here.
     const PAGE_PLATFORMS = { Instagram: 1, Facebook: 1, YouTube: 1, LinkedIn: 1, Pinterest: 1, Indiamart: 1 };
-    (S.accounts || []).forEach((a) => { if (!PAGE_PLATFORMS[a.platform]) return; (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
+    const allPages = (S.accounts || []).filter((a) => PAGE_PLATFORMS[a.platform])
+      .concat(socPageAdds).filter((a) => !socPageHidden.includes(acctKey(a)));
+    const platGroups = {};
+    allPages.forEach((a) => { (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
     const platOrdered = Object.keys(platGroups).sort((a, b) => {
       const ia = PLAT_ORDER.indexOf(a), ib = PLAT_ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
     });
     // Social pages get DM replies & post engagement from Sparsha (Lead Collection).
-    const SOC_DM_PLATFORMS = { Instagram: 1, Threads: 1, Facebook: 1, YouTube: 1, LinkedIn: 1, Pinterest: 1 };
-    const acctHead = ["Brand", "Account", "Content posted by", "DM reply & engagement", "Notes"].map((x) => `<th>${x}</th>`).join("");
+    const SOC_DM_PLATFORMS = { Instagram: 1, Facebook: 1, YouTube: 1, LinkedIn: 1, Pinterest: 1 };
+    const acctHead = (ed ? [""] : []).concat("Brand", "Account", "Status", "Content created & posted by", "DM reply & engagement", "Notes").map((x) => `<th>${x}</th>`).join("");
     const platSections = platOrdered.map((pl) => {
       const rows = platGroups[pl];
       const dmBy = SOC_DM_PLATFORMS[pl] ? "Sparsha" : "";
-      const body = rows.map((a) => `<tr>
+      const body = rows.map((a) => {
+        const k = acctKey(a);
+        const off = socPageStatus[k] === "off";
+        const statusCell = ed
+          ? `<td><button type="button" class="soc-status ${off ? "off" : "on"}" data-key="${esc(k)}">${off ? "Not Active" : "Active"}</button></td>`
+          : `<td><span class="badge ${off ? "b-bad" : "b-good"}">${off ? "Not Active" : "Active"}</span></td>`;
+        return `<tr>
+        ${ed ? `<td class="num"><button type="button" class="ghost-btn danger soc-del" data-key="${esc(k)}" title="Delete this page">🗑</button></td>` : ""}
         <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
         <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
+        ${statusCell}
         <td>${esc(a.owner || "—")}</td>
         <td>${dmBy || "—"}</td>
-        <td>${a.fn ? fnBadge(a.fn) + " " : ""}${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : (a.fn ? "" : "—")}</td>
-      </tr>`).join("");
+        <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
+      </tr>`;
+      }).join("");
       return `<div class="block" style="margin-top:16px">
-        <h3 style="margin:0 0 8px">${PLAT_ICON[pl] || "🔗"} ${esc(pl)} <span class="t-muted" style="font-weight:400">· ${rows.length} account${rows.length > 1 ? "s" : ""}</span></h3>
+        <h3 style="margin:0 0 8px">${PLAT_ICON[pl] || "🔗"} ${esc(pl)} <span class="t-muted" style="font-weight:400">· ${rows.length} page${rows.length > 1 ? "s" : ""}</span></h3>
         ${table(acctHead, body)}
       </div>`;
     }).join("");
+    const addPageBtn = ed ? `<div class="hq-actions" style="margin:10px 0"><button id="socAddPage" class="dl-btn" type="button">＋ Add online page</button></div>` : "";
     const addrBlocks = (S.addresses || []).length
       ? `<div class="block" style="margin-top:16px"><h4 class="ld-h">🏢 Addresses</h4><ul class="soc-addr">${S.addresses.map((a) => `<li><b>${esc(a.brand)} · ${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul></div>`
       : "";
@@ -5724,21 +5741,37 @@
           ${tbl(["Deliverable", "Owner", "Frequency"], cadRows)}
           <div class="muted-note">${esc(M.escalation)}</div></div>`;
     }
-    const websites = platOrdered.length
+    const websites = (platOrdered.length || ed)
       ? `<h2 style="margin-top:28px">Pages by platform</h2>
-         <p class="muted-note" style="margin-top:2px"><b>Content posted by</b> the company team (Rashmi + Avedan) or the agency (ClanConnect / Buzzfied); <b>DM replies &amp; post engagement</b> are handled by Sparsha (Lead Collection). Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only). Emails &amp; phone numbers are on the Lead Collection tab.</p>
-         ${platSections}`
+         <p class="muted-note" style="margin-top:2px"><b>Content created &amp; posted by</b> the company team (Rashmi + Avedan) or the agency (ClanConnect / Buzzfied); <b>DM replies &amp; post engagement</b> are handled by Sparsha (Lead Collection).${ed ? " Page admins can toggle a page Active / Not Active, add a new page, or delete one." : ""} Emails &amp; phone numbers are on the Lead Collection tab; logins on the 🔑 Passwords tab (super admin only).</p>
+         ${addPageBtn}${platSections}`
       : "";
 
     setTimeout(() => {
-      // Editable owner per account id (id is fixed; only the owner changes).
-      document.querySelectorAll(".soc-owner-in").forEach((el) => {
-        el.onchange = () => {
-          const id = el.dataset.id, v = (el.value || "").trim();
-          if (v) socOwners[id] = v; else delete socOwners[id];
-          saveEdits("Social owner · " + id);
+      // Toggle a page Active / Not Active.
+      document.querySelectorAll(".soc-status").forEach((b) => {
+        b.onclick = () => {
+          const k = b.dataset.key;
+          if (socPageStatus[k] === "off") delete socPageStatus[k]; else socPageStatus[k] = "off";
+          saveEdits("Online page status · " + k);
+          go("social");
         };
       });
+      // Delete a page (added page → drop from adds; seed page → hide).
+      document.querySelectorAll(".soc-del").forEach((b) => {
+        b.onclick = () => {
+          const k = b.dataset.key;
+          if (!window.confirm("Remove this page from the list?")) return;
+          const i = socPageAdds.findIndex((x) => socAcctKey(x) === k);
+          if (i >= 0) socPageAdds.splice(i, 1);
+          else if (!socPageHidden.includes(k)) socPageHidden.push(k);
+          delete socPageStatus[k];
+          saveEdits("Removed online page · " + k);
+          go("social");
+        };
+      });
+      const ap = document.getElementById("socAddPage");
+      if (ap) ap.onclick = socAddPageDialog;
     }, 0);
 
     return `
@@ -5747,6 +5780,35 @@
         <p>Every brand page &amp; account in one place, with who posts / manages each. Logins are on the separate Passwords tab; lead replies live under Lead Collection.</p>
       </div>
       ${websites}`;
+  }
+
+  // Add a new online page (page admins). Stored for everyone.
+  function socAddPageDialog() {
+    const PLATS = ["Instagram", "Facebook", "YouTube", "LinkedIn", "Pinterest", "Indiamart"];
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>Add an online page</h3>
+      <div class="lead-form-grid">
+        <label>Platform<select id="spgPlat" class="select">${PLATS.map((p) => `<option>${p}</option>`).join("")}</select></label>
+        <label>Brand<input id="spgBrand" type="text" placeholder="Primelaze / Celluma / Esthemax / Casovil"></label>
+        <label>Account / handle<input id="spgId" type="text" placeholder="e.g. primelaze_derma"></label>
+        <label>Link (optional)<input id="spgLink" type="text" placeholder="https://…"></label>
+        <label class="lead-form-wide">Content created &amp; posted by<input id="spgOwner" type="text" placeholder="e.g. Rashmi + Avedan"></label>
+      </div>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="spgCancel">Cancel</button><button type="button" class="dl-btn" id="spgSave">Add page</button></div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("spgCancel").onclick = close;
+    document.getElementById("spgSave").onclick = () => {
+      const v = (id) => (document.getElementById(id).value || "").trim();
+      const plat = v("spgPlat"), brand = v("spgBrand"), id = v("spgId");
+      if (!brand || !id) { window.alert("Enter the brand and account / handle."); return; }
+      socPageAdds.push({ platform: plat, brand, id, link: v("spgLink"), owner: v("spgOwner"), _added: true, _seq: socPageSeq++ });
+      saveEdits("Added online page · " + plat + "::" + id);
+      close(); go("social");
+    };
   }
 
   /* ================= LEAD COLLECTION ================= */
@@ -5760,18 +5822,21 @@
     // table — Sparsha's enquiry lines plus the service / HR / IT inboxes.
     const CONTACT_PLATFORMS = { Email: 1, Phone: 1, WhatsApp: 1 };
     const contacts = (S.accounts || []).filter((a) => CONTACT_PLATFORMS[a.platform])
-      .slice().sort((a, b) => socPlatSort(a.platform, b.platform) || String(a.brand).localeCompare(b.brand) || String(a.id).localeCompare(b.id));
-    const cRows = contacts.map((a) => `<tr>
-      <td>${SOC_PLAT_ICON[a.platform] || "🔗"} ${esc(a.platform)}</td>
-      <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
-      <td class="t-name">${esc(a.id)}</td>
-      <td>${esc(a.owner || "—")}</td>
-      <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
-    </tr>`).join("");
+      .slice().sort((a, b) => socPlatSort(a.platform, b.platform) || String(a.id).localeCompare(b.id));
+    const byBrand = {};
+    contacts.forEach((a) => { (byBrand[a.brand] = byBrand[a.brand] || []).push(a); });
+    const brandOrder = ["Primelaze", "Casovil"].concat(Object.keys(byBrand).filter((b) => b !== "Primelaze" && b !== "Casovil"));
     const acctSection = contacts.length
-      ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">All emails &amp; phone numbers <span class="t-muted" style="font-weight:400">· Primelaze &amp; Casovil</span></h3>
-          ${tbl(["Type", "Brand", "Email / Number", "Owner", "Purpose"], cRows)}
-          <div class="muted-note">Logins are on the 🔑 Passwords tab (super admin only).</div></div>`
+      ? brandOrder.filter((b) => byBrand[b]).map((b) => {
+        const rows = byBrand[b].map((a) => `<tr>
+          <td>${SOC_PLAT_ICON[a.platform] || "🔗"} ${esc(a.platform)}</td>
+          <td class="t-name">${esc(a.id)}</td>
+          <td>${esc(a.owner || "—")}</td>
+          <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
+        </tr>`).join("");
+        return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">${esc(b)} — emails &amp; phone numbers</h3>
+          ${tbl(["Type", "Email / Number", "Owner", "Purpose"], rows)}</div>`;
+      }).join("") + `<div class="muted-note">Logins are on the 🔑 Passwords tab (super admin only).</div>`
       : "";
     return `
       <div class="section-head">
@@ -7127,6 +7192,9 @@
       if (e.regTrack && typeof e.regTrack === "object") { Object.keys(regTrack).forEach((k) => delete regTrack[k]); Object.assign(regTrack, e.regTrack); }
       if (e.regItemEdits && typeof e.regItemEdits === "object") { Object.keys(regItemEdits).forEach((k) => delete regItemEdits[k]); Object.assign(regItemEdits, e.regItemEdits); }
       if (e.socOwners && typeof e.socOwners === "object") { Object.keys(socOwners).forEach((k) => delete socOwners[k]); Object.assign(socOwners, e.socOwners); }
+      if (e.socPageStatus && typeof e.socPageStatus === "object") { Object.keys(socPageStatus).forEach((k) => delete socPageStatus[k]); Object.assign(socPageStatus, e.socPageStatus); }
+      if (Array.isArray(e.socPageAdds)) { socPageAdds.length = 0; e.socPageAdds.forEach((x) => socPageAdds.push(x)); const ids = socPageAdds.map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); socPageSeq = Math.max(socPageSeq, ...(ids.length ? ids : [0])) + 1; }
+      if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
@@ -7220,7 +7288,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
