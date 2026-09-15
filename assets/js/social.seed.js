@@ -69,4 +69,70 @@ window.SOCIAL_SEED = {
     { brand: "Casovil", label: "Head Office", value: "306, Bharathiyar Salai, Ashok Nagar, Lawspet, Puducherry – 605008" },
     { brand: "Casovil", label: "Hours", value: "Mon–Sat, 10am–7pm IST" },
   ],
+  // Online-marketing structure (from the Marketing Structure doc — online only;
+  // offline/events intentionally excluded). Escalation: Arjun → Bhanu.
+  marketing: {
+    onlineOwners: "Avedan + Rashmi",
+    scope: "Social media pages, content calendar, agency management, campaigns. Online only — no conference or stall responsibilities.",
+    agencies: "ClanConnect (Esthemax) · Buzzfied (Casovil)",
+    // 2.1 Who runs which page
+    pages: [
+      { brand: "Celluma India", model: "Company (internal team)", owners: "Rashmi + Avedan" },
+      { brand: "Primelaze", model: "Company (internal team)", owners: "Rashmi + Avedan" },
+      { brand: "Esthemax India", model: "Agency — ClanConnect (IRIDA)", owners: "Rashmi + Avedan (manage the agency)" },
+      { brand: "Casovil", model: "Agency — Buzzfied", owners: "Rashmi + Avedan (manage the agency)" },
+    ],
+    models: [
+      "Company-managed (Celluma India, Primelaze): Rashmi & Avedan run the page themselves — ideation, content, scheduling, posting, community management, reporting. Once the monthly calendar is approved, individual posts need no further sign-off.",
+      "Agency-managed (Esthemax India, Casovil): the agency creates & publishes. Rashmi & Avedan are the client-side counterparts — brief the agency, share events/product focus, review & approve, chase gaps, run the monthly strategy call. They do not create the content. Casovil (Buzzfied) mirrors the Esthemax (ClanConnect) model.",
+    ],
+    // 2.3 Monthly content calendar
+    calendar: [
+      { brand: "Celluma India", prepared: "Rashmi + Avedan", approved: "Arjun + Bhanu", due: "25th of preceding month" },
+      { brand: "Primelaze", prepared: "Rashmi + Avedan", approved: "Arjun + Bhanu", due: "25th of preceding month" },
+      { brand: "Esthemax India", prepared: "ClanConnect", approved: "Rashmi + Avedan, then Arjun + Bhanu", due: "25th of preceding month" },
+      { brand: "Casovil", prepared: "Buzzfied", approved: "Rashmi + Avedan, then Arjun + Bhanu", due: "25th of preceding month" },
+    ],
+    // 2.4 Quarterly strategy note (company-managed brands)
+    strategyNote: {
+      sections: [
+        "Who we are talking to — the audience for the quarter (e.g. dermatologists in tier-1 cities, salon owners exploring LED).",
+        "What we post about — three or four content themes, with roughly how much of the month goes to each.",
+        "What we want out of it — the numbers we chase: followers, reach, enquiries per month.",
+        "What is happening this quarter — product launches, conferences, campaigns the content needs to support.",
+      ],
+      due: "One page, due one week before the quarter starts. Prepared by Rashmi + Avedan, approved by Arjun + Bhanu. Monthly calendars must visibly follow it. Agency brands: the agency's own strategy deck covers this; Rashmi & Avedan review it against the same four questions.",
+    },
+    // 2.5 Fixed cadence
+    cadence: [
+      { deliverable: "Quarterly strategy note (Celluma India, Primelaze)", owner: "Rashmi + Avedan", freq: "1 week before quarter start" },
+      { deliverable: "Monthly content calendar (all 4 brands)", owner: "Rashmi + Avedan (2 internal, 2 chased from agency)", freq: "25th monthly" },
+      { deliverable: "Biweekly review meeting", owner: "Rashmi + Avedan present", freq: "Every alternate Monday" },
+      { deliverable: "Monthly performance report", owner: "Rashmi + Avedan", freq: "5th of following month" },
+      { deliverable: "Agency strategy call (Esthemax, Casovil)", owner: "Avedan", freq: "Monthly, per contract" },
+    ],
+    escalation: "Agencies (ClanConnect & Buzzfied): email is the channel of record — not WhatsApp. If a committed deliverable is missed, Avedan raises it in writing the same day. Two unanswered reminders, then escalate to Bhanu. A missed calendar or undelivered activation does not ride to month-end unreported.",
+    // 3. Telemarketing (across all channels, online enquiries + WhatsApp + calls)
+    telemarketing: {
+      owner: "Sparsha",
+      note: "Owns telemarketing across every social-media channel for all four brands — inbound enquiries, WhatsApp, and outbound calls. Dedicated number stays with Sparsha and does not rotate.",
+      standards: [
+        "First response within 4 working hours.",
+        "Handover to sales within 24 hours of qualification.",
+        "No lead lives only in WhatsApp — everything reaches Bigin the same day.",
+        "Source tagged on every lead: brand + channel (online / conference / doctor event).",
+      ],
+    },
+    // 4. Lead entry into Bigin + routing to sales
+    leadEntry: {
+      owner: "Mayank",
+      note: "Dedicated resource for entering every company lead into Bigin CRM — all channels, tagged by source. Sparsha audits completeness, accuracy, no duplicates, correct source tag.",
+      routing: [
+        { brand: "Primelaze Meditech", to: "Vikas" },
+        { brand: "Celluma India", to: "Vikas" },
+        { brand: "Esthemax India", to: "Vikas" },
+        { brand: "Casovil", to: "Lubhda / Ashutosh" },
+      ],
+    },
+  },
 };

@@ -121,7 +121,7 @@
     { id: "order", label: "Inventory", group: "Admin", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Admin", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin", render: renderChallan },
-    { id: "social", label: "Social Media", group: "Admin", render: renderSocial },
+    { id: "social", label: "Online Marketing", group: "Admin", render: renderSocial },
     { id: "admin", label: "⚙ Admin", group: "Admin", render: renderAdmin },
   ];
 
@@ -5675,6 +5675,43 @@
     const addrBlocks = (S.addresses || []).length
       ? `<div class="block" style="margin-top:16px"><h4 class="ld-h">🏢 Addresses</h4><ul class="soc-addr">${S.addresses.map((a) => `<li><b>${esc(a.brand)} · ${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul></div>`
       : "";
+    // ---- Online marketing structure (ownership, calendar, cadence) ----
+    const M = S.marketing;
+    let marketing = "";
+    if (M) {
+      const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
+      const pageRows = M.pages.map((p) => `<tr><td class="t-name">${esc(p.brand)}</td><td>${esc(p.model)}</td><td>${esc(p.owners)}</td></tr>`).join("");
+      const calRows = M.calendar.map((c) => `<tr><td class="t-name">${esc(c.brand)}</td><td>${esc(c.prepared)}</td><td>${esc(c.approved)}</td><td>${esc(c.due)}</td></tr>`).join("");
+      const cadRows = M.cadence.map((c) => `<tr><td class="t-name">${esc(c.deliverable)}</td><td>${esc(c.owner)}</td><td>${esc(c.freq)}</td></tr>`).join("");
+      const routeRows = M.leadEntry.routing.map((r) => `<tr><td class="t-name">${esc(r.brand)}</td><td>${esc(r.to)}</td></tr>`).join("");
+      marketing = `
+        <h2 style="margin-top:8px">Online marketing structure</h2>
+        <div class="callout teal">Owned by <b>${esc(M.onlineOwners)}</b> — ${esc(M.scope)} Agencies: ${esc(M.agencies)}. Escalation: Arjun → Bhanu.</div>
+
+        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Who runs which page</h3>
+          ${tbl(["Brand", "Model", "Our owners"], pageRows)}
+          <ul class="soc-addr">${M.models.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>
+
+        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Monthly content calendar</h3>
+          ${tbl(["Brand", "Prepared by", "Reviewed / approved by", "Due"], calRows)}
+          <div class="muted-note">All four calendars land together on the 25th so the next month is fully planned before it starts. For agency brands, Rashmi &amp; Avedan are accountable for on-time delivery.</div></div>
+
+        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Quarterly strategy note <span class="t-muted" style="font-weight:400">· company-managed brands</span></h3>
+          <ol class="soc-addr">${M.strategyNote.sections.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+          <div class="muted-note">${esc(M.strategyNote.due)}</div></div>
+
+        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Fixed cadence</h3>
+          ${tbl(["Deliverable", "Owner", "Frequency"], cadRows)}
+          <div class="muted-note">${esc(M.escalation)}</div></div>
+
+        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Telemarketing <span class="t-muted" style="font-weight:400">· ${esc(M.telemarketing.owner)}</span></h3>
+          <p style="margin:0 0 8px;color:var(--text-2)">${esc(M.telemarketing.note)}</p>
+          <ul class="soc-addr">${M.telemarketing.standards.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>
+
+        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry into Bigin <span class="t-muted" style="font-weight:400">· ${esc(M.leadEntry.owner)}</span></h3>
+          <p style="margin:0 0 8px;color:var(--text-2)">${esc(M.leadEntry.note)}</p>
+          ${tbl(["Leads for", "Route to"], routeRows)}</div>`;
+    }
     const revealBtn = canSeePass ? `<button id="socReveal" class="ghost-btn" type="button" style="margin-left:auto">👁 Show all passwords</button>` : "";
     const websites = (S.accounts || []).length
       ? `<div style="display:flex;align-items:center;gap:10px;margin-top:28px;flex-wrap:wrap"><h2 style="margin:0">Accounts &amp; Owners</h2>${revealBtn}</div>
@@ -5709,15 +5746,16 @@
 
     return `
       <div class="section-head">
-        <h1>Social Media Presence</h1>
-        <p>Where Primelaze, Esthemax and Celluma are present online, who manages leads, and (for admins) the account logins.</p>
+        <h1>Online Marketing</h1>
+        <p>Online-marketing structure and ownership, where each brand is present online, and (for admins) the account logins. Offline / events are handled separately.</p>
       </div>
       <div class="card" style="margin-bottom:14px"><div class="stat-row">
         <div class="stat"><b>${S.presence.length}</b><span>Platforms tracked</span></div>
         <div class="stat k-good"><b>${activeCount}</b><span>Active accounts</span></div>
         <div class="stat k-warn"><b>${notActiveCount}</b><span>Not active</span></div>
       </div></div>
-      <h2 style="margin-top:8px">Presence by platform type</h2>
+      ${marketing}
+      <h2 style="margin-top:28px">Presence by platform type</h2>
       ${typeSections}
       ${websites}`;
   }
@@ -7113,6 +7151,7 @@
     targets: ["HQ Targets"],
     order: ["Inventory"],
     payments: ["Outstanding Payment", "Payments"],
+    social: ["Social Media"],
   };
   // All changes recorded for a specific page (newest first). Matches on the
   // stable page id first, then the current label, then any past label.
