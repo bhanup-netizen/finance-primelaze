@@ -5617,6 +5617,10 @@
     addr: "Leo House, Shaheed Bhagat Singh Nagar, Dugri-Dhandra Rd, Near Joseph School, Ludhiana, Punjab 141001",
   };
   const TRANSPORT_MODES = ["Air", "Surface", "Road", "Rail", "Courier", "Sea", "By Hand"];
+  // Default transport / courier partner shown on a new challan — editable per
+  // challan so material carried by another cargo company or an individual can be
+  // recorded instead.
+  const DEFAULT_TRANSPORT = "JD Cargo\nAddress: G-3, Siddhivinayak CHS, Central Road, MIDC, Ganeshwadi, Behind Akruti Star, Andheri (E), Mumbai, India\nwww.jdcargo.co.in · info@jdcargo.co.in · 022-65166111, +91 98708 13466";
   const customAddresses = []; // admin-added challan addresses (appear in From & To)
   const fromBook = () => (D.challanRefs && D.challanRefs.from || []).concat(customAddresses);
   const toBook = () => (D.challanRefs && D.challanRefs.to || []).concat(customAddresses);
@@ -6088,6 +6092,7 @@
               <option value="__custom__">＋ Other (type below)…</option>
             </select></label>
           <label class="ord-field"><span>Notes / custom purpose (optional)</span><textarea id="chNotes" rows="2">${esc(c.notes || "")}</textarea></label>
+          <label class="ord-field"><span>Transport / courier partner <span class="t-muted" style="font-weight:400">(cargo company or person carrying it — editable)</span></span><textarea id="chTransport" rows="3" placeholder="Cargo company name + address + phone/email, or the person's name & number">${esc(c.transportPartner != null ? c.transportPartner : DEFAULT_TRANSPORT)}</textarea></label>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button type="submit" class="dl-btn">${c.id ? "Save changes" : "Create challan"}</button>
             <button type="button" class="ghost-btn" id="chCancel">Cancel</button>
@@ -6121,6 +6126,7 @@
       fromName: $("#chFromName").value.trim(), fromAddr: $("#chFromAddr").value.trim(),
       toName: $("#chToName").value.trim(), toAddr: $("#chToAddr").value.trim(),
       items, notes: $("#chNotes").value.trim(),
+      transportPartner: ($("#chTransport") ? $("#chTransport").value.trim() : ""),
     };
   }
 
@@ -6335,6 +6341,8 @@
           <ol>${DECLARATION.map((d) => `<li>${esc(d)}</li>`).join("")}</ol>
           <div>Thanking you.<br>Sincerely,</div>
         </div>
+
+        ${c.transportPartner ? `<div class="ch-transport"><b>Transport / Courier Partner</b><br>${esc(c.transportPartner).replace(/\n/g, "<br>")}</div>` : ""}
 
         <div class="ch-sign">
           ${brandSign

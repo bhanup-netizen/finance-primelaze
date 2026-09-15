@@ -849,6 +849,7 @@ textarea.mk-in { resize: vertical; line-height: 1.45; }
   #printArea .ch-declare { font-size: 10px; margin: 8px 0; break-inside: avoid; }
   #printArea .ch-declare ol { margin: 3px 0 6px 18px; padding: 0; }
   #printArea .ch-declare li { margin: 2px 0; }
+  #printArea .ch-transport { font-size: 10.5px; margin: 10px 0 4px; padding: 7px 9px; border: 1px solid #ccc; border-radius: 4px; break-inside: avoid; line-height: 1.5; }
   #printArea .ch-sign { margin-top: 18px; text-align: right; break-inside: avoid; }
   #printArea .ch-sign-name { font-weight: 700; color: #2a2ab0; font-size: 11px; }
   #printArea .ch-sign img { display: inline-block; margin: 2px 0; }
