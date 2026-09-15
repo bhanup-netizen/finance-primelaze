@@ -5193,6 +5193,7 @@
   const regDocs = {}; // "<group>:<slug>:<docType>" -> {name,url,path,size,at,by} | {url,link:true,at,by}
   const regTrack = {}; // "<group>:<slug>" -> {status, expected, actual, remarks:[{at,by,text}]}
   const regItemEdits = {}; // "<group>:<slug>:<field>" -> corrected value for an item's own detail
+  const socOwners = {}; // Social Media accounts: "<account id>" -> owner override (editable)
   const regAdds = { cdsco: [], gem: [], products: [], celluma: [], cosmetic: [] }; // items moved/added into a tab
   const regMoved = []; // "<group>:<slug>" hidden from that tab (moved out)
   let regTab = "cdsco", regQ = "", regStatusF = "";
@@ -5632,37 +5633,53 @@
         ${table(presHead, body)}</div>`;
     }).join("");
 
-    // ---- Website contact directory — per brand, contacts tagged by function ----
+    // ---- Website contact directory — per brand; every account (email, number,
+    // social handle, website) is its own row with an EDITABLE owner. The account
+    // id itself is fixed; only the owner can be changed (saved for everyone). ----
+    const canEditSocial = isAdmin(); // admins in admin mode, or a social page editor
+    const ownerCell = (id, def) => {
+      const val = socOwners[id] != null ? socOwners[id] : (def || "");
+      return canEditSocial
+        ? `<td><input class="soc-owner-in" data-id="${esc(id)}" value="${esc(val)}" placeholder="owner…" style="min-width:120px"></td>`
+        : `<td>${esc(val || "—")}</td>`;
+    };
     const webBlock = (w) => {
       const emails = (w.emails || []).slice().sort((a, b) => SOC_FN_ORDER.indexOf(a.fn) - SOC_FN_ORDER.indexOf(b.fn));
       const phones = (w.phones || []).slice().sort((a, b) => SOC_FN_ORDER.indexOf(a.fn) - SOC_FN_ORDER.indexOf(b.fn));
       const emailHasWhere = emails.some((e) => e.where);
-      const emailHead = ["Function", "Email", "Responsible for"].concat(emailHasWhere ? ["Where it appears"] : []).map((x) => `<th>${x}</th>`).join("");
+      const emailHead = ["Function", "Email", "Owner", "Responsible for"].concat(emailHasWhere ? ["Where it appears"] : []).map((x) => `<th>${x}</th>`).join("");
       const emailBody = emails.map((e) => `<tr>
         <td>${fnBadge(e.fn)}</td>
         <td class="t-name">${esc(e.addr)}</td>
+        ${ownerCell("mail:" + e.addr, e.owner)}
         <td>${esc(e.purpose || "")}</td>
         ${emailHasWhere ? `<td class="cell-note">${esc(e.where || "—")}</td>` : ""}</tr>`).join("");
       const phoneBody = phones.map((p) => `<tr>
-        <td>${fnBadge(p.fn)}</td><td class="t-name">${esc(p.num)}</td><td>${esc(p.purpose || "")}</td></tr>`).join("");
+        <td>${fnBadge(p.fn)}</td><td class="t-name">${esc(p.num)}</td>${ownerCell("tel:" + p.num, p.owner)}<td>${esc(p.purpose || "")}</td></tr>`).join("");
       const socBody = (w.social || []).map((s) => `<tr>
         <td class="t-name">${esc(s.platform)}</td>
-        <td>${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.handle)}</a>` : esc(s.handle)}</td></tr>`).join("");
+        <td>${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.handle)}</a>` : esc(s.handle)}</td>
+        ${ownerCell("soc:" + s.handle, s.owner)}</tr>`).join("");
+      const siteBody = `<tr>
+        <td class="t-name">${esc(w.site)}</td>
+        <td><a href="https://${esc(w.site)}" target="_blank" rel="noopener">${esc(w.site)}</a></td>
+        ${ownerCell("site:" + w.site, w.siteOwner)}</tr>`;
       const addr = (w.addresses || []).length
         ? `<h4 class="ld-h">🏢 Addresses</h4><ul class="soc-addr">${w.addresses.map((a) => `<li><b>${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul>`
         : "";
       return `<div class="block" style="margin-top:18px">
         <h3 style="margin:0 0 2px">${esc(w.brand)}</h3>
         <div class="t-muted" style="margin-bottom:10px">${esc(w.site)}</div>
+        <h4 class="ld-h">🌍 Website</h4>${table(["Website", "URL", "Owner"].map((x) => `<th>${x}</th>`).join(""), siteBody)}
         <h4 class="ld-h">📧 Emails</h4>${table(emailHead, emailBody)}
-        ${phoneBody ? `<h4 class="ld-h">📞 Phone / WhatsApp</h4>${table(["Function", "Number", "Purpose"].map((x) => `<th>${x}</th>`).join(""), phoneBody)}` : ""}
-        ${socBody ? `<h4 class="ld-h">🌐 Social</h4>${table(["Platform", "Link / handle"].map((x) => `<th>${x}</th>`).join(""), socBody)}` : ""}
+        ${phoneBody ? `<h4 class="ld-h">📞 Phone / WhatsApp</h4>${table(["Function", "Number", "Owner", "Purpose"].map((x) => `<th>${x}</th>`).join(""), phoneBody)}` : ""}
+        ${socBody ? `<h4 class="ld-h">🌐 Social</h4>${table(["Platform", "Link / handle", "Owner"].map((x) => `<th>${x}</th>`).join(""), socBody)}` : ""}
         ${addr}
       </div>`;
     };
     const websites = (S.websites || []).length
-      ? `<h2 style="margin-top:28px">Website Contacts</h2>
-         <p class="muted-note" style="margin-top:0">Emails and numbers are tagged by function; below are the social links and addresses wired into each brand's public website.</p>
+      ? `<h2 style="margin-top:28px">Accounts &amp; Owners</h2>
+         <p class="muted-note" style="margin-top:0">Every website, email, number and social handle is a separate row. ${canEditSocial ? "The <b>Owner</b> is editable (the id itself can't be changed) — changes save for everyone." : "Owners are set by an administrator."}</p>
          ${S.websites.map(webBlock).join("")}`
       : "";
 
@@ -5700,6 +5717,14 @@
         el.style.cursor = "pointer";
         el.title = "Click to reveal / hide";
         el.onclick = () => { el.textContent = el.textContent.indexOf("•") === 0 ? el.dataset.pass : "••••••••"; };
+      });
+      // Editable owner per account id (id is fixed; only the owner changes).
+      document.querySelectorAll(".soc-owner-in").forEach((el) => {
+        el.onchange = () => {
+          const id = el.dataset.id, v = (el.value || "").trim();
+          if (v) socOwners[id] = v; else delete socOwners[id];
+          saveEdits("Social owner · " + id);
+        };
       });
     }, 0);
 
@@ -6973,6 +6998,7 @@
       if (e.regDocs && typeof e.regDocs === "object") { Object.keys(regDocs).forEach((k) => delete regDocs[k]); Object.assign(regDocs, e.regDocs); }
       if (e.regTrack && typeof e.regTrack === "object") { Object.keys(regTrack).forEach((k) => delete regTrack[k]); Object.assign(regTrack, e.regTrack); }
       if (e.regItemEdits && typeof e.regItemEdits === "object") { Object.keys(regItemEdits).forEach((k) => delete regItemEdits[k]); Object.assign(regItemEdits, e.regItemEdits); }
+      if (e.socOwners && typeof e.socOwners === "object") { Object.keys(socOwners).forEach((k) => delete socOwners[k]); Object.assign(socOwners, e.socOwners); }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
@@ -7066,7 +7092,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
