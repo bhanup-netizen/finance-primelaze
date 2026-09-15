@@ -5609,6 +5609,37 @@
       <td>${yn(r.celluma)}</td>
     </tr>`).join("");
 
+    // Website contact directory (public-facing info) — one block per brand.
+    const webBlock = (w) => {
+      const emailHasWhere = (w.emails || []).some((e) => e.where);
+      const emailHead = ["Email", "Responsible for"].concat(emailHasWhere ? ["Where it appears"] : []).map((x) => `<th>${x}</th>`).join("");
+      const emailBody = (w.emails || []).map((e) => `<tr>
+        <td class="t-name">${esc(e.addr)}</td>
+        <td>${esc(e.purpose || "")}</td>
+        ${emailHasWhere ? `<td class="cell-note">${esc(e.where || "—")}</td>` : ""}</tr>`).join("");
+      const phoneBody = (w.phones || []).map((p) => `<tr>
+        <td class="t-name">${esc(p.num)}</td><td>${esc(p.purpose || "")}</td></tr>`).join("");
+      const socBody = (w.social || []).map((s) => `<tr>
+        <td class="t-name">${esc(s.platform)}</td>
+        <td>${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.handle)}</a>` : esc(s.handle)}</td></tr>`).join("");
+      const addr = (w.addresses || []).length
+        ? `<h4 class="ld-h">Addresses</h4><ul class="soc-addr">${w.addresses.map((a) => `<li><b>${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul>`
+        : "";
+      return `<div class="block" style="margin-top:18px">
+        <h3 style="margin:0 0 2px">${esc(w.brand)}</h3>
+        <div class="t-muted" style="margin-bottom:10px">${esc(w.site)}</div>
+        <h4 class="ld-h">📧 Emails</h4>${table(emailHead, emailBody)}
+        ${phoneBody ? `<h4 class="ld-h">📞 Phone / WhatsApp</h4>${table(["Number", "Purpose"].map((x) => `<th>${x}</th>`).join(""), phoneBody)}` : ""}
+        ${socBody ? `<h4 class="ld-h">🌐 Social</h4>${table(["Platform", "Link / handle"].map((x) => `<th>${x}</th>`).join(""), socBody)}` : ""}
+        ${addr}
+      </div>`;
+    };
+    const websites = (S.websites || []).length
+      ? `<h2 style="margin-top:28px">Website Contacts</h2>
+         <p class="muted-note" style="margin-top:0">The emails, numbers and social links wired into each brand's public website.</p>
+         ${S.websites.map(webBlock).join("")}`
+      : "";
+
     // Credentials block — admins / super admins only. Passwords are masked until
     // the viewer clicks "Show".
     let creds = "";
@@ -5656,6 +5687,7 @@
         <div class="stat k-good"><b>${activeCount}</b><span>Active accounts</span></div>
       </div></div>
       ${table(head, body)}
+      ${websites}
       ${creds}`;
   }
 

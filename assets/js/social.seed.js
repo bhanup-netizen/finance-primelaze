@@ -39,4 +39,48 @@ window.SOCIAL_SEED = {
       { user: "7339513001", pass: "OTP on Dhinesh sir's number" },
     ] },
   ],
+  websites: [
+    {
+      brand: "Casovil", site: "casovil.com",
+      emails: [
+        { addr: "sales@casovil.com", purpose: "Sales & orders — contact/enquiry form and the cart's “send order request”", where: "Contact page, all footers, order flow" },
+        { addr: "info@casovil.com", purpose: "General enquiries (catch-all)", where: "Contact page, all footers, legal pages" },
+        { addr: "itsupport@primelaze.com", purpose: "Admin login only — internal order-management backend", where: "Not shown publicly on the site" },
+      ],
+      phones: [
+        { num: "+91 97013 82034", purpose: "Call & WhatsApp — floating “Chat on WhatsApp” button + contact page" },
+      ],
+      social: [
+        { platform: "Instagram", handle: "@casovil.world", link: "https://instagram.com/casovil.world" },
+      ],
+      addresses: [
+        { label: "Corporate Office", value: "SCO No. 23, Upper Ground Floor, Block A, Chandigarh Citi Center, VIP Road, Zirakpur, Mohali, Punjab – 140603" },
+        { label: "Head Office", value: "306, Bharathiyar Salai, Ashok Nagar, Lawspet, Puducherry – 605008" },
+        { label: "Hours", value: "Mon–Sat, 10am–7pm IST" },
+      ],
+    },
+    {
+      brand: "Primelaze Meditech", site: "primelaze.com",
+      emails: [
+        { addr: "calls@primelaze.com", purpose: "General & Sales enquiries (contact, demo, brochure forms)" },
+        { addr: "servicesupport@primelaze.com", purpose: "Service / technical support" },
+        { addr: "hr@primelaze.com", purpose: "HR & Careers (job applications)" },
+        { addr: "salessupport@primelaze.com", purpose: "Sales support (support portal)" },
+        { addr: "info@primelaze.com", purpose: "General info (support portal)" },
+      ],
+      phones: [
+        { num: "+91 74167 35111", purpose: "Sales / Demo Enquiry (main — shown in header on every page)" },
+        { num: "+91 97013 82034", purpose: "Service Support" },
+        { num: "+91 78459 13001", purpose: "HR & Careers" },
+        { num: "+91 99155 59151", purpose: "WhatsApp (chat button + all “WhatsApp” links)" },
+      ],
+      social: [
+        { platform: "Facebook", handle: "facebook.com/primelaze", link: "https://facebook.com/primelaze" },
+        { platform: "Instagram", handle: "instagram.com/primelazemeditech", link: "https://instagram.com/primelazemeditech" },
+        { platform: "YouTube", handle: "youtube.com/@marketingprimelaze", link: "https://youtube.com/@marketingprimelaze" },
+        { platform: "LinkedIn (company)", handle: "linkedin.com/company/primelaze-meditech", link: "https://linkedin.com/company/primelaze-meditech" },
+      ],
+      addresses: [],
+    },
+  ],
 };
