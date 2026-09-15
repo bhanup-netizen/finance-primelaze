@@ -5211,6 +5211,69 @@
   const socAcctKey = (a) => a.platform + "::" + a.id;
   const socOwnerOf = (a) => socOwners[socAcctKey(a)] != null ? socOwners[socAcctKey(a)] : (a.owner || "");
   const socIsSparsha = (a) => /sparsha/i.test(socOwnerOf(a));
+  // ---- Editable marketing content (Online & Offline Marketing pages) ----
+  // mktDoc is a full editable override of window.SOCIAL_SEED.marketing. Until a
+  // first edit it stays empty and the seed is shown; the first edit copies the
+  // seed in, then everything renders from (and saves to) mktDoc.
+  const mktDoc = {};
+  const mktObj = () => (mktDoc.__init ? mktDoc : ((window.SOCIAL_SEED || {}).marketing || {}));
+  function mktEnsure() {
+    if (!mktDoc.__init) {
+      const base = JSON.parse(JSON.stringify((window.SOCIAL_SEED || {}).marketing || {}));
+      Object.keys(base).forEach((k) => { mktDoc[k] = base[k]; });
+      mktDoc.__init = true;
+    }
+    return mktDoc;
+  }
+  const mktAt = (obj, path) => path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
+  function mktSetPath(path, val) {
+    mktEnsure();
+    const parts = path.split("."), last = parts.pop();
+    const parent = parts.reduce((o, k) => o[k], mktDoc);
+    if (parent) parent[last] = val;
+  }
+  // Editable-content render helpers (ed = editable for this viewer).
+  const mkText = (ed, path, val) => ed
+    ? `<input class="mk-in" data-path="${esc(path)}" value="${esc(val == null ? "" : val)}">`
+    : esc(val || "—");
+  const mkArea = (ed, path, val) => ed
+    ? `<textarea class="mk-in" data-path="${esc(path)}" rows="2">${esc(val == null ? "" : val)}</textarea>`
+    : esc(val || "—");
+  const mkList = (ed, path, arr) => {
+    const items = (arr || []).map((s, i) => ed
+      ? `<li class="mk-li"><input class="mk-in" data-path="${esc(path)}.${i}" value="${esc(s)}"><button type="button" class="linkish mk-del" data-path="${esc(path)}" data-i="${i}" title="Remove">✕</button></li>`
+      : `<li>${esc(s)}</li>`).join("");
+    return `<ul class="soc-addr">${items}</ul>${ed ? `<button type="button" class="mini-btn mk-add" data-path="${esc(path)}" data-tmpl="str">＋ Add</button>` : ""}`;
+  };
+  // cols: [[key,label], ...]
+  const mkRowsTable = (ed, path, rows, cols) => {
+    const head = (ed ? [""] : []).concat(cols.map((c) => c[1])).map((x) => `<th>${x}</th>`).join("");
+    const body = (rows || []).map((r, i) => `<tr>${ed ? `<td class="num"><button type="button" class="linkish mk-del" data-path="${esc(path)}" data-i="${i}" title="Remove row">✕</button></td>` : ""}${cols.map((c) => `<td>${mkText(ed, path + "." + i + "." + c[0], r[c[0]])}</td>`).join("")}</tr>`).join("");
+    return table(head, body) + (ed ? `<button type="button" class="mini-btn mk-add" data-path="${esc(path)}" data-tmpl="${esc(cols.map((c) => c[0]).join(","))}">＋ Add row</button>` : "");
+  };
+  function wireMkt() {
+    document.querySelectorAll(".mk-in").forEach((el) => {
+      el.onchange = () => { mktSetPath(el.dataset.path, el.value); saveEdits("Marketing content"); };
+    });
+    document.querySelectorAll(".mk-del").forEach((b) => {
+      b.onclick = () => {
+        mktEnsure(); const arr = mktAt(mktDoc, b.dataset.path);
+        if (Array.isArray(arr)) { arr.splice(+b.dataset.i, 1); saveEdits("Marketing · removed item"); go(currentTab); }
+      };
+    });
+    document.querySelectorAll(".mk-add").forEach((b) => {
+      b.onclick = () => {
+        mktEnsure(); const arr = mktAt(mktDoc, b.dataset.path);
+        if (!Array.isArray(arr)) return;
+        const tmpl = b.dataset.tmpl; let item;
+        if (tmpl === "str") item = "";
+        else if (tmpl === "phase") item = { when: "New stage", note: "", tasks: [] };
+        else if (tmpl === "cgroup") item = { group: "New group", items: [] };
+        else { item = {}; tmpl.split(",").forEach((k) => { item[k] = ""; }); }
+        arr.push(item); saveEdits("Marketing · added item"); go(currentTab);
+      };
+    });
+  }
   const SOC_PLAT_ORDER = ["Facebook", "Instagram", "Threads", "YouTube", "LinkedIn", "Pinterest", "Website", "Email", "WhatsApp", "Phone", "Indiamart"];
   const SOC_PLAT_ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
   const socPlatSort = (a, b) => { const ia = SOC_PLAT_ORDER.indexOf(a), ib = SOC_PLAT_ORDER.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b); };
@@ -5713,34 +5776,29 @@
     const addrBlocks = (S.addresses || []).length
       ? `<div class="block" style="margin-top:16px"><h4 class="ld-h">🏢 Addresses</h4><ul class="soc-addr">${S.addresses.map((a) => `<li><b>${esc(a.brand)} · ${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul></div>`
       : "";
-    // ---- Online marketing structure (ownership, calendar, cadence) ----
-    const M = S.marketing;
+    // ---- Online marketing structure (editable rules & responsibilities) ----
+    const M = mktObj();
     let marketing = "";
-    if (M) {
-      const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
-      const pageRows = M.pages.map((p) => `<tr><td class="t-name">${esc(p.brand)}</td><td>${esc(p.model)}</td><td>${esc(p.owners)}</td></tr>`).join("");
-      const calRows = M.calendar.map((c) => `<tr><td class="t-name">${esc(c.brand)}</td><td>${esc(c.prepared)}</td><td>${esc(c.approved)}</td><td>${esc(c.due)}</td></tr>`).join("");
-      const cadRows = M.cadence.map((c) => `<tr><td class="t-name">${esc(c.deliverable)}</td><td>${esc(c.owner)}</td><td>${esc(c.freq)}</td></tr>`).join("");
+    if (M && M.pages) {
       marketing = `
         <h2 style="margin-top:8px">Online marketing structure</h2>
-        <div class="callout teal">Owned by <b>${esc(M.onlineOwners)}</b> — ${esc(M.scope)} Agencies: ${esc(M.agencies)}. Escalation: Arjun → Bhanu.</div>
+        <div class="callout teal">Owned by <b>${mkText(ed, "onlineOwners", M.onlineOwners)}</b> · Agencies: ${mkText(ed, "agencies", M.agencies)}<br>${mkArea(ed, "scope", M.scope)}</div>
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 2px">Who runs which page <span class="t-muted" style="font-weight:400">· Instagram page</span></h3>
           <div class="muted-note" style="margin:0 0 8px">Refers to the Instagram page for each brand.</div>
-          ${tbl(["Brand", "Instagram page", "Our owners"], pageRows)}
-          <ul class="soc-addr">${M.models.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>
+          ${mkRowsTable(ed, "pages", M.pages, [["brand", "Brand"], ["model", "Instagram page"], ["owners", "Our owners"]])}
+          ${mkList(ed, "models", M.models)}</div>
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Monthly content calendar</h3>
-          ${tbl(["Brand", "Prepared by", "Reviewed / approved by", "Due"], calRows)}
-          <div class="muted-note">All four calendars land together on the 25th so the next month is fully planned before it starts. For agency brands, Rashmi &amp; Avedan are accountable for on-time delivery.</div></div>
+          ${mkRowsTable(ed, "calendar", M.calendar, [["brand", "Brand"], ["prepared", "Prepared by"], ["approved", "Reviewed / approved by"], ["due", "Due"]])}</div>
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Quarterly strategy note <span class="t-muted" style="font-weight:400">· company-managed brands</span></h3>
-          <ol class="soc-addr">${M.strategyNote.sections.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
-          <div class="muted-note">${esc(M.strategyNote.due)}</div></div>
+          ${mkList(ed, "strategyNote.sections", M.strategyNote && M.strategyNote.sections)}
+          <div class="muted-note">${mkArea(ed, "strategyNote.due", M.strategyNote && M.strategyNote.due)}</div></div>
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Fixed cadence</h3>
-          ${tbl(["Deliverable", "Owner", "Frequency"], cadRows)}
-          <div class="muted-note">${esc(M.escalation)}</div></div>`;
+          ${mkRowsTable(ed, "cadence", M.cadence, [["deliverable", "Deliverable"], ["owner", "Owner"], ["freq", "Frequency"]])}
+          <div class="muted-note">${mkArea(ed, "escalation", M.escalation)}</div></div>`;
     }
     const websites = (platOrdered.length || ed)
       ? `<h2 style="margin-top:28px">Pages by platform</h2>
@@ -5773,13 +5831,15 @@
       });
       const ap = document.getElementById("socAddPage");
       if (ap) ap.onclick = socAddPageDialog;
+      wireMkt();
     }, 0);
 
     return `
       <div class="section-head">
         <h1>Online Marketing</h1>
-        <p>Every brand page &amp; account in one place, with who posts / manages each. Logins are on the separate Passwords tab; lead replies live under Lead Collection.</p>
+        <p>Structure &amp; responsibilities plus every brand page in one place.${ed ? " <b>Editable</b> — changes save for everyone." : ""} Logins are on the Passwords tab; lead replies live under Lead Collection.</p>
       </div>
+      ${marketing}
       ${websites}`;
   }
 
@@ -5814,49 +5874,45 @@
 
   /* ================= OFFLINE MARKETING ================= */
   function renderOffline() {
-    const O = ((window.SOCIAL_SEED || {}).marketing || {}).offline;
+    const O = mktObj().offline;
     if (!O) return `<div class="section-head"><h1>Offline Marketing</h1><p>No data.</p></div>`;
-    const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
-    const entryRows = (O.entry || []).map((e) => `<tr><td class="t-name">${esc(e.route)}</td><td>${esc(e.flow)}</td></tr>`).join("");
-    const planBlocks = (O.plan || []).map((p) => {
-      const rows = p.tasks.map((t) => `<tr><td class="t-name">${esc(t.task)}</td><td>${esc(t.who)}</td></tr>`).join("");
-      return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">${esc(p.when)}</h3>
-        ${tbl(["What must be done", "Who does it"], rows)}
-        ${p.note ? `<div class="muted-note">${esc(p.note)}</div>` : ""}</div>`;
-    }).join("");
-    const afterRows = (O.after || []).map((a) => `<tr><td class="t-name">${esc(a.task)}</td><td><span class="badge b-info">${esc(a.when)}</span></td><td>${esc(a.who)}</td></tr>`).join("");
+    const ed = isAdmin(); // admins / offline page editors can edit the content
+    setTimeout(wireMkt, 0);
+    const planBlocks = (O.plan || []).map((p, i) => `<div class="block" style="margin-top:16px">
+        <h3 style="margin:0 0 8px">${ed ? mkText(ed, `offline.plan.${i}.when`, p.when) : esc(p.when)}</h3>
+        ${mkRowsTable(ed, `offline.plan.${i}.tasks`, p.tasks, [["task", "What must be done"], ["who", "Who does it"]])}
+        ${(p.note || ed) ? `<div class="muted-note">${mkText(ed, `offline.plan.${i}.note`, p.note)}</div>` : ""}</div>`).join("");
     return `
       <div class="section-head">
         <h1>Offline Marketing</h1>
-        <p>Exhibitions, conferences, doctor events and on-ground device installation — the one-month event playbook.</p>
+        <p>Exhibitions, conferences, doctor events and on-ground device installation — the one-month event playbook.${ed ? " <b>Editable</b> — changes save for everyone." : ""}</p>
       </div>
-      <div class="callout teal">Owned by <b>${esc(O.owners)}</b> — ${esc(O.scope)}</div>
+      <div class="callout teal">Owned by <b>${mkText(ed, "offline.owners", O.owners)}</b><br>${mkArea(ed, "offline.scope", O.scope)}</div>
 
       <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">How an event enters the system</h3>
-        ${tbl(["Route", "Flow"], entryRows)}</div>
+        ${mkRowsTable(ed, "offline.entry", O.entry, [["route", "Route"], ["flow", "Flow"]])}</div>
 
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:16px">
-        <div class="block"><h3 style="margin:0 0 8px">Sparsha — coordinate</h3><ul class="soc-addr">${O.sparshaDoes.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>
-        <div class="block"><h3 style="margin:0 0 8px">Akshay — execute</h3><ul class="soc-addr">${O.akshayDoes.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>
+        <div class="block"><h3 style="margin:0 0 8px">Sparsha — coordinate</h3>${mkList(ed, "offline.sparshaDoes", O.sparshaDoes)}</div>
+        <div class="block"><h3 style="margin:0 0 8px">Akshay — execute</h3>${mkList(ed, "offline.akshayDoes", O.akshayDoes)}</div>
       </div>
 
       <h2 style="margin-top:26px">The one-month event plan</h2>
       <p class="muted-note" style="margin-top:0">Read as: how many weeks are left before the event. Sparsha keeps this chart and checks it every Monday.</p>
       ${planBlocks}
+      ${ed ? `<button type="button" class="mini-btn mk-add" data-path="offline.plan" data-tmpl="phase" style="margin-top:8px">＋ Add stage</button>` : ""}
 
       <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">After the event</h3>
-        ${tbl(["What must be done", "When", "Who does it"], afterRows)}</div>
+        ${mkRowsTable(ed, "offline.after", O.after, [["task", "What must be done"], ["when", "When"], ["who", "Who does it"]])}</div>
 
-      <div class="callout" style="margin-top:16px">${esc(O.doctorNote)}</div>
+      <div class="callout" style="margin-top:16px">${mkArea(ed, "offline.doctorNote", O.doctorNote)}</div>
 
-      ${(O.checklist || []).length ? `
-        <h2 style="margin-top:28px">Conference checklist</h2>
-        <p class="muted-note" style="margin-top:0">Standard pack-list for a 2–3 day conference — run through every item for each event.</p>
-        ${O.checklist.map((g) => {
-          const rows = g.items.map((it) => `<tr><td class="num">☐</td><td class="t-name">${esc(it.item)}</td><td>${esc(it.who)}</td></tr>`).join("");
-          return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 8px">${esc(g.group)}</h3>
-            ${tbl(["", "Item", "Assigned to"], rows)}</div>`;
-        }).join("")}` : ""}`;
+      <h2 style="margin-top:28px">Conference checklist</h2>
+      <p class="muted-note" style="margin-top:0">Standard pack-list for a 2–3 day conference — run through every item for each event.</p>
+      ${(O.checklist || []).map((g, i) => `<div class="block" style="margin-top:14px">
+          <h3 style="margin:0 0 8px">${ed ? mkText(ed, `offline.checklist.${i}.group`, g.group) : esc(g.group)}</h3>
+          ${mkRowsTable(ed, `offline.checklist.${i}.items`, g.items, [["item", "Item"], ["who", "Assigned to"]])}</div>`).join("")}
+      ${ed ? `<button type="button" class="mini-btn mk-add" data-path="offline.checklist" data-tmpl="cgroup" style="margin-top:8px">＋ Add checklist group</button>` : ""}`;
   }
 
   /* ================= LEAD COLLECTION ================= */
@@ -7243,6 +7299,7 @@
       if (e.socPageStatus && typeof e.socPageStatus === "object") { Object.keys(socPageStatus).forEach((k) => delete socPageStatus[k]); Object.assign(socPageStatus, e.socPageStatus); }
       if (Array.isArray(e.socPageAdds)) { socPageAdds.length = 0; e.socPageAdds.forEach((x) => socPageAdds.push(x)); const ids = socPageAdds.map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); socPageSeq = Math.max(socPageSeq, ...(ids.length ? ids : [0])) + 1; }
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
+      if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
@@ -7336,7 +7393,7 @@
       updateLastUpdatedUI();
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
