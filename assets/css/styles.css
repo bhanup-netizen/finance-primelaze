@@ -324,6 +324,26 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 .tab:hover { background: var(--surface-2); color: var(--text); }
 .tab.active { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
 .tab-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 18px; background: var(--border-strong); margin: 0 5px; }
+/* Second-level nav: the pages inside the selected department. */
+.subtabs {
+  position: sticky; top: 111px; z-index: 19;
+  display: flex; gap: 4px; overflow-x: auto;
+  padding: 7px clamp(14px, 4vw, 34px);
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+.subtab {
+  flex: 0 0 auto;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-2); font-size: 12.5px; font-weight: 600;
+  padding: 6px 13px; border-radius: 999px; cursor: pointer;
+  white-space: nowrap; transition: .15s; font-family: inherit;
+}
+.subtab:hover { border-color: var(--accent); color: var(--text); }
+.subtab.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
 /* ---------- Layout ---------- */
 .view {
@@ -888,6 +908,7 @@ tr.total-row:hover td { background: var(--surface-3); }
   .topbar { padding: 10px 14px; gap: 10px; }
   .topbar-meta { gap: 8px; }
   .tabs { top: 58px; }              /* match the shorter mobile top bar */
+  .subtabs { top: 102px; }          /* sit just below the shorter mobile tabs */
   .view { padding: 16px 14px 40px; }
   .controls { gap: 8px; }
   .hq-actions { margin-left: 0; width: 100%; }

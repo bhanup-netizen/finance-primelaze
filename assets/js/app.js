@@ -6796,16 +6796,47 @@
   /* ---------------- shell / routing ---------------- */
   function renderTab(id) { go(id); }
 
+  const groupLabel = (g) => (g === "" ? "Overview" : g);
+  // Distinct department groups (in tab order) that have at least one visible page.
+  function visibleGroups() {
+    const out = [];
+    TABS.forEach((t) => {
+      if (!canSeePage(t.id)) return;
+      const g = t.group || "";
+      if (!out.includes(g)) out.push(g);
+    });
+    return out;
+  }
+  const groupOf = (id) => { const t = TABS.find((x) => x.id === id); return t ? (t.group || "") : ""; };
+
+  // Top-level nav: one button per department. Clicking one opens that
+  // department's first page; its pages then appear in the sub-tab bar.
   function mountTabs() {
     const nav = $("#tabs");
-    const visible = TABS.filter((t) => canSeePage(t.id));
-    let lastGroup = null;
-    nav.innerHTML = visible.map((t) => {
-      const sep = (lastGroup !== null && t.group && t.group !== lastGroup) ? `<span class="tab-sep" aria-hidden="true"></span>` : "";
-      lastGroup = t.group;
-      return `${sep}<button class="tab" data-tab="${t.id}" role="tab" title="${esc(t.group || "")}">${t.label}</button>`;
-    }).join("");
-    nav.querySelectorAll(".tab").forEach((b) => (b.onclick = () => go(b.dataset.tab)));
+    const groups = visibleGroups();
+    const cur = groupOf(currentTab);
+    nav.innerHTML = groups.map((g) =>
+      `<button class="tab ${g === cur ? "active" : ""}" data-group="${esc(g)}" role="tab">${esc(groupLabel(g))}</button>`).join("");
+    nav.querySelectorAll(".tab").forEach((b) => (b.onclick = () => {
+      const g = b.dataset.group;
+      if (g === groupOf(currentTab)) return; // already here
+      const first = TABS.find((t) => (t.group || "") === g && canSeePage(t.id));
+      if (first) go(first.id);
+    }));
+  }
+
+  // Sub-tab bar: the pages inside the currently active department. Hidden when
+  // the department has only a single page (e.g. Overview, HR).
+  function mountSubTabs() {
+    const nav = $("#subtabs");
+    if (!nav) return;
+    const cur = groupOf(currentTab);
+    const pages = TABS.filter((t) => (t.group || "") === cur && canSeePage(t.id));
+    if (pages.length <= 1) { nav.innerHTML = ""; nav.hidden = true; return; }
+    nav.hidden = false;
+    nav.innerHTML = pages.map((t) =>
+      `<button class="subtab ${t.id === currentTab ? "active" : ""}" data-tab="${t.id}" role="tab">${t.label}</button>`).join("");
+    nav.querySelectorAll(".subtab").forEach((b) => (b.onclick = () => go(b.dataset.tab)));
   }
 
   function firstVisibleTab() {
@@ -6817,7 +6848,8 @@
     let tab = TABS.find((t) => t.id === id);
     if (!tab || !canSeePage(tab.id)) tab = TABS.find((t) => t.id === firstVisibleTab()) || TABS[0];
     currentTab = tab.id;
-    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab.id));
+    document.querySelectorAll("#tabs .tab").forEach((b) => b.classList.toggle("active", b.dataset.group === groupOf(tab.id)));
+    mountSubTabs();
     $("#view").innerHTML = pageEditNote(tab.id) + tab.render();
     wirePageEditNote();
     enhanceTables();
