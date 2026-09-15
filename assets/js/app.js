@@ -5798,7 +5798,11 @@
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Fixed cadence</h3>
           ${mkRowsTable(ed, "cadence", M.cadence, [["deliverable", "Deliverable"], ["owner", "Owner"], ["freq", "Frequency"]])}
-          <div class="muted-note">${mkArea(ed, "escalation", M.escalation)}</div></div>`;
+          <div class="muted-note">${mkArea(ed, "escalation", M.escalation)}</div></div>
+
+        ${M.kpis ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">KPIs — what we measure</h3>
+          ${mkRowsTable(ed, "kpis.rows", M.kpis.rows, [["metric", "Metric"], ["how", "How it's measured"], ["target", "Target"]])}
+          <div class="muted-note">${mkArea(ed, "kpis.note", M.kpis.note)}</div></div>` : ""}`;
     }
     const websites = (platOrdered.length || ed)
       ? `<h2 style="margin-top:28px">Pages by platform</h2>

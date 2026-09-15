@@ -106,6 +106,18 @@ window.SOCIAL_SEED = {
       { deliverable: "Agency strategy call (Esthemax, Casovil)", owner: "Avedan", freq: "Monthly, per contract" },
     ],
     escalation: "Agencies (ClanConnect & Buzzfied): email is the channel of record — not WhatsApp. If a committed deliverable is missed, Avedan raises it in writing the same day. Two unanswered reminders, then escalate to Bhanu. A missed calendar or undelivered activation does not ride to month-end unreported.",
+    // KPIs — bring these numbers to every biweekly review, per brand.
+    kpis: {
+      note: "Bring these numbers to every biweekly review — per brand. Targets are set in the quarterly strategy note; the meeting checks whether they are moving.",
+      rows: [
+        { metric: "Followers — net growth", how: "New followers this period vs last", target: "" },
+        { metric: "Reach / impressions", how: "Accounts reached per post + total", target: "" },
+        { metric: "Engagement rate", how: "(Likes + comments + saves + shares) ÷ reach", target: "" },
+        { metric: "Enquiries (leads)", how: "DMs / comments / form fills that became leads", target: "" },
+        { metric: "Qualified leads → sales", how: "Leads handed to sales in Bigin", target: "" },
+        { metric: "Content published vs planned", how: "Posts published ÷ approved calendar", target: "100%" },
+      ],
+    },
     // 5 & 6. Offline marketing — exhibitions, conferences, doctor events, installs
     offline: {
       owners: "Sparsha (coordinate) + Akshay (execute)",
