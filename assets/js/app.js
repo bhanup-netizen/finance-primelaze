@@ -5847,7 +5847,16 @@
       <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">After the event</h3>
         ${tbl(["What must be done", "When", "Who does it"], afterRows)}</div>
 
-      <div class="callout" style="margin-top:16px">${esc(O.doctorNote)}</div>`;
+      <div class="callout" style="margin-top:16px">${esc(O.doctorNote)}</div>
+
+      ${(O.checklist || []).length ? `
+        <h2 style="margin-top:28px">Conference checklist</h2>
+        <p class="muted-note" style="margin-top:0">Standard pack-list for a 2–3 day conference — run through every item for each event.</p>
+        ${O.checklist.map((g) => {
+          const rows = g.items.map((it) => `<tr><td class="num">☐</td><td class="t-name">${esc(it.item)}</td><td>${esc(it.who)}</td></tr>`).join("");
+          return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 8px">${esc(g.group)}</h3>
+            ${tbl(["", "Item", "Assigned to"], rows)}</div>`;
+        }).join("")}` : ""}`;
   }
 
   /* ================= LEAD COLLECTION ================= */

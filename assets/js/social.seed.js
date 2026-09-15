@@ -130,29 +130,29 @@ window.SOCIAL_SEED = {
         "Vendor payments through finance.",
       ],
       plan: [
-        { when: "4 weeks before — decide & approve", note: "Nothing moves forward until Arjun has approved the budget. If this week slips, the event date is at risk — flag it to Bhanu immediately.", tasks: [
+        { when: "3 weeks before — decide & approve", note: "Nothing moves forward until Arjun has approved the budget. If this week slips, the event date is at risk — flag it to Bhanu immediately.", tasks: [
           { task: "Decide which conference / event we are doing", who: "Sparsha, with Arjun & Dhinesh" },
           { task: "Tell Akshay it is confirmed, so he can start", who: "Sparsha" },
           { task: "Get the stall package options and pricing", who: "Sparsha" },
-          { task: "Negotiate the package — derma", who: "Ayush (Bhanu on the call)" },
-          { task: "Negotiate the package — salon / spa", who: "Lubhda (Bhanu on the call)" },
+          { task: "Negotiate the package — derma (Primelaze)", who: "Arjun + Bhanu decide (Akshay & Sparsha on the call)" },
+          { task: "Negotiate the package — salon / spa (Casovil)", who: "Lubhda + Arjun + Bhanu (Akshay & Sparsha on the call)" },
           { task: "Take the final numbers to Arjun and get approval", who: "Sparsha asks, Arjun decides" },
           { task: "Confirm who is attending and which machines are going", who: "Arjun decides, Ayush confirms" },
-          { task: "Tell Vikas the schedule so he can brief the sales team", who: "Ayush" },
+          { task: "Tell Vikas the schedule so he can brief the sales team", who: "Sparsha" },
         ] },
-        { when: "3 weeks before — design & start building", tasks: [
+        { when: "2 weeks before — design & start building", tasks: [
           { task: "Stall design ready and shown to Arjun / Dhinesh", who: "Akshay" },
           { task: "Design approved", who: "Arjun / Dhinesh (Sparsha sets up the call)" },
           { task: "Vendor confirmed and stall build started", who: "Akshay" },
           { task: "Marketing material finalised and sent to print", who: "Akshay" },
         ] },
-        { when: "2 weeks before — book everything", tasks: [
+        { when: "1 week before — book everything", tasks: [
           { task: "Photographer, anchor, hostess, models booked", who: "Akshay" },
           { task: "Flights and hotel booked for the team", who: "Ayush" },
           { task: "Visitor engagement activities planned", who: "Akshay (+ Lubhda for salon/spa)" },
           { task: "Check the stall build is on schedule with the vendor", who: "Akshay, tracked by Sparsha" },
         ] },
-        { when: "1 week before — pack & dispatch", tasks: [
+        { when: "Event week — pack & dispatch", tasks: [
           { task: "Machines, display units, Esthemax stock, visitor forms, stationery dispatched", who: "Ayush" },
           { task: "Printed material received and checked", who: "Akshay" },
           { task: "Readiness call — everyone confirms their part is done", who: "Sparsha runs it; Akshay & Ayush confirm" },
@@ -172,6 +172,45 @@ window.SOCIAL_SEED = {
         { task: "Vendor payments cleared", when: "Within 2 weeks", who: "Akshay" },
       ],
       doctorNote: "Doctor events: same steps, shorter runway — usually two weeks from request to event. Sparsha compresses the chart when Vikas passes the request: decide & approve in the first three days, build & book in week one, dispatch & set up in week two.",
+      // Standard conference checklist (built from the conference checklist sheet).
+      checklist: [
+        { group: "Team & sessions", items: [
+          { item: "Company staff attending the conference", who: "Sparsha (with Arjun)" },
+          { item: "Talks / sessions — topic, presenter, slot", who: "Speaker team" },
+          { item: "Workshops / hands-on", who: "Speaker team" },
+          { item: "KOL / doctor coordination (invited speakers)", who: "Sparsha" },
+        ] },
+        { group: "Stall & branding", items: [
+          { item: "Stall design", who: "Akshay" },
+          { item: "Stall artwork", who: "Akshay" },
+          { item: "Marketing material — standee, poster", who: "Akshay" },
+          { item: "Vendor confirmed & stall build", who: "Akshay" },
+          { item: "Stall setup on-ground", who: "Akshay" },
+        ] },
+        { group: "Devices", items: [
+          { item: "Devices logistics (transport to venue)", who: "Ayush" },
+          { item: "Devices at booth", who: "Ayush" },
+          { item: "Devices for workshop", who: "Ayush" },
+          { item: "Device installation & on-ground setup", who: "Akshay" },
+        ] },
+        { group: "Travel & stay", items: [
+          { item: "Team travel (flights / transport)", who: "Ayush" },
+          { item: "Doctor travel (invited by Primelaze)", who: "Ayush" },
+          { item: "Hotel stay — team", who: "Ayush" },
+          { item: "Hotel stay — doctor", who: "Ayush" },
+        ] },
+        { group: "Collateral & stationery", items: [
+          { item: "Brochures (per product)", who: "Ayush" },
+          { item: "Visitor forms", who: "Ayush" },
+          { item: "Pens, stapler, stationery", who: "Ayush" },
+          { item: "Visiting cards", who: "Ayush" },
+        ] },
+        { group: "Engagement activities", items: [
+          { item: "Videographer / photographer & model", who: "Akshay" },
+          { item: "Souvenirs / giveaways", who: "Akshay" },
+          { item: "Engagement activity (games, mascot, coffee, etc.)", who: "Akshay (+ Lubhda for salon/spa)" },
+        ] },
+      ],
     },
     // 3. Telemarketing (across all channels, online enquiries + WhatsApp + calls)
     telemarketing: {
