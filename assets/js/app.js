@@ -123,7 +123,7 @@
     { id: "team", label: "HR", group: "HR", render: renderTeam },
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
-    { id: "telemarketing", label: "Telemarketing", group: "Marketing", render: renderTelemarketing },
+    { id: "telemarketing", label: "Lead Collection", group: "Marketing", render: renderTelemarketing },
     { id: "passwords", label: "🔑 Passwords", group: "Marketing", render: renderPasswords },
     // Admin & Logistics
     { id: "registration", label: "Registration", group: "Admin & Logistics", render: renderReg },
@@ -5710,8 +5710,8 @@
           <div class="muted-note">${esc(M.escalation)}</div></div>`;
     }
     const websites = (S.accounts || []).length
-      ? `<h2 style="margin-top:28px">Accounts &amp; Owners</h2>
-         <p class="muted-note" style="margin-top:2px">Grouped by platform. Every account is its own row.${canEditSocial ? " <b>Owner</b> is editable (the id can't be changed) — saved for everyone." : ""} Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only).</p>
+      ? `<h2 style="margin-top:28px">Pages &amp; accounts by platform</h2>
+         <p class="muted-note" style="margin-top:2px"><b>Owner = who posts / manages that page</b> (company brands: Rashmi + Avedan; agency brands: ClanConnect / Buzzfied). Reading &amp; replying to DMs and enquiries is handled by Lead Collection (Sparsha).${canEditSocial ? " Owner is editable (the account id can't be changed) — saved for everyone." : ""} Logins &amp; passwords are on the separate <b>🔑 Passwords</b> tab (super admin only).</p>
          ${platSections}${addrBlocks}`
       : "";
 
@@ -5729,33 +5729,25 @@
     return `
       <div class="section-head">
         <h1>Online Marketing</h1>
-        <p>Online-marketing structure and ownership, and where each brand is present online. Account logins are on the separate Passwords tab; offline / events are handled separately.</p>
+        <p>Online-marketing structure and ownership, and every brand page &amp; account in one place. Account logins are on the separate Passwords tab; lead replies live under Lead Collection; offline / events are handled separately.</p>
       </div>
-      <div class="card" style="margin-bottom:14px"><div class="stat-row">
-        <div class="stat"><b>${S.presence.length}</b><span>Platforms tracked</span></div>
-        <div class="stat k-good"><b>${activeCount}</b><span>Active accounts</span></div>
-        <div class="stat k-warn"><b>${notActiveCount}</b><span>Not active</span></div>
-      </div></div>
       ${marketing}
-      <h2 style="margin-top:28px">Presence by platform type</h2>
-      ${typeSections}
       ${websites}`;
   }
 
-  /* ================= TELEMARKETING ================= */
+  /* ================= LEAD COLLECTION ================= */
   function renderTelemarketing() {
     const M = (window.SOCIAL_SEED || {}).marketing || {};
     const T = M.telemarketing || {}, L = M.leadEntry || {};
     const tbl = (head, rows) => table(head.map((x) => `<th>${x}</th>`).join(""), rows);
-    const setupRows = (T.setup || []).map((s, i) => `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(s.action)}</td><td>${esc(s.owner)}</td><td><span class="badge b-info">${esc(s.priority)}</span></td></tr>`).join("");
     const routeRows = (L.routing || []).map((r) => `<tr><td class="t-name">${esc(r.brand)}</td><td>${esc(r.to)}</td></tr>`).join("");
     return `
       <div class="section-head">
-        <h1>Telemarketing</h1>
-        <p>Inbound enquiries, WhatsApp and outbound calls across all four brands — and how each lead reaches Bigin and sales.</p>
+        <h1>Lead Collection</h1>
+        <p>Every enquiry across all four brands — DMs, WhatsApp, calls and forms — collected, qualified and passed to sales.</p>
       </div>
       <div class="callout teal">Owned by <b>${esc(T.owner || "—")}</b> — ${esc(T.note || "")}</div>
-      ${setupRows ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Setup — before go-live</h3>${tbl(["#", "Action", "Owner", "Priority"], setupRows)}</div>` : ""}
+      ${(T.sources || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Where Sparsha collects leads from</h3><ul class="soc-addr">${T.sources.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
       ${(T.standards || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Standards</h3><ul class="soc-addr">${T.standards.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
       ${L.owner ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry into Bigin <span class="t-muted" style="font-weight:400">· ${esc(L.owner)}</span></h3>
         <p style="margin:0 0 8px;color:var(--text-2)">${esc(L.note || "")}</p>

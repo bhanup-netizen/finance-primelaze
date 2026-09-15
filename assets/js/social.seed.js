@@ -17,9 +17,6 @@ window.SOCIAL_SEED = {
     { n: 7,  media: "Indiamart",   type: "Marketplace", account: "Available",     active: "Active",     managedBy: "Sparsha",         primelaze: "Yes", esthemax: "No",  celluma: "No",  casovil: "No"  },
     { n: 8,  media: "Mail",        type: "Owned",       account: "Available",     active: "Active",     managedBy: "Function-wise",    primelaze: "Yes", esthemax: "No",  celluma: "No",  casovil: "Yes" },
     { n: 9,  media: "Website",     type: "Owned",       account: "Available",     active: "Active",     managedBy: "Vikas (build)",    primelaze: "Yes", esthemax: "No",  celluma: "No",  casovil: "Yes" },
-    { n: 12, media: "Snapchat",    type: "Messaging",   account: "Available",     active: "Not Active", managedBy: "-",               primelaze: "No",  esthemax: "No",  celluma: "No",  casovil: "No"  },
-    { n: 11, media: "Quora",       type: "Community",   account: "Not Available", active: "Not Active", managedBy: "-",               primelaze: "No",  esthemax: "No",  celluma: "No",  casovil: "No"  },
-    { n: 13, media: "Reddit",      type: "Community",   account: "Not Available", active: "Not Active", managedBy: "-",               primelaze: "No",  esthemax: "No",  celluma: "No",  casovil: "No"  },
   ],
   // One row per account. fn: Sales | Service | HR | General | Admin | WhatsApp.
   // owner = default (editable in UI); login + pass shown to admins/super only.
@@ -42,27 +39,27 @@ window.SOCIAL_SEED = {
     { platform: "Phone",    brand: "Primelaze", id: "+91 78459 13001", fn: "HR",       owner: "Sandeepika (HR)", note: "HR & Careers" },
     { platform: "WhatsApp", brand: "Primelaze", id: "+91 99155 59151", fn: "WhatsApp", owner: "Sparsha",         note: "WhatsApp chat button + all WhatsApp links" },
     { platform: "Phone",    brand: "Casovil",   id: "+91 97013 82034", fn: "Sales",    owner: "Sparsha",         note: "Call & WhatsApp — chat button + contact page" },
-    // Instagram
-    { platform: "Instagram", brand: "Primelaze", id: "primelazemeditech", link: "https://instagram.com/primelazemeditech", owner: "Sparsha", login: "primelazemeditech",   pass: "Ju5645@P" },
-    { platform: "Instagram", brand: "Celluma",   id: "Celluma_india",     link: "https://instagram.com/Celluma_india",     owner: "Sparsha", login: "Celluma_india",       pass: "Primelaze@Zirakhpur" },
-    { platform: "Instagram", brand: "Esthemax",  id: "esthemax.india",    link: "https://instagram.com/esthemax.india",    owner: "Sparsha", login: "esthemax.india",      pass: "plmesth12!@" },
-    { platform: "Instagram", brand: "Casovil",   id: "@casovil.world",    link: "https://instagram.com/casovil.world",     owner: "Sparsha", login: "Casovil / 9701382034", pass: "plmesth12!@" },
+    // Instagram — posting owner (company: Rashmi + Avedan; agency brands: the agency)
+    { platform: "Instagram", brand: "Primelaze", id: "primelazemeditech", link: "https://instagram.com/primelazemeditech", owner: "Rashmi + Avedan", login: "primelazemeditech",   pass: "Ju5645@P" },
+    { platform: "Instagram", brand: "Celluma",   id: "Celluma_india",     link: "https://instagram.com/Celluma_india",     owner: "Rashmi + Avedan", login: "Celluma_india",       pass: "Primelaze@Zirakhpur" },
+    { platform: "Instagram", brand: "Esthemax",  id: "esthemax.india",    link: "https://instagram.com/esthemax.india",    owner: "ClanConnect (agency)", login: "esthemax.india",      pass: "plmesth12!@" },
+    { platform: "Instagram", brand: "Casovil",   id: "@casovil.world",    link: "https://instagram.com/casovil.world",     owner: "Buzzfied (agency)", login: "Casovil / 9701382034", pass: "plmesth12!@" },
     // Threads (same logins as Instagram)
-    { platform: "Threads", brand: "Primelaze", id: "primelazemeditech", owner: "Sparsha", login: "primelazemeditech",   pass: "Ju5645@P",          note: "Same login as Instagram" },
-    { platform: "Threads", brand: "Esthemax",  id: "esthemax.india",    owner: "Sparsha", login: "esthemax.india",      pass: "plmesth12!@",       note: "Same login as Instagram" },
-    { platform: "Threads", brand: "Celluma",   id: "Celluma_india",     owner: "Sparsha", login: "Celluma_india",       pass: "Primelaze@Zirakhpur", note: "Same login as Instagram" },
-    { platform: "Threads", brand: "Casovil",   id: "@casovil.world",    owner: "Sparsha", login: "Casovil / 9701382034", pass: "plmesth12!@",      note: "Same login as Instagram" },
+    { platform: "Threads", brand: "Primelaze", id: "primelazemeditech", owner: "Rashmi + Avedan", login: "primelazemeditech",   pass: "Ju5645@P",          note: "Same login as Instagram" },
+    { platform: "Threads", brand: "Esthemax",  id: "esthemax.india",    owner: "ClanConnect (agency)", login: "esthemax.india",      pass: "plmesth12!@",       note: "Same login as Instagram" },
+    { platform: "Threads", brand: "Celluma",   id: "Celluma_india",     owner: "Rashmi + Avedan", login: "Celluma_india",       pass: "Primelaze@Zirakhpur", note: "Same login as Instagram" },
+    { platform: "Threads", brand: "Casovil",   id: "@casovil.world",    owner: "Buzzfied (agency)", login: "Casovil / 9701382034", pass: "plmesth12!@",      note: "Same login as Instagram" },
     // Facebook
-    { platform: "Facebook", brand: "Primelaze", id: "facebook.com/primelaze", link: "https://facebook.com/primelaze", owner: "Sparsha", login: "er.arjun1987@gmail.com", pass: "Primelazefacebook#-123" },
-    { platform: "Facebook", brand: "Esthemax",  id: "Esthemax page",          owner: "Sparsha", login: "esthemaxindia@gmail.com", pass: "Hju537&@9FG" },
+    { platform: "Facebook", brand: "Primelaze", id: "facebook.com/primelaze", link: "https://facebook.com/primelaze", owner: "Rashmi + Avedan", login: "er.arjun1987@gmail.com", pass: "Primelazefacebook#-123" },
+    { platform: "Facebook", brand: "Esthemax",  id: "Esthemax page",          owner: "ClanConnect (agency)", login: "esthemaxindia@gmail.com", pass: "Hju537&@9FG" },
     // YouTube
-    { platform: "YouTube", brand: "Primelaze", id: "youtube.com/@marketingprimelaze", link: "https://youtube.com/@marketingprimelaze", owner: "Sparsha", login: "marketing@primelaze.com", pass: "Primelazemeditech@2022" },
+    { platform: "YouTube", brand: "Primelaze", id: "youtube.com/@marketingprimelaze", link: "https://youtube.com/@marketingprimelaze", owner: "Rashmi + Avedan", login: "marketing@primelaze.com", pass: "Primelazemeditech@2022" },
     // LinkedIn
-    { platform: "LinkedIn", brand: "Primelaze", id: "linkedin.com/company/primelaze-meditech", link: "https://linkedin.com/company/primelaze-meditech", owner: "Sparsha / Avedan", login: "er.arjun1987@gmail.com", pass: "Arjun@plm321" },
+    { platform: "LinkedIn", brand: "Primelaze", id: "linkedin.com/company/primelaze-meditech", link: "https://linkedin.com/company/primelaze-meditech", owner: "Rashmi + Avedan", login: "er.arjun1987@gmail.com", pass: "Arjun@plm321" },
     // Pinterest
-    { platform: "Pinterest", brand: "Primelaze", id: "Pinterest (primelaze)", owner: "Sparsha", login: "marketing@primelaze.com", pass: "Primelazemeditech@2022" },
+    { platform: "Pinterest", brand: "Primelaze", id: "Pinterest (primelaze)", owner: "Rashmi + Avedan", login: "marketing@primelaze.com", pass: "Primelazemeditech@2022" },
     // Indiamart
-    { platform: "Indiamart", brand: "Primelaze", id: "7339513001", owner: "Sparsha", login: "7339513001", pass: "OTP on Dhinesh sir's number", note: "OTP-based login" },
+    { platform: "Indiamart", brand: "Primelaze", id: "7339513001", owner: "Rashmi + Avedan", login: "7339513001", pass: "OTP on Dhinesh sir's number", note: "OTP-based login" },
   ],
   addresses: [
     { brand: "Casovil", label: "Corporate Office", value: "SCO No. 23, Upper Ground Floor, Block A, Chandigarh Citi Center, VIP Road, Zirakpur, Mohali, Punjab – 140603" },
@@ -115,14 +112,14 @@ window.SOCIAL_SEED = {
     // 3. Telemarketing (across all channels, online enquiries + WhatsApp + calls)
     telemarketing: {
       owner: "Sparsha",
-      note: "Owns telemarketing across every social-media channel for all four brands — inbound enquiries, WhatsApp, and outbound calls. Dedicated number stays with Sparsha and does not rotate. Training is product-level, not brand-level.",
-      setup: [
-        { action: "Issue dedicated telemarketing phone number to Sparsha", owner: "Ayush", priority: "Immediate" },
-        { action: "Set up WhatsApp Business on that number", owner: "Ayush → Sparsha", priority: "With #1" },
-        { action: "Basic product training — all products across the portfolio", owner: "Arjun", priority: "Before go-live" },
-        { action: "Set up Bigin CRM for Casovil", owner: "Ayush", priority: "Before Casovil go-live" },
-        { action: "Bigin access and training — Sparsha and Mayank", owner: "Ayush", priority: "Before go-live" },
-        { action: "Call script and objection handling", owner: "Arjun + Sparsha", priority: "Week 1" },
+      note: "Sparsha collects every lead across all four brands — reads and replies to DMs, answers the calls and WhatsApp messages, talks to whoever enquires, qualifies them, and passes them on. Dedicated number stays with her and does not rotate.",
+      sources: [
+        "Instagram & Threads — DMs, comments, story replies (all brands)",
+        "Facebook — page messages and comments",
+        "WhatsApp — the dedicated WhatsApp Business number",
+        "Phone — inbound calls on the enquiry numbers + outbound follow-up calls",
+        "Website & email enquiry forms (calls@ / sales@ / info@)",
+        "Indiamart — buyer enquiries and leads",
       ],
       standards: [
         "First response within 4 working hours.",
