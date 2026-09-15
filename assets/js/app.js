@@ -111,21 +111,26 @@
   /* ---------------- tab registry ---------------- */
   const TABS = [
     { id: "overview", label: "Overview", group: "", render: renderOverview },
-    { id: "targets", label: "HQ Targets", group: "Primelaze Sales", render: renderTargets },
-    { id: "incentives", label: "Incentives", group: "Primelaze Sales", render: renderIncentives },
-    { id: "prices", label: "Pricing", group: "Primelaze Sales", render: renderPricing },
-    { id: "leads", label: "Casovil Sale", group: "Casovil Sales", render: renderLeads },
-    { id: "payments", label: "Primelaze Sale", group: "Finance", render: renderPayments },
+    // Finance
+    { id: "targets", label: "HQ Targets", group: "Finance", render: renderTargets },
+    { id: "incentives", label: "Incentives", group: "Finance", render: renderIncentives },
+    { id: "prices", label: "Pricing", group: "Finance", render: renderPricing },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
+    // Sale
+    { id: "leads", label: "Casovil Sale", group: "Sale", render: renderLeads },
+    { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
+    // HR
     { id: "team", label: "HR", group: "HR", render: renderTeam },
-    { id: "registration", label: "Registration", group: "Admin", render: renderReg },
-    { id: "order", label: "Inventory", group: "Admin", render: renderOrder },
-    { id: "demo", label: "Demo Machines", group: "Admin", render: renderDemo },
-    { id: "challan", label: "Delivery Challan", group: "Admin", render: renderChallan },
-    { id: "social", label: "Online Marketing", group: "Admin", render: renderSocial },
-    { id: "telemarketing", label: "Telemarketing", group: "Admin", render: renderTelemarketing },
-    { id: "passwords", label: "🔑 Passwords", group: "Admin", render: renderPasswords },
-    { id: "admin", label: "⚙ Admin", group: "Admin", render: renderAdmin },
+    // Marketing
+    { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
+    { id: "telemarketing", label: "Telemarketing", group: "Marketing", render: renderTelemarketing },
+    { id: "passwords", label: "🔑 Passwords", group: "Marketing", render: renderPasswords },
+    // Admin & Logistics
+    { id: "registration", label: "Registration", group: "Admin & Logistics", render: renderReg },
+    { id: "order", label: "Inventory", group: "Admin & Logistics", render: renderOrder },
+    { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
+    { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
+    { id: "admin", label: "⚙ Admin", group: "Admin & Logistics", render: renderAdmin },
   ];
 
   // rupees → short ₹ Cr / ₹ L / ₹ form
