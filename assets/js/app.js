@@ -5729,9 +5729,8 @@
     return `
       <div class="section-head">
         <h1>Online Marketing</h1>
-        <p>Online-marketing structure and ownership, and every brand page &amp; account in one place. Account logins are on the separate Passwords tab; lead replies live under Lead Collection; offline / events are handled separately.</p>
+        <p>Every brand page &amp; account in one place, with who posts / manages each. Logins are on the separate Passwords tab; lead replies live under Lead Collection.</p>
       </div>
-      ${marketing}
       ${websites}`;
   }
 
