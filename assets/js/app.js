@@ -5643,63 +5643,44 @@
         ? `<td><input class="soc-owner-in" data-id="${esc(id)}" value="${esc(val)}" placeholder="owner…" style="min-width:120px"></td>`
         : `<td>${esc(val || "—")}</td>`;
     };
-    // Flatten every account (website, email, phone, social) across all brands,
-    // then group PLATFORM-WISE (Facebook, Instagram, Website, …).
+    // Group every account PLATFORM-WISE (Facebook, Instagram, Website, …). Each
+    // account is one row: Brand · Account (id, fixed) · Owner (editable) · Login
+    // & Password (admins/super only, shown in the same row) · Notes.
     const PLAT_ORDER = ["Facebook", "Instagram", "Threads", "YouTube", "LinkedIn", "Pinterest", "Website", "Email", "WhatsApp", "Phone", "Indiamart"];
     const PLAT_ICON = { Facebook: "📘", Instagram: "📸", Threads: "🧵", YouTube: "▶️", LinkedIn: "💼", Pinterest: "📌", Website: "🌍", Email: "📧", WhatsApp: "💬", Phone: "📞", Indiamart: "🛒" };
-    const flat = [];
-    (S.websites || []).forEach((w) => {
-      if (w.site) flat.push({ platform: "Website", brand: w.brand, id: w.site, link: "https://" + w.site, ownerKey: "site:" + w.site, ownerDef: w.siteOwner });
-      (w.emails || []).forEach((e) => flat.push({ platform: "Email", brand: w.brand, id: e.addr, ownerKey: "mail:" + e.addr, ownerDef: e.owner, fn: e.fn, note: e.purpose }));
-      (w.phones || []).forEach((p) => flat.push({ platform: p.fn === "WhatsApp" ? "WhatsApp" : "Phone", brand: w.brand, id: p.num, ownerKey: "tel:" + p.num, ownerDef: p.owner, fn: p.fn, note: p.purpose }));
-      (w.social || []).forEach((s) => flat.push({ platform: String(s.platform).replace(/\s*\(company\)/i, "").trim(), brand: w.brand, id: s.handle, link: s.link, ownerKey: "soc:" + s.handle, ownerDef: s.owner }));
-    });
+    const acctKey = (a) => a.platform + "::" + a.id;
     const platGroups = {};
-    flat.forEach((a) => { (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
+    (S.accounts || []).forEach((a) => { (platGroups[a.platform] = platGroups[a.platform] || []).push(a); });
     const platOrdered = Object.keys(platGroups).sort((a, b) => {
       const ia = PLAT_ORDER.indexOf(a), ib = PLAT_ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
     });
+    const acctCols = ["Brand", "Account", "Owner"].concat(canSeePass ? ["Login", "Password"] : []).concat(["Notes"]);
+    const acctHead = acctCols.map((x) => `<th>${x}</th>`).join("");
     const platSections = platOrdered.map((pl) => {
       const rows = platGroups[pl];
       const body = rows.map((a) => `<tr>
         <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
         <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
-        ${ownerCell(a.ownerKey, a.ownerDef)}
+        ${ownerCell(acctKey(a), a.owner)}
+        ${canSeePass ? `<td class="cell-note">${a.login ? esc(a.login) : "—"}</td>` : ""}
+        ${canSeePass ? `<td>${a.pass ? `<span class="soc-pass" data-pass="${esc(a.pass)}">••••••••</span>` : "—"}</td>` : ""}
         <td>${a.fn ? fnBadge(a.fn) + " " : ""}${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : (a.fn ? "" : "—")}</td>
       </tr>`).join("");
       return `<div class="block" style="margin-top:16px">
         <h3 style="margin:0 0 8px">${PLAT_ICON[pl] || "🔗"} ${esc(pl)} <span class="t-muted" style="font-weight:400">· ${rows.length} account${rows.length > 1 ? "s" : ""}</span></h3>
-        ${table(["Brand", "Account", "Owner", "Notes"].map((x) => `<th>${x}</th>`).join(""), body)}
+        ${table(acctHead, body)}
       </div>`;
     }).join("");
-    const addrBlocks = (S.websites || []).filter((w) => (w.addresses || []).length).map((w) =>
-      `<div class="block" style="margin-top:14px"><h4 class="ld-h">🏢 ${esc(w.brand)} addresses</h4><ul class="soc-addr">${w.addresses.map((a) => `<li><b>${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul></div>`).join("");
-    const websites = flat.length
-      ? `<h2 style="margin-top:28px">Accounts &amp; Owners</h2>
-         <p class="muted-note" style="margin-top:0">Grouped by platform. Every account is its own row across brands. ${canEditSocial ? "The <b>Owner</b> is editable (the id itself can't be changed) — changes save for everyone." : "Owners are set by an administrator."}</p>
+    const addrBlocks = (S.addresses || []).length
+      ? `<div class="block" style="margin-top:16px"><h4 class="ld-h">🏢 Addresses</h4><ul class="soc-addr">${S.addresses.map((a) => `<li><b>${esc(a.brand)} · ${esc(a.label)}:</b> ${esc(a.value)}</li>`).join("")}</ul></div>`
+      : "";
+    const revealBtn = canSeePass ? `<button id="socReveal" class="ghost-btn" type="button" style="margin-left:auto">👁 Show all passwords</button>` : "";
+    const websites = (S.accounts || []).length
+      ? `<div style="display:flex;align-items:center;gap:10px;margin-top:28px;flex-wrap:wrap"><h2 style="margin:0">Accounts &amp; Owners</h2>${revealBtn}</div>
+         <p class="muted-note" style="margin-top:2px">Grouped by platform. Every account is its own row. ${canEditSocial ? "<b>Owner</b> is editable (the id can't be changed) — saved for everyone. " : ""}${canSeePass ? "Login &amp; password are visible to admins / super admins only — do not share outside the team." : ""}</p>
          ${platSections}${addrBlocks}`
       : "";
-
-    // Credentials block — admins / super admins only. Passwords are masked until
-    // the viewer clicks "Show".
-    let creds = "";
-    if (canSeePass) {
-      const blocks = (S.credentials || []).map((c) => {
-        const rows = c.rows.map((r) => `<tr>
-          <td class="t-name">${esc(r.user)}${r.note ? ` <span class="t-muted">(${esc(r.note)})</span>` : ""}</td>
-          <td><span class="soc-pass" data-pass="${esc(r.pass)}">••••••••</span></td>
-        </tr>`).join("");
-        return `<div class="block" style="margin-top:16px">
-          <h3 style="margin:0 0 8px">${esc(c.group)}</h3>
-          ${table(["Username / handle", "Password"].map((x) => `<th>${x}</th>`).join(""), rows)}
-        </div>`;
-      }).join("");
-      creds = `
-        <div class="callout warn" style="margin-top:26px">🔒 Account logins — visible to admins &amp; super admins only. Do not share outside the team.</div>
-        <div class="hq-actions" style="margin:10px 0"><button id="socReveal" class="dl-btn" type="button">👁 Show all passwords</button></div>
-        ${blocks}`;
-    }
 
     setTimeout(() => {
       const btn = document.getElementById("socReveal");
@@ -5738,8 +5719,7 @@
       </div></div>
       <h2 style="margin-top:8px">Presence by platform type</h2>
       ${typeSections}
-      ${websites}
-      ${creds}`;
+      ${websites}`;
   }
 
   function renderChallan() {
