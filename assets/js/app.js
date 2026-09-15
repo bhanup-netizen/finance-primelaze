@@ -5611,18 +5611,19 @@
     const notActiveCount = S.presence.length - activeCount;
 
     // ---- Presence grouped by platform TYPE (active first within each) ----
-    const presHead = ["Media", "Status", "Leads Managed By", "Primelaze", "Esthemax", "Celluma"].map((x) => `<th>${x}</th>`).join("");
+    const presHead = ["Media", "Status", "Leads Managed By", "Primelaze", "Esthemax", "Celluma", "Casovil"].map((x) => `<th>${x}</th>`).join("");
     const typeSections = SOC_TYPE_ORDER.map(([key, label]) => {
       const rows = S.presence.filter((r) => r.type === key)
         .sort((a, b) => (isActive(a) === isActive(b) ? String(a.media).localeCompare(b.media) : (isActive(a) ? -1 : 1)));
       if (!rows.length) return "";
       const body = rows.map((r) => `<tr>
-        <td class="t-name">${esc(r.media)}</td>
+        <td class="t-name">${esc(r.media)}${r.detail ? `<div class="cell-sub soc-detail">${esc(r.detail)}</div>` : ""}</td>
         <td>${activeBadge(r.active)}</td>
         <td>${esc(r.managedBy || "—")}</td>
         <td>${yn(r.primelaze)}</td>
         <td>${yn(r.esthemax)}</td>
         <td>${yn(r.celluma)}</td>
+        <td>${yn(r.casovil)}</td>
       </tr>`).join("");
       const act = rows.filter(isActive).length;
       return `<div class="block" style="margin-top:16px">
