@@ -97,6 +97,8 @@ window.SOCIAL_SEED = {
     },
     // 2.5 Fixed cadence
     cadence: [
+      { deliverable: "Posts per brand — company brands: 3–5 posts/week + daily stories; agency brands: per contract", owner: "Rashmi + Avedan / agency", freq: "Weekly" },
+      { deliverable: "DM, comment & enquiry engagement (reply + qualify)", owner: "Sparsha (Lead Collection)", freq: "Within 1–4 hrs, working hours" },
       { deliverable: "Quarterly strategy note (Celluma India, Primelaze)", owner: "Rashmi + Avedan", freq: "1 week before quarter start" },
       { deliverable: "Monthly content calendar (all 4 brands)", owner: "Rashmi + Avedan (2 internal, 2 chased from agency)", freq: "25th monthly" },
       { deliverable: "Biweekly review meeting", owner: "Rashmi + Avedan present", freq: "Every alternate Monday" },
@@ -132,6 +134,7 @@ window.SOCIAL_SEED = {
       plan: [
         { when: "3 weeks before — decide & approve", note: "Nothing moves forward until Arjun has approved the budget. If this week slips, the event date is at risk — flag it to Bhanu immediately.", tasks: [
           { task: "Decide which conference / event we are doing", who: "Sparsha, with Arjun & Dhinesh" },
+          { task: "Set the goal for this event — target leads / meetings / machines", who: "Sparsha, with Arjun" },
           { task: "Tell Akshay it is confirmed, so he can start", who: "Sparsha" },
           { task: "Get the stall package options and pricing", who: "Sparsha" },
           { task: "Negotiate the package — derma (Primelaze)", who: "Arjun + Bhanu decide (Akshay & Sparsha on the call)" },
@@ -145,6 +148,8 @@ window.SOCIAL_SEED = {
           { task: "Design approved", who: "Arjun / Dhinesh (Sparsha sets up the call)" },
           { task: "Vendor confirmed and stall build started", who: "Akshay" },
           { task: "Marketing material finalised and sent to print", who: "Akshay" },
+          { task: "Pre-show promotion — announce attendance on all pages, invite key doctors & existing customers", who: "Rashmi + Avedan (Sparsha briefs)" },
+          { task: "Pre-book meetings with priority doctors at the stall", who: "Sparsha + attending sales team" },
         ] },
         { when: "1 week before — book everything", tasks: [
           { task: "Photographer, anchor, hostess, models booked", who: "Akshay" },
@@ -152,28 +157,36 @@ window.SOCIAL_SEED = {
           { task: "Visitor engagement activities planned", who: "Akshay (+ Lubhda for salon/spa)" },
           { task: "Check the stall build is on schedule with the vendor", who: "Akshay, tracked by Sparsha" },
         ] },
-        { when: "Event week — pack & dispatch", tasks: [
+        { when: "Event week — pack, brief & dispatch", tasks: [
           { task: "Machines, display units, Esthemax stock, visitor forms, stationery dispatched", who: "Ayush" },
           { task: "Printed material received and checked", who: "Akshay" },
+          { task: "Brief the booth team — the 3 questions doctors ask, our 3 answers, capture a lead in under 60 seconds, hand hot leads to a senior rep", who: "Sparsha + Arjun" },
           { task: "Readiness call — everyone confirms their part is done", who: "Sparsha runs it; Akshay & Ayush confirm" },
         ] },
         { when: "Event days", tasks: [
           { task: "Device installation and stall setup", who: "Akshay" },
           { task: "Run the stall and engagement activities", who: "Akshay + attending team" },
-          { task: "Collect visitor forms", who: "Attending sales team" },
+          { task: "Collect visitor forms and tag each visitor hot / warm / cold", who: "Attending sales team" },
         ] },
       ],
       after: [
+        { task: "Hot leads called / met while interest is fresh", when: "Within 2 days", who: "Attending sales team" },
         { task: "Visitor form photos shared, physical copies to office", when: "Within 2 days", who: "Attending sales team" },
-        { task: "All forms entered into Bigin", when: "Within 3 days", who: "Mayank" },
+        { task: "All forms entered into Bigin, tagged by source", when: "Within 3 days", who: "Mayank" },
         { task: "Entry checked for errors and duplicates", when: "Within 4 days", who: "Sparsha" },
         { task: "Leads passed to sales (Vikas or Lubhda / Ashutosh)", when: "Within 5 days", who: "Sparsha" },
-        { task: "Report: what we spent, how many leads, what converted", when: "Within 1 week", who: "Sparsha + Akshay" },
+        { task: "Post-event report: spend, leads, meetings, machines sold vs the goal", when: "Within 1 week", who: "Sparsha + Akshay" },
         { task: "Vendor payments cleared", when: "Within 2 weeks", who: "Akshay" },
       ],
       doctorNote: "Doctor events: same steps, shorter runway — usually two weeks from request to event. Sparsha compresses the chart when Vikas passes the request: decide & approve in the first three days, build & book in week one, dispatch & set up in week two.",
       // Standard conference checklist (built from the conference checklist sheet).
       checklist: [
+        { group: "Goal & promotion (before the show)", items: [
+          { item: "Event goal set — target leads / meetings / machines", who: "Sparsha (with Arjun)" },
+          { item: "Attendance announced on all social pages", who: "Rashmi + Avedan" },
+          { item: "Key doctors & existing customers invited", who: "Sparsha + sales team" },
+          { item: "Priority meetings pre-booked at the stall", who: "Sparsha + sales team" },
+        ] },
         { group: "Team & sessions", items: [
           { item: "Company staff attending the conference", who: "Sparsha (with Arjun)" },
           { item: "Talks / sessions — topic, presenter, slot", who: "Speaker team" },
@@ -210,6 +223,12 @@ window.SOCIAL_SEED = {
           { item: "Souvenirs / giveaways", who: "Akshay" },
           { item: "Engagement activity (games, mascot, coffee, etc.)", who: "Akshay (+ Lubhda for salon/spa)" },
         ] },
+        { group: "Lead capture & follow-up", items: [
+          { item: "Visitor forms / lead app ready (capture in under 60 sec)", who: "Ayush" },
+          { item: "Lead tagging — hot / warm / cold", who: "Attending sales team" },
+          { item: "Booth team briefed — 3 questions, 3 answers, hand hot leads to a senior rep", who: "Sparsha + Arjun" },
+          { item: "Post-event: forms to Bigin, leads to sales, ROI report vs goal", who: "Mayank / Sparsha" },
+        ] },
       ],
     },
     // 3. Telemarketing (across all channels, online enquiries + WhatsApp + calls)
@@ -231,11 +250,13 @@ window.SOCIAL_SEED = {
         "Indiamart — buyer enquiries and leads",
       ],
       standards: [
-        "First response within 4 working hours.",
-        "Handover to sales within 24 hours of qualification.",
-        "HR replies to careers / HR enquiries within 24 hours.",
-        "No lead lives only in WhatsApp — everything reaches Bigin the same day.",
-        "Source tagged on every lead: brand + channel (online / conference / doctor event).",
+        "Speed to lead: high-intent enquiries (demo request, pricing, “call me”, inbound call) get a first response within 1 hour in working hours; general enquiries within 4 working hours.",
+        "HR / careers enquiries — reply within 24 hours.",
+        "Qualify before handover — capture Need, Budget / timeline, Decision-maker, City, and the best contact number (BANT).",
+        "Tag every lead hot / warm / cold and hand hot leads to sales within 24 hours of qualification.",
+        "No lead lives only in WhatsApp or a notebook — everything reaches Bigin the same day, tagged by brand + channel (online / conference / doctor event).",
+        "Follow up an unresponsive lead at least 3 times over 7 days before marking it cold.",
+        "One dedicated enquiry number — it stays with Sparsha and does not rotate.",
       ],
     },
     // 4. Lead entry into Bigin + routing to sales
