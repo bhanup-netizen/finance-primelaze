@@ -8074,18 +8074,20 @@
       const permsJson = esc(JSON.stringify({ email: u.email || "", role: "view", landing: !!u.landing, managerInc: !!u.managerInc, pages: u.pages || [], hqs: u.hqs || [], editPages: u.editPages || [] }));
       const cells = scopePages.map((t) => {
         const has = hasPage(t.id);
-        return `<td><select class="pa-access select" data-uid="${doc.id}" data-page="${t.id}" data-perms="${permsJson}" style="max-width:150px"><option value="view"${has ? " selected" : ""}>View</option><option value="none"${!has ? " selected" : ""}>No access</option></select></td>`;
+        return `<td class="mx-cell"><input type="checkbox" class="pa-view" data-uid="${doc.id}" data-page="${t.id}" data-perms="${permsJson}"${has ? " checked" : ""}></td>`;
       }).join("");
       const otherPages = PERMISSION_PAGES.filter((t) => !scopeIds.includes(t.id) && hasPage(t.id)).map((t) => t.label);
       const otherCell = `<td class="t-muted">${otherPages.length ? esc(otherPages.join(", ")) : "—"}</td>`;
       const pwdCell = `<td style="white-space:nowrap"><button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger pa-remove" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Remove</button></td>`;
-      rows.push(`<tr><td class="t-name">${esc(u.email || "—")}</td>${cells}${otherCell}${pwdCell}</tr>`);
+      rows.push(`<tr><td class="t-name mx-user">${esc(u.email || "—")}</td>${cells}${otherCell}${pwdCell}</tr>`);
     });
+    const paHead = `<th class="mx-user">Viewer</th>${scopePages.map((t) => `<th class="mx-th" title="${esc(t.label)}">${esc(t.label)}</th>`).join("")}<th>Other access</th><th></th>`;
     box.innerHTML = rows.length
-      ? table(["Viewer", ...scopePages.map((t) => t.label), "Other access", ""].map((h) => `<th>${esc(h)}</th>`).join(""), rows.join(""))
-      : `<div class="empty">No viewers yet. Use “Add viewer” on the left to create one, then grant page access here.</div>`;
-    box.querySelectorAll(".pa-access").forEach((sel) => {
-      sel.onchange = () => pageAdminSetAccess(sel.dataset.uid, sel.dataset.perms, sel.dataset.page, sel.value, sel);
+      ? `<div class="muted-note" style="margin-bottom:6px">Tick a box = the viewer <b>can see</b> that page. (You can grant <b>view</b> only; editing rights are set by a super admin.) Changes save instantly.</div>`
+        + table(paHead, rows.join(""))
+      : `<div class="empty">No viewers yet. Add one with “＋ Add viewer” below, then tick the pages they can see.</div>`;
+    box.querySelectorAll(".pa-view").forEach((cb) => {
+      cb.onchange = () => pageAdminSetAccess(cb.dataset.uid, cb.dataset.perms, cb.dataset.page, cb.checked ? "view" : "none", cb);
     });
     box.querySelectorAll(".u-pwd").forEach((b) => {
       b.onclick = async () => {
@@ -8196,7 +8198,14 @@
       </div>`;
       const pageHead = PERMISSION_PAGES.map((t) => `<th class="mx-th" title="${esc((t.group ? t.group + " · " : "") + t.label)}">${esc(t.label)}</th>`).join("");
       box.innerHTML = newRow + bulkBar
-        + `<div class="muted-note" style="margin-bottom:6px">Tick a box = <b>can view</b> the page; the <b>✎</b> next to it = <b>can edit</b>. Changes save instantly.</div>`
+        + `<div class="callout teal" style="margin-bottom:10px;font-size:13px;line-height:1.6">
+            <b>How access works</b> — everything saves instantly, no submit.<br>
+            • <b>＋ New user</b> — add an account, then tick its pages.<br>
+            • <b>☑ box</b> = the user <b>can view</b> that page. &nbsp; • <b>✎ pencil</b> (turns blue) = the user <b>can edit</b> it (editing also turns view on).<br>
+            • <b>Untick</b> the box = removes both view and edit for that page.<br>
+            • <b>Bulk access</b> bar — tick several users, pick a page + level, Apply to all at once.<br>
+            • <b>⚙</b> = role / landing / manager-incentive / HQ &nbsp; · &nbsp; <b>Reset pwd</b> = email a reset link &nbsp; · &nbsp; <b>Revoke</b> = remove the user.
+          </div>`
         + (rows.length
           ? table(`<th class="num"><input type='checkbox' id='uSelectAll' title='Select all'></th><th class="mx-user">User</th>${pageHead}<th></th>`, rows.join(""))
           : `<div class="empty">No users yet — add one above.</div>`);
