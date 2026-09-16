@@ -8111,6 +8111,34 @@
     });
   }
 
+  // Super-admin bulk access: set one page's access (View / Edit / No access) for
+  // every ticked user at once — no need to open each user.
+  async function bulkApplyAccess() {
+    const page = document.getElementById("bulkPage").value;
+    const level = document.getElementById("bulkLevel").value;
+    const checked = Array.from(document.querySelectorAll(".u-select:checked"));
+    if (!checked.length) { window.alert("Tick at least one user first."); return; }
+    const label = (PERMISSION_PAGES.find((t) => t.id === page) || {}).label || page;
+    if (!window.confirm(`Set “${label}” to ${level === "none" ? "No access" : level === "edit" ? "Edit" : "View"} for ${checked.length} user(s)?`)) return;
+    const btn = document.getElementById("bulkApply"); btn.disabled = true; const orig = btn.textContent; btn.textContent = "Applying…";
+    let done = 0, skipped = 0;
+    for (const cb of checked) {
+      let p; try { p = JSON.parse(cb.dataset.perms); } catch (e) { skipped++; continue; }
+      if (p.role === "admin" || p.role === "superadmin" || p.pages === "all" || p.editPages === "all") { skipped++; continue; }
+      let pages = Array.isArray(p.pages) ? p.pages.slice() : [];
+      let editPages = Array.isArray(p.editPages) ? p.editPages.slice() : [];
+      const rm = (arr) => arr.filter((x) => x !== page);
+      if (level === "none") { pages = rm(pages); editPages = rm(editPages); }
+      else if (level === "view") { if (!pages.includes(page)) pages.push(page); editPages = rm(editPages); }
+      else if (level === "edit") { if (!pages.includes(page)) pages.push(page); if (!editPages.includes(page)) editPages.push(page); }
+      try { await db.collection("users").doc(cb.dataset.uid).set({ pages, editPages }, { merge: true }); done++; }
+      catch (e) { skipped++; }
+    }
+    btn.disabled = false; btn.textContent = orig;
+    window.alert(`Updated ${done} user(s)` + (skipped ? `; skipped ${skipped} (admins / errors)` : "") + ".");
+    loadUserList();
+  }
+
   async function loadUserList() {
     const box = document.getElementById("userList");
     if (!box) return;
@@ -8142,17 +8170,33 @@
           roleLabel = names.join(" + ") + " admin"; roleCls = "b-info";
         } else { roleLabel = "view"; roleCls = "b-neutral"; }
         const permsJson = esc(JSON.stringify({ email: u.email || "", role: u.role || "view", landing: !!u.landing, managerInc: !!u.managerInc, pages: u.pages || [], hqs: u.hqs || [], editPages: u.editPages || [] }));
+        const isAll = isAdm || u.pages === "all" || u.editPages === "all";
+        const selCell = `<td class="num">${isAll ? "" : `<input type="checkbox" class="u-select" data-uid="${doc.id}" data-perms="${permsJson}">`}</td>`;
         rows.push(`<tr>
+          ${selCell}
           <td class="t-name">${esc(u.email || "—")}</td>
           <td><span class="badge ${roleCls}">${esc(roleLabel)}</span></td>
           <td class="t-muted">${esc(scope)}</td>
           <td style="white-space:nowrap"><button class="ghost-btn u-view" data-uid="${doc.id}">View</button> <button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
         </tr>
-        <tr class="ua-tr" data-uid="${doc.id}" hidden><td colspan="4">${userAccessDetail(u)}</td></tr>`);
+        <tr class="ua-tr" data-uid="${doc.id}" hidden><td colspan="5">${userAccessDetail(u)}</td></tr>`);
       });
+      const bulkBar = `<div class="bulk-bar">
+        <b>Bulk access</b> — tick users, then set a page:
+        <select id="bulkPage" class="select">${PERMISSION_PAGES.map((t) => `<option value="${t.id}">${esc(t.group ? t.group + " · " : "")}${esc(t.label)}</option>`).join("")}</select>
+        <select id="bulkLevel" class="select"><option value="view">View</option><option value="edit">Edit</option><option value="none">No access</option></select>
+        <button id="bulkApply" class="dl-btn" type="button">Apply to selected</button>
+        <span id="bulkCount" class="t-muted">0 selected</span>
+      </div>`;
       box.innerHTML = rows.length
-        ? table(["User", "Role", "Access", ""].map((h) => `<th>${h}</th>`).join(""), rows.join(""))
+        ? bulkBar + table(["<input type='checkbox' id='uSelectAll' title='Select all'>", "User", "Role", "Access", ""].map((h) => `<th>${h}</th>`).join(""), rows.join(""))
         : `<div class="empty">No users yet.</div>`;
+      const updateCount = () => { const n = box.querySelectorAll(".u-select:checked").length; const c = document.getElementById("bulkCount"); if (c) c.textContent = n + " selected"; };
+      const selAll = document.getElementById("uSelectAll");
+      if (selAll) selAll.onchange = () => { box.querySelectorAll(".u-select").forEach((cb) => { cb.checked = selAll.checked; }); updateCount(); };
+      box.querySelectorAll(".u-select").forEach((cb) => (cb.onchange = updateCount));
+      const bApply = document.getElementById("bulkApply");
+      if (bApply) bApply.onclick = bulkApplyAccess;
       box.querySelectorAll(".u-view").forEach((b) => {
         b.onclick = () => {
           const det = box.querySelector('.ua-tr[data-uid="' + b.dataset.uid + '"]');
