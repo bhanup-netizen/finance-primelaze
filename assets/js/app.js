@@ -8111,6 +8111,20 @@
     });
   }
 
+  // Live copy of every user's perms in the access matrix (uid -> {pages,editPages,role}).
+  const userPermsMap = {};
+  // Write one user's page access to Firestore from the matrix cell state.
+  function mxApply(uid, page, view, edit) {
+    const p = userPermsMap[uid]; if (!p) return;
+    let pages = Array.isArray(p.pages) ? p.pages.slice() : [];
+    let ed = Array.isArray(p.editPages) ? p.editPages.slice() : [];
+    const rm = (a) => a.filter((x) => x !== page);
+    pages = rm(pages); ed = rm(ed);
+    if (view || edit) pages.push(page);
+    if (edit) ed.push(page);
+    p.pages = pages; p.editPages = ed;
+    db.collection("users").doc(uid).set({ pages, editPages: ed }, { merge: true }).catch((e) => window.alert("Save failed: " + (e.message || e)));
+  }
   // Super-admin bulk access: set one page's access (View / Edit / No access) for
   // every ticked user at once — no need to open each user.
   async function bulkApplyAccess() {
@@ -8123,19 +8137,13 @@
     const btn = document.getElementById("bulkApply"); btn.disabled = true; const orig = btn.textContent; btn.textContent = "Applying…";
     let done = 0, skipped = 0;
     for (const cb of checked) {
-      let p; try { p = JSON.parse(cb.dataset.perms); } catch (e) { skipped++; continue; }
-      if (p.role === "admin" || p.role === "superadmin" || p.pages === "all" || p.editPages === "all") { skipped++; continue; }
-      let pages = Array.isArray(p.pages) ? p.pages.slice() : [];
-      let editPages = Array.isArray(p.editPages) ? p.editPages.slice() : [];
-      const rm = (arr) => arr.filter((x) => x !== page);
-      if (level === "none") { pages = rm(pages); editPages = rm(editPages); }
-      else if (level === "view") { if (!pages.includes(page)) pages.push(page); editPages = rm(editPages); }
-      else if (level === "edit") { if (!pages.includes(page)) pages.push(page); if (!editPages.includes(page)) editPages.push(page); }
-      try { await db.collection("users").doc(cb.dataset.uid).set({ pages, editPages }, { merge: true }); done++; }
-      catch (e) { skipped++; }
+      const p = userPermsMap[cb.dataset.uid];
+      if (!p || p.role === "admin" || p.role === "superadmin" || p.pages === "all" || p.editPages === "all") { skipped++; continue; }
+      mxApply(cb.dataset.uid, page, level === "view" || level === "edit", level === "edit");
+      done++;
     }
     btn.disabled = false; btn.textContent = orig;
-    window.alert(`Updated ${done} user(s)` + (skipped ? `; skipped ${skipped} (admins / errors)` : "") + ".");
+    window.alert(`Updated ${done} user(s)` + (skipped ? `; skipped ${skipped} (admins)` : "") + ".");
     loadUserList();
   }
 
@@ -8147,39 +8155,31 @@
       const rows = [];
       const superMode = isSuperAdmin();
       if (!superMode) { renderPageAdminUserList(box, snap); return; }
+      Object.keys(userPermsMap).forEach((k) => delete userPermsMap[k]);
       snap.forEach((doc) => {
         const u = doc.data();
         const isAdm = u.role === "admin" || u.role === "superadmin";
-        const editN = u.editPages === "all" ? "all" : (u.editPages || []).length;
-        const scope = [
-          isAdm ? "all pages" : (u.pages === "all" ? "all pages" : ((u.pages || []).length + " pages")),
-          isAdm ? "edits all" : (editN === "all" || editN > 0 ? "edits " + editN : "view-only"),
-          u.hqs === "all" ? "all HQs" : ((u.hqs || []).length + " HQs"),
-          u.landing ? "landing✓" : "no-landing",
-          u.managerInc ? "mgr-inc✓" : "no-mgr-inc",
-        ].join(" · ");
-        // A view user with edit rights on page(s) is a "page admin" — label it
-        // by the page(s) they administer (e.g. "Inventory admin", "Demo admin").
-        const editList = u.editPages === "all" ? "all" : (Array.isArray(u.editPages) ? u.editPages : []);
+        const isAll = isAdm || u.pages === "all" || u.editPages === "all";
         let roleLabel, roleCls;
         if (u.role === "superadmin") { roleLabel = "super admin"; roleCls = "b-good"; }
         else if (u.role === "admin") { roleLabel = "admin"; roleCls = "b-good"; }
-        else if (editList === "all") { roleLabel = "page admin (all)"; roleCls = "b-info"; }
-        else if (editList.length) {
-          const names = editList.map((id) => (PERMISSION_PAGES.find((t) => t.id === id) || {}).label || id);
-          roleLabel = names.join(" + ") + " admin"; roleCls = "b-info";
-        } else { roleLabel = "view"; roleCls = "b-neutral"; }
-        const permsJson = esc(JSON.stringify({ email: u.email || "", role: u.role || "view", landing: !!u.landing, managerInc: !!u.managerInc, pages: u.pages || [], hqs: u.hqs || [], editPages: u.editPages || [] }));
-        const isAll = isAdm || u.pages === "all" || u.editPages === "all";
-        const selCell = `<td class="num">${isAll ? "" : `<input type="checkbox" class="u-select" data-uid="${doc.id}" data-perms="${permsJson}">`}</td>`;
+        else if (u.editPages === "all") { roleLabel = "page admin (all)"; roleCls = "b-info"; }
+        else if (Array.isArray(u.editPages) && u.editPages.length) { roleLabel = "editor"; roleCls = "b-info"; }
+        else { roleLabel = "view"; roleCls = "b-neutral"; }
+        userPermsMap[doc.id] = { role: u.role || "view", pages: u.pages === "all" ? "all" : (u.pages || []), editPages: u.editPages === "all" ? "all" : (u.editPages || []) };
+        const selCell = `<td class="num">${isAll ? "" : `<input type="checkbox" class="u-select" data-uid="${doc.id}">`}</td>`;
+        const pageCells = PERMISSION_PAGES.map((t) => {
+          if (isAll) return `<td class="mx-cell"><span class="mx-all" title="all access">✓</span></td>`;
+          const pv = Array.isArray(u.pages) && u.pages.includes(t.id);
+          const pe = Array.isArray(u.editPages) && u.editPages.includes(t.id);
+          return `<td class="mx-cell"><input type="checkbox" class="mx-view" data-uid="${doc.id}" data-page="${t.id}"${(pv || pe) ? " checked" : ""}><button type="button" class="mx-edit${pe ? " on" : ""}" data-uid="${doc.id}" data-page="${t.id}" title="Edit rights (✎ = can edit)">✎</button></td>`;
+        }).join("");
         rows.push(`<tr>
           ${selCell}
-          <td class="t-name">${esc(u.email || "—")}</td>
-          <td><span class="badge ${roleCls}">${esc(roleLabel)}</span></td>
-          <td class="t-muted">${esc(scope)}</td>
-          <td style="white-space:nowrap"><button class="ghost-btn u-view" data-uid="${doc.id}">View</button> <button class="ghost-btn u-edit" data-uid="${doc.id}" data-perms="${permsJson}">Edit</button> <button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
-        </tr>
-        <tr class="ua-tr" data-uid="${doc.id}" hidden><td colspan="5">${userAccessDetail(u)}</td></tr>`);
+          <td class="t-name mx-user">${esc(u.email || "—")}<div><span class="badge ${roleCls}">${esc(roleLabel)}</span></div></td>
+          ${pageCells}
+          <td class="mx-act" style="white-space:nowrap"><button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
+        </tr>`);
       });
       const bulkBar = `<div class="bulk-bar">
         <b>Bulk access</b> — tick users, then set a page:
@@ -8188,8 +8188,10 @@
         <button id="bulkApply" class="dl-btn" type="button">Apply to selected</button>
         <span id="bulkCount" class="t-muted">0 selected</span>
       </div>`;
+      const pageHead = PERMISSION_PAGES.map((t) => `<th class="mx-th" title="${esc((t.group ? t.group + " · " : "") + t.label)}">${esc(t.label)}</th>`).join("");
       box.innerHTML = rows.length
-        ? bulkBar + table(["<input type='checkbox' id='uSelectAll' title='Select all'>", "User", "Role", "Access", ""].map((h) => `<th>${h}</th>`).join(""), rows.join(""))
+        ? bulkBar + `<div class="muted-note" style="margin-bottom:6px">Tick a box = <b>can view</b> the page; the <b>✎</b> next to it = <b>can edit</b>. Changes save instantly.</div>`
+          + table(`<th class="num"><input type='checkbox' id='uSelectAll' title='Select all'></th><th class="mx-user">User</th>${pageHead}<th></th>`, rows.join(""))
         : `<div class="empty">No users yet.</div>`;
       const updateCount = () => { const n = box.querySelectorAll(".u-select:checked").length; const c = document.getElementById("bulkCount"); if (c) c.textContent = n + " selected"; };
       const selAll = document.getElementById("uSelectAll");
@@ -8197,6 +8199,20 @@
       box.querySelectorAll(".u-select").forEach((cb) => (cb.onchange = updateCount));
       const bApply = document.getElementById("bulkApply");
       if (bApply) bApply.onclick = bulkApplyAccess;
+      // Matrix cell toggles — view checkbox + edit pencil, save instantly.
+      box.querySelectorAll(".mx-view").forEach((cb) => (cb.onchange = () => {
+        const eb = cb.parentElement.querySelector(".mx-edit");
+        let edit = eb.classList.contains("on");
+        if (!cb.checked) { edit = false; eb.classList.remove("on"); }
+        mxApply(cb.dataset.uid, cb.dataset.page, cb.checked, edit);
+      }));
+      box.querySelectorAll(".mx-edit").forEach((b) => (b.onclick = () => {
+        const vcb = b.parentElement.querySelector(".mx-view");
+        const nowEdit = !b.classList.contains("on");
+        b.classList.toggle("on", nowEdit);
+        if (nowEdit) vcb.checked = true;
+        mxApply(b.dataset.uid, b.dataset.page, vcb.checked, nowEdit);
+      }));
       box.querySelectorAll(".u-view").forEach((b) => {
         b.onclick = () => {
           const det = box.querySelector('.ua-tr[data-uid="' + b.dataset.uid + '"]');
