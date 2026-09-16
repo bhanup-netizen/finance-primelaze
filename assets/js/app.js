@@ -120,13 +120,17 @@
     // Sale
     { id: "leads", label: "Casovil Sale", group: "Sale", render: renderLeads },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
+    { id: "weeklySale", label: "Weekly Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
     { id: "weeklyHr", label: "Weekly Duties", group: "HR", render: () => renderWeekly("HR") },
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
+    { id: "weeklyOnline", label: "Online Duties", group: "Marketing", render: () => renderWeekly("Online Marketing") },
     { id: "offline", label: "Offline Marketing", group: "Marketing", render: renderOffline },
+    { id: "weeklyOffline", label: "Offline Duties", group: "Marketing", render: () => renderWeekly("Offline Marketing") },
     { id: "telemarketing", label: "Lead Collection", group: "Marketing", render: renderTelemarketing },
+    { id: "weeklyLead", label: "Lead Duties", group: "Marketing", render: () => renderWeekly("Lead Collection") },
     { id: "passwords", label: "🔑 Passwords", group: "Marketing", render: renderPasswords },
     // Admin & Logistics
     { id: "registration", label: "Registration", group: "Admin & Logistics", render: renderReg },
@@ -6045,6 +6049,31 @@
     },
     "Admin & Logistics": {
       mandatory: [{ id: "al1", task: "Update inventory stock levels", time: "~45 min", priority: "High", remark: "" }],
+      optional: [],
+    },
+    "Sale": {
+      mandatory: [
+        { id: "sl1", task: "Update Primelaze Sale — commitments, payments received, pending", time: "~1 hr", priority: "High", remark: "" },
+        { id: "sl2", task: "Follow up open Casovil leads and update stage", time: "~1 hr", priority: "High", remark: "" },
+      ],
+      optional: [],
+    },
+    "Online Marketing": {
+      mandatory: [
+        { id: "om1", task: "Publish posts per the approved content calendar", time: "as planned", priority: "High", remark: "" },
+        { id: "om2", task: "Update the KPI numbers (followers, reach, enquiries)", time: "~30 min", priority: "Medium", remark: "" },
+      ],
+      optional: [],
+    },
+    "Offline Marketing": {
+      mandatory: [{ id: "of1", task: "Update the event tracker for every live event (Monday check)", time: "~45 min", priority: "High", remark: "" }],
+      optional: [],
+    },
+    "Lead Collection": {
+      mandatory: [
+        { id: "lc1", task: "Reply to all DMs / comments / WhatsApp within SLA", time: "ongoing", priority: "High", remark: "" },
+        { id: "lc2", task: "Pass qualified leads to Mayank for Bigin / Dashboard entry", time: "~30 min", priority: "High", remark: "" },
+      ],
       optional: [],
     },
   };
