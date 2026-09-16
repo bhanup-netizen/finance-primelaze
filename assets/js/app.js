@@ -8181,6 +8181,13 @@
           <td class="mx-act" style="white-space:nowrap"><button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
         </tr>`);
       });
+      const newRow = `<div class="bulk-bar">
+        <b>＋ New user</b>
+        <input id="mxNewEmail" type="email" placeholder="person@primelaze.com" class="select" style="max-width:230px">
+        <input id="mxNewPass" type="text" placeholder="temp password (min 6)" class="select" style="max-width:190px">
+        <button id="mxNewCreate" class="dl-btn" type="button">Create</button>
+        <span id="mxNewMsg" class="t-muted">then tick their pages below</span>
+      </div>`;
       const bulkBar = `<div class="bulk-bar">
         <b>Bulk access</b> — tick users, then set a page:
         <select id="bulkPage" class="select">${PERMISSION_PAGES.map((t) => `<option value="${t.id}">${esc(t.group ? t.group + " · " : "")}${esc(t.label)}</option>`).join("")}</select>
@@ -8189,10 +8196,23 @@
         <span id="bulkCount" class="t-muted">0 selected</span>
       </div>`;
       const pageHead = PERMISSION_PAGES.map((t) => `<th class="mx-th" title="${esc((t.group ? t.group + " · " : "") + t.label)}">${esc(t.label)}</th>`).join("");
-      box.innerHTML = rows.length
-        ? bulkBar + `<div class="muted-note" style="margin-bottom:6px">Tick a box = <b>can view</b> the page; the <b>✎</b> next to it = <b>can edit</b>. Changes save instantly.</div>`
-          + table(`<th class="num"><input type='checkbox' id='uSelectAll' title='Select all'></th><th class="mx-user">User</th>${pageHead}<th></th>`, rows.join(""))
-        : `<div class="empty">No users yet.</div>`;
+      box.innerHTML = newRow + bulkBar
+        + `<div class="muted-note" style="margin-bottom:6px">Tick a box = <b>can view</b> the page; the <b>✎</b> next to it = <b>can edit</b>. Changes save instantly.</div>`
+        + (rows.length
+          ? table(`<th class="num"><input type='checkbox' id='uSelectAll' title='Select all'></th><th class="mx-user">User</th>${pageHead}<th></th>`, rows.join(""))
+          : `<div class="empty">No users yet — add one above.</div>`);
+      const nc = document.getElementById("mxNewCreate");
+      if (nc) nc.onclick = async () => {
+        const email = (document.getElementById("mxNewEmail").value || "").trim();
+        const pass = document.getElementById("mxNewPass").value || "";
+        const m = document.getElementById("mxNewMsg");
+        if (!email || pass.length < 6) { m.style.color = "var(--bad)"; m.textContent = "Enter an email and a 6+ character password."; return; }
+        nc.disabled = true; m.style.color = ""; m.textContent = "Creating…";
+        try {
+          await adminCreateUser(email, pass, { role: "view", pages: [], editPages: [], hqs: "all", landing: false, managerInc: false });
+          loadUserList();
+        } catch (err) { m.style.color = "var(--bad)"; m.textContent = authErr(err); nc.disabled = false; }
+      };
       const updateCount = () => { const n = box.querySelectorAll(".u-select:checked").length; const c = document.getElementById("bulkCount"); if (c) c.textContent = n + " selected"; };
       const selAll = document.getElementById("uSelectAll");
       if (selAll) selAll.onchange = () => { box.querySelectorAll(".u-select").forEach((cb) => { cb.checked = selAll.checked; }); updateCount(); };
