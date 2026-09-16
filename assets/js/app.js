@@ -7550,6 +7550,7 @@
       editsLog.unshift({ by, at, tab: tabLabel, tabId: currentTab, what: desc });
       if (editsLog.length > 300) editsLog.length = 300;
       updateLastUpdatedUI();
+      refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
           { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
@@ -7776,33 +7777,31 @@
         <h1>${superMode ? "Admin — Users &amp; Access" : "Manage viewers for your pages"}</h1>
         <p>${superMode ? "Create accounts and control which pages and HQs each person can see." : "Add and manage view-only users for the pages you administer. You can add them, edit their access and revoke them."}</p>
       </div>
-      <div class="two-col">
-        <div class="card">
-          <h2 style="margin-top:0">Add ${superMode ? "user" : "viewer"}</h2>
-          <form id="addUserForm" class="admin-form" autocomplete="off">
-            <label class="ord-field"><span>Email</span><input id="auEmail" type="email" required placeholder="person@primelaze.com"></label>
-            <label class="ord-field"><span>${superMode ? "Temp password" : "Set password"}</span><input id="auPass" type="text" required placeholder="min 6 chars"></label>
-            ${roleField}
-            ${superMode ? `<div id="permExtras"><label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
-            <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label></div>` : ""}
-            <div class="perm-group" id="permPageGroup"><div class="perm-title">Page access ${superMode ? `<span>
-              <button type="button" class="linkish" data-access="all">all</button> ·
-              <button type="button" class="linkish" data-access="none">none</button></span>` : ""}</div>
-              <div class="perm-grid">${accessRows}</div>
-              <div class="muted-note" id="permPageNote" style="margin-top:6px">${scopeNote}</div></div>
-            ${superMode ? `<div class="perm-group" id="permHqGroup"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>` : ""}
-            <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="submit" class="dl-btn" id="auSubmit">Create ${superMode ? "user" : "viewer"}</button><button type="button" class="ghost-btn" id="auCancel" hidden>Cancel edit</button></div>
-            <div id="auMsg" class="lock-error" style="min-height:16px"></div>
-          </form>
-        </div>
-        <div class="card">
-          <h2 style="margin-top:0">${superMode ? "Existing users" : "Viewers you manage"}</h2>
-          <p class="muted-note" style="margin-top:0">${superMode
-            ? `Set a password when adding a user. To change it later, click <b>Reset pwd</b> — the user gets an email to choose a new one. (To set an exact password directly, use the Firebase console → Authentication → Users.)`
-            : `<b>Every viewer</b> in the system is listed below — including people other admins added. Set your page to <b>View</b> to grant access or <b>No access</b> to remove it. Their access to other pages (set by other admins) stays untouched. Use <b>Reset pwd</b> to email a new-password link, or <b>Remove</b> to permanently delete a contact who has left.`}</p>
-          <div id="userList"><div class="empty">Loading…</div></div>
-        </div>
+      <div class="card">
+        <h2 style="margin-top:0">${superMode ? "Existing users" : "Viewers you manage"}</h2>
+        <p class="muted-note" style="margin-top:0">${superMode
+          ? `Add a user in the <b>＋ New user</b> row, then tick the pages they can see (✎ = can edit). <b>⚙</b> sets role / landing / HQ; <b>Reset pwd</b> emails a new-password link; <b>Revoke</b> removes access.`
+          : `<b>Every viewer</b> in the system is listed below — including people other admins added. Set your page to <b>View</b> to grant access or <b>No access</b> to remove it. Their access to other pages (set by other admins) stays untouched. Use <b>Reset pwd</b> to email a new-password link, or <b>Remove</b> to permanently delete a contact who has left.`}</p>
+        <div id="userList"><div class="empty">Loading…</div></div>
       </div>
+      <details class="card adv-add" style="margin-top:16px">
+        <summary><b>＋ Add ${superMode ? "user — advanced" : "viewer"}</b>${superMode ? " (create an admin, set landing / manager-incentive / HQ, or edit a user's flags)" : ""}</summary>
+        <form id="addUserForm" class="admin-form" autocomplete="off" style="margin-top:14px">
+          <label class="ord-field"><span>Email</span><input id="auEmail" type="email" required placeholder="person@primelaze.com"></label>
+          <label class="ord-field"><span>${superMode ? "Temp password" : "Set password"}</span><input id="auPass" type="text" required placeholder="min 6 chars"></label>
+          ${roleField}
+          ${superMode ? `<div id="permExtras"><label class="chk chk-strong"><input type="checkbox" id="auLanding"> Can see landing/cost prices</label>
+          <label class="chk chk-strong"><input type="checkbox" id="auMgrInc"> Can see Sales Manager incentives</label></div>` : ""}
+          <div class="perm-group" id="permPageGroup"><div class="perm-title">Page access ${superMode ? `<span>
+            <button type="button" class="linkish" data-access="all">all</button> ·
+            <button type="button" class="linkish" data-access="none">none</button></span>` : ""}</div>
+            <div class="perm-grid">${accessRows}</div>
+            <div class="muted-note" id="permPageNote" style="margin-top:6px">${scopeNote}</div></div>
+          ${superMode ? `<div class="perm-group" id="permHqGroup"><div class="perm-title">HQ access <button type="button" class="linkish" data-all="perm-hq">all/none</button></div><div class="perm-grid">${hqChecks}</div></div>` : ""}
+          <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="submit" class="dl-btn" id="auSubmit">Create ${superMode ? "user" : "viewer"}</button><button type="button" class="ghost-btn" id="auCancel" hidden>Cancel edit</button></div>
+          <div id="auMsg" class="lock-error" style="min-height:16px"></div>
+        </form>
+      </details>
       ${superMode ? `<div class="card" style="margin-top:20px">
         <h2 style="margin-top:0">Activity log</h2>
         <p class="muted-note" style="margin-top:0">Most recent edits (who changed which page, and when). Last ${editsLog.length} shown.</p>
@@ -8166,7 +8165,7 @@
         else if (u.editPages === "all") { roleLabel = "page admin (all)"; roleCls = "b-info"; }
         else if (Array.isArray(u.editPages) && u.editPages.length) { roleLabel = "editor"; roleCls = "b-info"; }
         else { roleLabel = "view"; roleCls = "b-neutral"; }
-        userPermsMap[doc.id] = { role: u.role || "view", pages: u.pages === "all" ? "all" : (u.pages || []), editPages: u.editPages === "all" ? "all" : (u.editPages || []) };
+        userPermsMap[doc.id] = { email: u.email || "", role: u.role || "view", pages: u.pages === "all" ? "all" : (u.pages || []), editPages: u.editPages === "all" ? "all" : (u.editPages || []), hqs: u.hqs || [], landing: !!u.landing, managerInc: !!u.managerInc };
         const selCell = `<td class="num">${isAll ? "" : `<input type="checkbox" class="u-select" data-uid="${doc.id}">`}</td>`;
         const pageCells = PERMISSION_PAGES.map((t) => {
           if (isAll) return `<td class="mx-cell"><span class="mx-all" title="all access">✓</span></td>`;
@@ -8178,7 +8177,7 @@
           ${selCell}
           <td class="t-name mx-user">${esc(u.email || "—")}<div><span class="badge ${roleCls}">${esc(roleLabel)}</span></div></td>
           ${pageCells}
-          <td class="mx-act" style="white-space:nowrap"><button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
+          <td class="mx-act" style="white-space:nowrap">${isAll ? "" : `<button class="ghost-btn u-flags" data-uid="${doc.id}" title="Role, landing, manager-incentive, HQ access">⚙</button> `}<button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
         </tr>`);
       });
       const newRow = `<div class="bulk-bar">
@@ -8232,6 +8231,12 @@
         b.classList.toggle("on", nowEdit);
         if (nowEdit) vcb.checked = true;
         mxApply(b.dataset.uid, b.dataset.page, vcb.checked, nowEdit);
+      }));
+      // ⚙ = open the advanced form (role, landing, manager-incentive, HQ) for this user.
+      box.querySelectorAll(".u-flags").forEach((b) => (b.onclick = () => {
+        const p = userPermsMap[b.dataset.uid]; if (!p) return;
+        const d = document.querySelector(".adv-add"); if (d) d.open = true;
+        fillUserForm(p, b.dataset.uid);
       }));
       box.querySelectorAll(".u-view").forEach((b) => {
         b.onclick = () => {
