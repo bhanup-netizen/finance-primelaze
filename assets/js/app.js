@@ -3849,7 +3849,7 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button id="expTpl" class="ghost-btn" type="button" title="Download a blank Excel template to fill next month's expenses">⬇ Template</button>
-          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Upload an expense sheet (Excel/CSV) — replaces the current data">⬆ Import<input type="file" id="expFile" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Upload an expense sheet (Excel/CSV) — choose to add to or replace the current data">⬆ Import<input type="file" id="expFile" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
           <button id="expExport" class="ghost-btn" type="button" title="Download all entries as Excel">⬇ Export Excel</button>
         </div>
       </div>
@@ -3921,6 +3921,11 @@
   }
   // Column order for expense export + template.
   const EXPENSE_HEADERS = ["Sr", "Date", "Details", "Paid to", "Category", "Bank", "Week", "Amount"];
+  // Show/write dates as DD/MM/YYYY so the sheet matches finance's own format.
+  function expFmtDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso || "");
+  }
   // Wired after render (template / import / export buttons).
   function wireExpense() {
     const ex = document.getElementById("expExport");
@@ -3939,8 +3944,8 @@
   }
   // Blank template so Finance can prepare next month's expense sheet.
   function expTemplate() {
-    const sample1 = [1, "2026-09-01", "Salary for the month of Aug 2026", "Employee Name (delete this row)", "Salary", "ICICI- 202", "Week 1", 50000];
-    const sample2 = [2, "2026-09-02", "Customs Duty", "DHL EXPRESS (delete this row)", "Customs Duty", "AXIS-962", "Week 1", 191240.8];
+    const sample1 = [1, "01/09/2026", "Salary for the month of Aug 2026", "Employee Name (delete this row)", "Salary", "ICICI- 202", "Week 1", 50000];
+    const sample2 = [2, "02/09/2026", "Customs Duty", "DHL EXPRESS (delete this row)", "Customs Duty", "AXIS-962", "Week 1", 191240.8];
     if (window.XLSX) {
       const ws = XLSX.utils.aoa_to_sheet([EXPENSE_HEADERS, sample1, sample2]);
       ws["!cols"] = EXPENSE_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 4) }));
@@ -3956,8 +3961,8 @@
   }
   function expExport() {
     if (!window.XLSX) { window.alert("Excel library not loaded."); return; }
-    const data = expenseRows().slice().sort((a, b) => (a.sr || 0) - (b.sr || 0)).map((r) => ({
-      "Sr": r.sr, "Date": r.date, "Details": r.details, "Paid to": r.name,
+    const data = expenseRows().slice().sort((a, b) => (a.sr || 0) - (b.sr || 0)).map((r, i) => ({
+      "Sr": r.sr || i + 1, "Date": expFmtDate(r.date), "Details": r.details, "Paid to": r.name,
       "Category": EXPENSE_CAT_LABEL[expCatKey(r)] || r.ledger, "Bank": r.bank, "Week": r.week, "Amount": +r.amount || 0,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -3988,18 +3993,56 @@
     };
   }
   const expKey = (r) => [r.date, r.name, r.ledger, r.amount, r.details].join("|").toLowerCase();
-  // Replace-import: the uploaded sheet becomes the expense data (hides the seed).
-  function expAppend(mapped) {
+  // Import an uploaded sheet — replace = the file becomes the expense data
+  // (hides the seed); otherwise add its rows to what's already there, skipping
+  // any exact duplicates so re-uploading the same sheet won't double up.
+  function expAppend(mapped, replace) {
     const valid = mapped.filter((r) => r.amount || r.name || r.details);
     if (!valid.length) { window.alert("No usable rows found. Make sure the sheet has Amount / Paid to / Details columns."); return; }
-    expSeq = 0;
-    expenseAdds.length = 0;
-    valid.forEach((r) => { r.sr = r.sr || ++expSeq; if (r.sr > expSeq) expSeq = r.sr; expenseAdds.push(r); });
-    expenseHideBase = true;
+    if (replace) {
+      expSeq = 0;
+      expenseAdds.length = 0;
+      valid.forEach((r) => { r.sr = r.sr || ++expSeq; if (r.sr > expSeq) expSeq = r.sr; expenseAdds.push(r); });
+      expenseHideBase = true;
+      expBuildLabels(valid);
+      saveEdits(`Expense · imported ${valid.length} row(s) (replaced previous data)`);
+      renderTab("expense");
+      window.alert(`Imported ${valid.length} expense row(s), replacing the previous data.` + (mapped.length - valid.length ? ` ${mapped.length - valid.length} blank row(s) skipped.` : ""));
+      return;
+    }
+    const seen = new Set(expenseRows().map(expKey));
+    expSeq = expenseRows().reduce((m, r) => Math.max(m, +r.sr || 0), 0);
+    let added = 0;
+    valid.forEach((r) => { const k = expKey(r); if (seen.has(k)) return; seen.add(k); r.sr = ++expSeq; expenseAdds.push(r); added++; });
     expBuildLabels(valid);
-    saveEdits(`Expense · imported ${valid.length} row(s) (replaced previous data)`);
+    saveEdits(`Expense · added ${added} new row(s)`);
     renderTab("expense");
-    window.alert(`Imported ${valid.length} expense row(s).` + (mapped.length - valid.length ? ` ${mapped.length - valid.length} blank row(s) skipped.` : ""));
+    window.alert(`Added ${added} new expense row(s).` + (valid.length - added ? ` ${valid.length - added} already present (skipped).` : ""));
+  }
+  // Ask whether the uploaded sheet should be added to the current data or
+  // replace it. Defaults matter: finance uploads periodic (e.g. fortnightly)
+  // sheets, so "Add" keeps earlier periods instead of wiping them.
+  function expChooseImportMode(mapped, fileName) {
+    const n = mapped.filter((r) => r.amount || r.name || r.details).length;
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>Import expense sheet</h3>
+      <p class="muted-note" style="margin:2px 0 14px">“${esc(fileName)}” — <b>${n}</b> usable row(s) found.<br>How should this be brought in?</p>
+      <div class="lead-modal-actions" style="flex-wrap:wrap">
+        <button type="button" class="ghost-btn" id="expImpCancel">Cancel</button>
+        <button type="button" class="ghost-btn" id="expImpReplace" title="Wipe the current data and show only this sheet">↺ Replace all</button>
+        <button type="button" class="dl-btn" id="expImpAdd" title="Keep the current data and add this sheet's rows (duplicates skipped)">＋ Add to existing</button>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("expImpCancel").onclick = close;
+    document.getElementById("expImpAdd").onclick = () => { close(); expAppend(mapped, false); };
+    document.getElementById("expImpReplace").onclick = () => {
+      if (!window.confirm("Replace ALL current expense data with this sheet? This can't be undone.")) return;
+      close(); expAppend(mapped, true);
+    };
   }
   function expImport(file) {
     const isCsv = /\.csv$/i.test(file.name) || !window.XLSX;
@@ -4013,7 +4056,7 @@
           const ws = wb.Sheets[wb.SheetNames[0]];
           rows = window.XLSX.utils.sheet_to_json(ws, { defval: "" });
         }
-        expAppend(rows.map(expMapRow));
+        expChooseImportMode(rows.map(expMapRow), file.name);
       } catch (err) { window.alert("Could not read the file: " + (err.message || err)); }
     };
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
