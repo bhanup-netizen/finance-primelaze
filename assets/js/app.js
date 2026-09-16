@@ -116,13 +116,13 @@
     { id: "incentives", label: "Incentives", group: "Finance", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Finance", render: renderPricing },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
-    { id: "weeklyFin", label: "Weekly Tasks", group: "Finance", render: () => renderWeekly("Finance") },
+    { id: "weeklyFin", label: "Weekly Duties", group: "Finance", render: () => renderWeekly("Finance") },
     // Sale
     { id: "leads", label: "Casovil Sale", group: "Sale", render: renderLeads },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
-    { id: "weeklyHr", label: "Weekly Tasks", group: "HR", render: () => renderWeekly("HR") },
+    { id: "weeklyHr", label: "Weekly Duties", group: "HR", render: () => renderWeekly("HR") },
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
     { id: "offline", label: "Offline Marketing", group: "Marketing", render: renderOffline },
@@ -133,7 +133,7 @@
     { id: "order", label: "Inventory", group: "Admin & Logistics", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
-    { id: "weeklyOps", label: "Weekly Tasks", group: "Admin & Logistics", render: () => renderWeekly("Admin & Logistics") },
+    { id: "weeklyOps", label: "Weekly Duties", group: "Admin & Logistics", render: () => renderWeekly("Admin & Logistics") },
     { id: "admin", label: "⚙ Admin", group: "⚙ Admin", render: renderAdmin },
   ];
 
@@ -6031,81 +6031,106 @@
       ${sections}`;
   }
 
-  /* ================= MANDATORY WEEKLY TASKS ================= */
-  // A shared, editable rule-book per department: what each person must do every
-  // week, why it matters, how long it takes, and a link / uploaded how-to.
+  /* ================= WEEKLY DUTIES (per department) ================= */
+  // A shared, editable rule-book per department, split into Mandatory and
+  // Optional weekly duties: Task, Time it takes, Priority, Remark + link/file.
   const WEEKLY_DEFAULTS = {
-    "HR": [{ id: "hr1", task: "Update attendance & leave records", why: "Keeps payroll and compliance accurate", time: "~30 min", link: "" }],
-    "Finance": [{ id: "fn1", task: "Update outstanding payments (Primelaze Sale)", why: "Know exactly what's pending and committed", time: "~1 hr", link: "" }],
-    "Admin & Logistics": [{ id: "al1", task: "Update inventory stock levels", why: "Avoid stock-outs before dispatches", time: "~45 min", link: "" }],
+    "HR": {
+      mandatory: [{ id: "hr1", task: "Update attendance & leave records", time: "~30 min", priority: "High", remark: "" }],
+      optional: [{ id: "hro1", task: "Employee engagement check-in", time: "~20 min", priority: "Low", remark: "" }],
+    },
+    "Finance": {
+      mandatory: [{ id: "fn1", task: "Update outstanding payments (Primelaze Sale)", time: "~1 hr", priority: "High", remark: "" }],
+      optional: [],
+    },
+    "Admin & Logistics": {
+      mandatory: [{ id: "al1", task: "Update inventory stock levels", time: "~45 min", priority: "High", remark: "" }],
+      optional: [],
+    },
   };
+  const WEEKLY_PRIOS = ["High", "Medium", "Low"];
   const weeklyTasks = JSON.parse(JSON.stringify(WEEKLY_DEFAULTS));
   let weeklySeq = 100;
-  const weeklyList = (dept) => (weeklyTasks[dept] = weeklyTasks[dept] || []);
+  const weeklyList = (dept, kind) => {
+    const d = (weeklyTasks[dept] = weeklyTasks[dept] || { mandatory: [], optional: [] });
+    return (d[kind] = d[kind] || []);
+  };
+  const prioBadge = (p) => `<span class="badge ${p === "High" ? "b-bad" : p === "Medium" ? "b-warn" : "b-good"}">${esc(p || "—")}</span>`;
 
   function renderWeekly(dept) {
     const ed = isAdmin();
-    const list = weeklyList(dept);
     setTimeout(() => wireWeekly(dept), 0);
-    const cell = (i, field, val, ph) => ed
-      ? `<td><input class="wk-in" data-i="${i}" data-field="${field}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
+    const inCell = (kind, i, field, val, ph) => ed
+      ? `<td><input class="wk-in" data-kind="${kind}" data-i="${i}" data-field="${field}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
       : `<td>${field === "link" && val ? `<a href="${esc(val)}" target="_blank" rel="noopener">link ↗</a>` : esc(val || "—")}</td>`;
-    const fileCell = (i, t) => {
-      const has = t.fileUrl ? `<a href="${esc(t.fileUrl)}" target="_blank" rel="noopener">📎 ${esc(t.fileName || "file")}</a>${ed ? ` <button type="button" class="linkish wk-fdel" data-i="${i}" title="Remove file">✕</button>` : ""}` : (ed ? "" : "—");
-      const up = ed ? `<label class="wk-up">⬆ Upload<input type="file" class="wk-file" data-i="${i}" hidden></label>` : "";
+    const prioCell = (kind, i, val) => ed
+      ? `<td><select class="wk-in" data-kind="${kind}" data-i="${i}" data-field="priority">${WEEKLY_PRIOS.map((p) => `<option${(val || "Medium") === p ? " selected" : ""}>${p}</option>`).join("")}</select></td>`
+      : `<td>${prioBadge(val)}</td>`;
+    const fileCell = (kind, i, t) => {
+      const has = t.fileUrl ? `<a href="${esc(t.fileUrl)}" target="_blank" rel="noopener">📎 ${esc(t.fileName || "file")}</a>${ed ? ` <button type="button" class="linkish wk-fdel" data-kind="${kind}" data-i="${i}" title="Remove file">✕</button>` : ""}` : (ed ? "" : "—");
+      const up = ed ? `<label class="wk-up">⬆ Upload<input type="file" class="wk-file" data-kind="${kind}" data-i="${i}" hidden></label>` : "";
       return `<td>${has}${has && up ? " " : ""}${up}</td>`;
     };
-    const rows = list.map((t, i) => `<tr>
-      <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish wk-del" data-i="${i}" title="Remove task">✕</button>` : ""}</td>
-      ${cell(i, "task", t.task, "Task")}
-      ${cell(i, "why", t.why, "Why it matters")}
-      ${cell(i, "time", t.time, "e.g. 30 min")}
-      ${cell(i, "link", t.link, "Paste a how-to link")}
-      ${fileCell(i, t)}
-    </tr>`).join("") || `<tr><td colspan="6" class="empty">No weekly tasks yet.${ed ? " Click “Add task”." : ""}</td></tr>`;
-    const head = ["#", "Task", "Why", "Time it takes", "Link", "File"].map((x) => `<th>${x}</th>`).join("");
+    const head = ["#", "Task", "Time it takes", "Priority", "Remark", "Link", "File"].map((x) => `<th>${x}</th>`).join("");
+    const section = (kind, title, note) => {
+      const list = weeklyList(dept, kind);
+      const rows = list.map((t, i) => `<tr>
+        <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish wk-del" data-kind="${kind}" data-i="${i}" title="Remove">✕</button>` : ""}</td>
+        ${inCell(kind, i, "task", t.task, "Task")}
+        ${inCell(kind, i, "time", t.time, "e.g. 30 min")}
+        ${prioCell(kind, i, t.priority)}
+        ${inCell(kind, i, "remark", t.remark, "Remark / note")}
+        ${inCell(kind, i, "link", t.link, "Paste a how-to link")}
+        ${fileCell(kind, i, t)}
+      </tr>`).join("") || `<tr><td colspan="7" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Click “Add duty”." : ""}</td></tr>`;
+      return `<div class="block" style="margin-top:16px">
+        <h2 style="margin:0 0 4px">${esc(title)}</h2>
+        <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
+        ${table(head, rows)}
+        ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn wk-add" data-kind="${kind}">＋ Add duty</button></div>` : ""}</div>`;
+    };
     return `
-      <div class="section-head"><h1>${esc(dept)} — Mandatory Weekly Tasks</h1>
-        <p>The tasks each ${esc(dept)} team member must complete every week — our shared rule book. Add the task, why it matters, and how long it takes, with a link or an uploaded how-to.${ed ? " Editable — saves for everyone." : ""}</p></div>
-      ${table(head, rows)}
-      ${ed ? `<div class="hq-actions" style="margin-top:12px"><button id="wkAdd" class="dl-btn" type="button">＋ Add task</button></div>` : ""}`;
+      <div class="section-head"><h1>${esc(dept)} — Weekly Duties</h1>
+        <p>What each ${esc(dept)} team member does every week — our shared rule book, split into mandatory and optional.${ed ? " Editable — saves for everyone." : ""}</p></div>
+      ${section("mandatory", "Mandatory weekly duties", "Must be done every week, without fail.")}
+      ${section("optional", "Optional weekly duties", "Do these when time allows — good-to-have, not compulsory.")}`;
   }
 
   function wireWeekly(dept) {
-    const list = weeklyList(dept);
     document.querySelectorAll(".wk-in").forEach((el) => {
-      el.onchange = () => { const t = list[+el.dataset.i]; if (t) { t[el.dataset.field] = el.value.trim(); saveEdits("Weekly task · " + dept); } };
+      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.value.trim(); saveEdits("Weekly duty · " + dept); } };
     });
     document.querySelectorAll(".wk-del").forEach((b) => {
-      b.onclick = () => { if (!window.confirm("Remove this task?")) return; list.splice(+b.dataset.i, 1); saveEdits("Weekly task removed · " + dept); go(currentTab); };
+      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); saveEdits("Weekly duty removed · " + dept); go(currentTab); };
     });
-    const add = document.getElementById("wkAdd");
-    if (add) add.onclick = () => { list.push({ id: "w" + (weeklySeq++), task: "", why: "", time: "", link: "" }); saveEdits("Weekly task added · " + dept); go(currentTab); };
+    document.querySelectorAll(".wk-add").forEach((b) => {
+      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "" }); saveEdits("Weekly duty added · " + dept); go(currentTab); };
+    });
     document.querySelectorAll(".wk-file").forEach((inp) => {
-      inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) uploadWeeklyFile(dept, +inp.dataset.i, f); };
+      inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) uploadWeeklyFile(dept, inp.dataset.kind, +inp.dataset.i, f); };
     });
-    document.querySelectorAll(".wk-fdel").forEach((b) => { b.onclick = () => removeWeeklyFile(dept, +b.dataset.i); });
+    document.querySelectorAll(".wk-fdel").forEach((b) => { b.onclick = () => removeWeeklyFile(dept, b.dataset.kind, +b.dataset.i); });
   }
 
-  async function uploadWeeklyFile(dept, i, file) {
-    const t = weeklyList(dept)[i]; if (!t) return;
+  async function uploadWeeklyFile(dept, kind, i, file) {
+    const t = weeklyList(dept, kind)[i]; if (!t) return;
     if (!storage) { window.alert("⚠ File storage is not enabled yet — paste a link instead."); return; }
     if (file.size > 15 * 1024 * 1024) { window.alert("⚠ File too large (max 15 MB)."); return; }
     try {
       const safe = String(file.name).replace(/[^\w.\-]+/g, "_").slice(-80);
-      const path = "weeklytasks/" + idfor(dept) + "/" + (t.id || i) + "/" + Date.now() + "-" + safe;
+      const path = "weeklytasks/" + idfor(dept) + "/" + kind + "/" + (t.id || i) + "/" + Date.now() + "-" + safe;
       const ref = storage.ref().child(path);
       await ref.put(file, { contentType: file.type || "application/octet-stream" });
       const url = await ref.getDownloadURL();
       if (t.filePath && t.filePath !== path) { try { await storage.ref().child(t.filePath).delete(); } catch (e) {} }
       t.fileName = file.name; t.fileUrl = url; t.filePath = path;
-      saveEdits("Weekly task file · " + dept); go(currentTab);
+      saveEdits("Weekly duty file · " + dept); go(currentTab);
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
-  async function removeWeeklyFile(dept, i) {
-    const t = weeklyList(dept)[i]; if (!t) return;
+  async function removeWeeklyFile(dept, kind, i) {
+    const t = weeklyList(dept, kind)[i]; if (!t) return;
     const path = t.filePath; delete t.fileName; delete t.fileUrl; delete t.filePath;
-    saveEdits("Weekly task file removed · " + dept); go(currentTab);
+    saveEdits("Weekly duty file removed · " + dept); go(currentTab);
     if (path && storage) { try { await storage.ref().child(path).delete(); } catch (e) {} }
   }
 
@@ -7404,7 +7429,7 @@
       if (Array.isArray(e.socPageAdds)) { socPageAdds.length = 0; e.socPageAdds.forEach((x) => socPageAdds.push(x)); const ids = socPageAdds.map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); socPageSeq = Math.max(socPageSeq, ...(ids.length ? ids : [0])) + 1; }
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
-      if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flat().map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
+      if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
