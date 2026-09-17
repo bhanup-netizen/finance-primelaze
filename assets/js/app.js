@@ -7494,6 +7494,21 @@
       udoc.role = "superadmin";
       try { await db.collection("users").doc(user.uid).set({ role: "superadmin" }, { merge: true }); } catch (e) {}
     }
+
+    // No access record yet? Check for a pending email invite an admin saved
+    // (they granted access to an existing login without its password). Activate
+    // it now: create this user's access doc from the invite, then clear it.
+    if (!udoc) {
+      try {
+        const cfg = await db.collection("config").doc("app").get();
+        const inv = cfg.exists && (cfg.data().invites || {})[email];
+        if (inv) {
+          udoc = { email, role: inv.role || "view", pages: inv.pages || [], editPages: inv.editPages || [], hqs: inv.hqs || "all", landing: !!inv.landing, managerInc: !!inv.managerInc, name: inv.name || "" };
+          await db.collection("users").doc(user.uid).set(udoc);
+          try { await db.collection("config").doc("app").set({ invites: { [email]: firebase.firestore.FieldValue.delete() } }, { merge: true }); } catch (e) {}
+        }
+      } catch (e) { console.warn("invite activation failed", e); }
+    }
     if (!udoc) throw new Error("no-access");
 
     // "superadmin" and "admin" both edit all content; only super manages users.
@@ -8052,6 +8067,23 @@
     await db.collection("users").doc(uid).set(docData, { merge: true });
   }
 
+  // A pending access "invite" keyed by email, stored inside config/app (which
+  // every signed-in user can already read). It activates automatically the next
+  // time that person signs in — so we can grant access to an existing login
+  // without knowing its password and without touching the Firebase console.
+  async function saveAccessInvite(email, docData) {
+    const key = String(email || "").toLowerCase();
+    await db.collection("config").doc("app").set({
+      invites: { [key]: { email: key, role: docData.role || "view", pages: docData.pages || [], editPages: docData.editPages || [], hqs: docData.hqs || "all", landing: !!docData.landing, managerInc: !!docData.managerInc, by: (sessionUser && sessionUser.email) || "", at: Date.now() } },
+    }, { merge: true });
+  }
+  async function clearAccessInvite(email) {
+    try {
+      const key = String(email || "").toLowerCase();
+      await db.collection("config").doc("app").set({ invites: { [key]: firebase.firestore.FieldValue.delete() } }, { merge: true });
+    } catch (e) { /* non-admins can't write config — harmless, invite is skipped once a user doc exists */ }
+  }
+
   async function adminCreateUser(email, pass, docData) {
     // use a throwaway secondary app so creating the user doesn't sign the admin out
     const sec = firebase.initializeApp(window.FIREBASE_CONFIG, "sec-" + Math.floor(performance.now()));
@@ -8070,12 +8102,20 @@
             const cred = await sec.auth().signInWithEmailAndPassword(email, pass);
             uid = cred.user.uid;
           } catch (e2) {
-            throw new Error("This email already has a login but no access record. Fix: delete it in Firebase Console → Authentication → Users, then Add user again with a fresh password. (Or, if you know this account's current password, enter that here to re-link it.)");
+            // Password unknown, so we can't re-link directly. Save the access as
+            // a pending invite (activates on their next sign-in) and email them
+            // a reset link so they can get in. No console needed.
+            await saveAccessInvite(email, docData);
+            let mailed = false;
+            try { await auth.sendPasswordResetEmail(email); mailed = true; } catch (e3) {}
+            return { invited: true, email, mailed };
           }
         } else throw err;
       }
       await db.collection("users").doc(uid).set({ email: email.toLowerCase(), ...docData });
+      await clearAccessInvite(email);
       try { await sec.auth().signOut(); } catch (e) {}
+      return { created: true, uid };
     } finally { try { await sec.delete(); } catch (e) {} }
   }
 
@@ -8131,7 +8171,12 @@
         }
         const email = document.getElementById("auEmail").value.trim();
         const pass = document.getElementById("auPass").value;
-        await adminCreateUser(email, pass, collectPerms());
+        const r = await adminCreateUser(email, pass, collectPerms());
+        if (r && r.invited) {
+          msg.style.color = "var(--warn)";
+          msg.textContent = `“${email}” already has a login — access saved as an invite. ${r.mailed ? "A password-reset link was emailed. " : ""}It activates when they next sign in.`;
+          return;
+        }
         msg.style.color = "var(--good)"; msg.textContent = "User created ✓";
         form.reset();
         document.querySelectorAll(".perm-hq").forEach((c) => (c.checked = true));
@@ -8331,8 +8376,12 @@
         if (!email || pass.length < 6) { m.style.color = "var(--bad)"; m.textContent = "Enter an email and a 6+ character password."; return; }
         nc.disabled = true; m.style.color = ""; m.textContent = "Creating…";
         try {
-          await adminCreateUser(email, pass, { role: "view", pages: [], editPages: [], hqs: "all", landing: false, managerInc: false });
-          loadUserList();
+          const r = await adminCreateUser(email, pass, { role: "view", pages: [], editPages: [], hqs: "all", landing: false, managerInc: false });
+          if (r && r.invited) {
+            m.style.color = "var(--warn)";
+            m.textContent = `“${email}” already has a login — access saved as an invite. ${r.mailed ? "A password-reset link was emailed. " : ""}Ask them to sign in; it activates automatically, then set their pages here.`;
+            nc.disabled = false;
+          } else { loadUserList(); }
         } catch (err) { m.style.color = "var(--bad)"; m.textContent = authErr(err); nc.disabled = false; }
       };
       // Department order for the per-user page list.
@@ -8403,7 +8452,7 @@
         panel.querySelectorAll(".u-del").forEach((b) => (b.onclick = async () => {
           if (b.dataset.email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) { window.alert("The bootstrap admin can't be revoked here."); return; }
           if (!window.confirm("Revoke access for " + b.dataset.email + "?\n\nThis removes their permissions from the database only. Their login still exists — to re-grant later, use ＋ New user with the same email.")) return;
-          try { await db.collection("users").doc(b.dataset.uid).delete(); toast("✓ Revoked " + b.dataset.email); loadUserList(); }
+          try { await db.collection("users").doc(b.dataset.uid).delete(); await clearAccessInvite(b.dataset.email); toast("✓ Revoked " + b.dataset.email); loadUserList(); }
           catch (e) { window.alert("Could not revoke: " + (e.message || e)); }
         }));
       }
