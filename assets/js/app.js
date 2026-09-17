@@ -5428,6 +5428,21 @@
       if (window.confirm('Move "' + item.name + '" to ' + regGroup(toG).label + "?")) { regMoveItem(fromG, item, toG); close(); renderTab("registration"); }
     }));
   }
+  // Delete an item from a tab — used to clean up duplicate / stray machine and
+  // product entries. Items added by the team are removed outright; built-in
+  // seed items are hidden via regMoved (so they stay gone after reload). Any
+  // status / dates / remarks / documents attached to it are cleared too.
+  function regDeleteItem(g, item) {
+    const slug = regSlug(item.name);
+    if (regAdds[g]) regAdds[g] = regAdds[g].filter((x) => regSlug(x.name) !== slug);
+    if (!regMoved.includes(g + ":" + slug)) regMoved.push(g + ":" + slug);
+    const tk = g + ":" + slug;
+    delete regTrack[tk];
+    const docPre = g + ":" + slug + ":", itemPre = g + ":" + slug + ":";
+    Object.keys(regDocs).forEach((k) => { if (k.indexOf(docPre) === 0) delete regDocs[k]; });
+    Object.keys(regItemEdits).forEach((k) => { if (k.indexOf(itemPre) === 0) delete regItemEdits[k]; });
+    saveEdits("Registration · deleted " + item.name);
+  }
   function regStatusBadge(s) {
     const t = String(s || "").toLowerCase();
     let cls = "b-neutral";
@@ -5460,7 +5475,8 @@
       const rmN = regRemarks(g, it).length;
       const rmBtn = `<button type="button" class="ghost-btn reg-rem-btn" data-g="${g}" data-name="${esc(it.name)}" title="Remarks &amp; history">📝 <b>${rmN}</b></button>`;
       const editBtn = admin ? ` <button type="button" class="ghost-btn reg-edit-btn" data-g="${g}" data-name="${esc(it.name)}" title="Edit item details">✏</button>` : "";
-      const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>${admin ? ` <button type="button" class="ghost-btn reg-move-btn" data-g="${g}" data-name="${esc(it.name)}" title="Move to another tab">↔</button>` : ""}${editBtn}`;
+      const delBtn = admin ? ` <button type="button" class="ghost-btn reg-del-btn" data-g="${g}" data-name="${esc(it.name)}" title="Delete this entry">🗑</button>` : "";
+      const docBtn = `<button type="button" class="ghost-btn reg-docs-btn" data-g="${g}" data-name="${esc(it.name)}" title="Documents">📄 <b>${n}</b>/${total}</button>${admin ? ` <button type="button" class="ghost-btn reg-move-btn" data-g="${g}" data-name="${esc(it.name)}" title="Move to another tab">↔</button>` : ""}${editBtn}${delBtn}`;
       const iv = (f) => esc(regItemVal(g, it, f) || "");
       const mfrCell = `<td>${regItemVal(g, it, "manufacturer") ? iv("manufacturer") : "—"}${regItemVal(g, it, "country") ? `<div class="t-muted" title="Country of origin">${iv("country")}</div>` : ""}</td>`;
       let nameCols;
@@ -5495,6 +5511,12 @@
     document.querySelectorAll(".reg-docs-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regDocsDialog(b.dataset.g, it); }));
     document.querySelectorAll(".reg-move-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regMoveDialog(b.dataset.g, it); }));
     document.querySelectorAll(".reg-edit-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regEditItemDialog(b.dataset.g, it); }));
+    document.querySelectorAll(".reg-del-btn").forEach((b) => (b.onclick = () => {
+      const it = find(b); if (!it) return;
+      if (window.confirm('Delete "' + it.name + '" from this tab?\n\nThis removes the entry and its status, dates, remarks and documents. This cannot be undone.')) {
+        regDeleteItem(b.dataset.g, it); renderTab("registration");
+      }
+    }));
   }
   // Edit an item's own details (manufacturer, class, models, …). The name is
   // the item's key, so it stays fixed; the rest are corrected via an overlay.
