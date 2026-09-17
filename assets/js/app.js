@@ -6150,6 +6150,11 @@
     return (d[kind] = d[kind] || []);
   };
   const prioBadge = (p) => `<span class="badge ${p === "High" ? "b-bad" : p === "Medium" ? "b-warn" : "b-good"}">${esc(p || "—")}</span>`;
+  // Turn an email into a short display name, e.g. "sonal@primelaze.com" → "Sonal".
+  const wkShortName = (email) => {
+    const p = String(email || "").split("@")[0].replace(/[._]+/g, " ").trim();
+    return p ? p.replace(/\b\w/g, (c) => c.toUpperCase()) : String(email || "");
+  };
 
   function renderWeekly(dept) {
     const ed = isAdmin();
@@ -6165,7 +6170,13 @@
       const up = ed ? `<label class="wk-up">⬆ Upload<input type="file" class="wk-file" data-kind="${kind}" data-i="${i}" hidden></label>` : "";
       return `<td>${has}${has && up ? " " : ""}${up}</td>`;
     };
-    const head = ["#", "Task", "Time it takes", "Priority", "Remark", "Link", "File"].map((x) => `<th>${x}</th>`).join("");
+    const byCell = (t) => {
+      if (!t.by) return `<td class="wk-by t-muted">—</td>`;
+      const name = wkShortName(t.by);
+      const when = t.at ? " · " + new Date(t.at).toLocaleDateString("en-GB") : "";
+      return `<td class="wk-by"><span title="${esc(t.by)}${esc(when)}">${esc(name)}</span></td>`;
+    };
+    const head = ["#", "Task", "Time it takes", "Priority", "Remark", "Link", "File", "Added by"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
       const rows = list.map((t, i) => `<tr>
@@ -6176,7 +6187,8 @@
         ${inCell(kind, i, "remark", t.remark, "Remark / note")}
         ${inCell(kind, i, "link", t.link, "Paste a how-to link")}
         ${fileCell(kind, i, t)}
-      </tr>`).join("") || `<tr><td colspan="7" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Click “Add duty”." : ""}</td></tr>`;
+        ${byCell(t)}
+      </tr>`).join("") || `<tr><td colspan="8" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Click “Add duty”." : ""}</td></tr>`;
       return `<div class="block" style="margin-top:16px">
         <h2 style="margin:0 0 4px">${esc(title)}</h2>
         <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
@@ -6198,7 +6210,7 @@
       b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); saveEdits("Weekly duty removed · " + dept); go(currentTab); };
     });
     document.querySelectorAll(".wk-add").forEach((b) => {
-      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "" }); saveEdits("Weekly duty added · " + dept); go(currentTab); };
+      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "", by: (sessionUser && sessionUser.email) || "", at: Date.now() }); saveEdits("Weekly duty added · " + dept); go(currentTab); };
     });
     document.querySelectorAll(".wk-file").forEach((inp) => {
       inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) uploadWeeklyFile(dept, inp.dataset.kind, +inp.dataset.i, f); };

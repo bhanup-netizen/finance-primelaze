@@ -721,6 +721,7 @@ textarea.mk-in { resize: vertical; line-height: 1.45; }
 .wk-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .wk-up { display: inline-block; cursor: pointer; font-size: 12px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 .wk-up:hover { background: var(--accent-soft); }
+.wk-by { white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
 @media (max-width: 560px) { .wk-in { min-width: 64px; font-size: 12px; padding: 4px 6px; } }
 /* Clickable Active / Not Active status pill for an online page. */
 .soc-status { border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
