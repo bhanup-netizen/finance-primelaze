@@ -7422,6 +7422,9 @@
     try {
       if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
       auth = firebase.auth();
+      // Keep users signed in across refreshes by default. The login form's
+      // "Keep me signed in" box can downgrade this to SESSION (per browser tab).
+      try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) {}
       db = firebase.firestore();
       try { storage = firebase.storage ? firebase.storage() : null; } catch (e) { storage = null; }
       return true;
@@ -7764,11 +7767,29 @@
       errEl.textContent = "Could not load Firebase — check your connection and refresh.";
       return;
     }
+    // Pre-fill the last-used email so people don't retype it (browser fills the
+    // saved password). We never store the password ourselves.
+    try {
+      const savedEmail = localStorage.getItem("pl-email");
+      if (savedEmail && $("#lockUser") && !$("#lockUser").value) $("#lockUser").value = savedEmail;
+      const rc = $("#lockRemember"); if (rc && localStorage.getItem("pl-remember") === "0") rc.checked = false;
+    } catch (e) {}
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errEl.style.color = ""; errEl.textContent = ""; btn.disabled = true; btn.textContent = "Signing in…";
+      const email = ($("#lockUser").value || "").trim();
+      const remember = !$("#lockRemember") || $("#lockRemember").checked;
       try {
-        await auth.signInWithEmailAndPassword(($("#lockUser").value || "").trim(), $("#lockPass").value || "");
+        // LOCAL = stay signed in after closing the browser; SESSION = only until
+        // the tab is closed. Set this before signing in so it takes effect.
+        try {
+          await auth.setPersistence(firebase.auth.Auth.Persistence[remember ? "LOCAL" : "SESSION"]);
+        } catch (pe) { console.warn("persistence", pe); }
+        try {
+          localStorage.setItem("pl-remember", remember ? "1" : "0");
+          if (remember) localStorage.setItem("pl-email", email); else localStorage.removeItem("pl-email");
+        } catch (se) {}
+        await auth.signInWithEmailAndPassword(email, $("#lockPass").value || "");
         // onAuthStateChanged finishes the flow
       } catch (err) {
         errEl.style.color = ""; errEl.textContent = authErr(err); btn.disabled = false; btn.textContent = "Sign in";

@@ -773,6 +773,11 @@ textarea.mk-in { resize: vertical; line-height: 1.45; }
   background: var(--surface-2); color: var(--text); font-size: 15px; font-family: inherit;
 }
 .lock-field input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.lock-remember {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  font-size: 13px; color: var(--text-2); cursor: pointer; user-select: none; margin-top: 2px;
+}
+.lock-remember input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 .lock-btn {
   margin-top: 6px; padding: 11px 16px; border: none; border-radius: 10px;
   background: var(--accent); color: #fff; font-size: 15px; font-weight: 700;
