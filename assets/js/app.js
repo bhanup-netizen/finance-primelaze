@@ -1005,6 +1005,17 @@
     }, 60);
   }
 
+  // Small transient confirmation at the bottom of the screen ("✓ Saved").
+  let _toastTimer = null;
+  function toast(msg, kind) {
+    let el = document.getElementById("plToast");
+    if (!el) { el = document.createElement("div"); el.id = "plToast"; el.className = "pl-toast"; document.body.appendChild(el); }
+    el.textContent = msg;
+    el.className = "pl-toast show" + (kind === "bad" ? " bad" : "");
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { el.className = "pl-toast"; }, 2600);
+  }
+
   /* ================= VACANCIES ================= */
   let vacancySort = "priority"; // "priority" | "fillBy"
   function renderVacancies() {
@@ -8213,7 +8224,7 @@
   // Live copy of every user's perms in the access matrix (uid -> {pages,editPages,role}).
   const userPermsMap = {};
   // Write one user's page access to Firestore from the matrix cell state.
-  function mxApply(uid, page, view, edit) {
+  function mxApply(uid, page, view, edit, silent) {
     const p = userPermsMap[uid]; if (!p) return;
     let pages = Array.isArray(p.pages) ? p.pages.slice() : [];
     let ed = Array.isArray(p.editPages) ? p.editPages.slice() : [];
@@ -8222,7 +8233,11 @@
     if (view || edit) pages.push(page);
     if (edit) ed.push(page);
     p.pages = pages; p.editPages = ed;
-    db.collection("users").doc(uid).set({ pages, editPages: ed }, { merge: true }).catch((e) => window.alert("Save failed: " + (e.message || e)));
+    const label = (PERMISSION_PAGES.find((t) => t.id === page) || {}).label || page;
+    const lvl = edit ? "Edit" : view ? "View" : "No access";
+    return db.collection("users").doc(uid).set({ pages, editPages: ed }, { merge: true })
+      .then(() => { if (!silent) toast(`✓ Saved — ${wkShortName(p.email)} · ${label}: ${lvl}`); })
+      .catch((e) => { toast("✕ Save failed", "bad"); window.alert("Save failed: " + (e.message || e)); });
   }
   // Super-admin bulk access: set one page's access (View / Edit / No access) for
   // every ticked user at once — no need to open each user.
@@ -8238,7 +8253,7 @@
     for (const cb of checked) {
       const p = userPermsMap[cb.dataset.uid];
       if (!p || p.role === "admin" || p.role === "superadmin" || p.pages === "all" || p.editPages === "all") { skipped++; continue; }
-      mxApply(cb.dataset.uid, page, level === "view" || level === "edit", level === "edit");
+      mxApply(cb.dataset.uid, page, level === "view" || level === "edit", level === "edit", true);
       done++;
     }
     btn.disabled = false; btn.textContent = orig;
@@ -8295,9 +8310,14 @@
         <span id="bulkCount" class="t-muted">0 selected</span>
       </div>`;
       const pageHead = PERMISSION_PAGES.map((t) => `<th class="mx-th" title="${esc((t.group ? t.group + " · " : "") + t.label)}">${esc(t.label)}</th>`).join("");
-      box.innerHTML = newRow + bulkBar
+      const filterBar = rows.length ? `<div class="bulk-bar">
+        <b>🔍 Filter users</b>
+        <input id="mxFilter" type="text" placeholder="Type a name or email…" class="select" style="max-width:260px">
+        <span id="mxFilterCount" class="t-muted"></span>
+      </div>` : "";
+      box.innerHTML = newRow + bulkBar + filterBar
         + `<div class="callout teal" style="margin-bottom:10px;font-size:13px;line-height:1.6">
-            <b>How access works</b> — everything saves instantly, no submit.<br>
+            <b>How access works</b> — each click saves right away and shows a <b>“✓ Saved”</b> confirmation at the bottom, so there's no separate submit.<br>
             • <b>＋ New user</b> — add an account, then tick its pages.<br>
             • <b>☑ box</b> = the user <b>can view</b> that page. &nbsp; • <b>✎ pencil</b> (turns blue) = the user <b>can edit</b> it (editing also turns view on).<br>
             • <b>Untick</b> the box = removes both view and edit for that page.<br>
@@ -8318,6 +8338,19 @@
           await adminCreateUser(email, pass, { role: "view", pages: [], editPages: [], hqs: "all", landing: false, managerInc: false });
           loadUserList();
         } catch (err) { m.style.color = "var(--bad)"; m.textContent = authErr(err); nc.disabled = false; }
+      };
+      const mxFilter = document.getElementById("mxFilter");
+      if (mxFilter) mxFilter.oninput = () => {
+        const q = mxFilter.value.trim().toLowerCase();
+        let shown = 0, total = 0;
+        box.querySelectorAll("tbody tr").forEach((tr) => {
+          const u = tr.querySelector(".mx-user"); if (!u) return;
+          total++;
+          const match = !q || u.textContent.toLowerCase().indexOf(q) >= 0;
+          tr.style.display = match ? "" : "none";
+          if (match) shown++;
+        });
+        const c = document.getElementById("mxFilterCount"); if (c) c.textContent = q ? shown + " of " + total + " shown" : "";
       };
       const updateCount = () => { const n = box.querySelectorAll(".u-select:checked").length; const c = document.getElementById("bulkCount"); if (c) c.textContent = n + " selected"; };
       const selAll = document.getElementById("uSelectAll");
