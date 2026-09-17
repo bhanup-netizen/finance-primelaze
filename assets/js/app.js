@@ -6178,6 +6178,10 @@
   };
   const WEEKLY_PRIOS = ["High", "Medium", "Low"];
   const weeklyTasks = JSON.parse(JSON.stringify(WEEKLY_DEFAULTS));
+  // Departments this session has changed since load — so a save only overwrites
+  // the departments the user actually edited, and never clobbers other people's
+  // concurrent changes to other departments (single shared edits doc).
+  const weeklyDirty = new Set();
   let weeklySeq = 100;
   const weeklyList = (dept, kind) => {
     const d = (weeklyTasks[dept] = weeklyTasks[dept] || { mandatory: [], optional: [] });
@@ -6238,13 +6242,13 @@
 
   function wireWeekly(dept) {
     document.querySelectorAll(".wk-in").forEach((el) => {
-      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.value.trim(); saveEdits("Weekly duty · " + dept); } };
+      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.value.trim(); weeklyDirty.add(dept); saveEdits("Weekly duty · " + dept); } };
     });
     document.querySelectorAll(".wk-del").forEach((b) => {
-      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); saveEdits("Weekly duty removed · " + dept); go(currentTab); };
+      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveEdits("Weekly duty removed · " + dept); go(currentTab); };
     });
     document.querySelectorAll(".wk-add").forEach((b) => {
-      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "", by: (sessionUser && sessionUser.email) || "", at: Date.now() }); saveEdits("Weekly duty added · " + dept); go(currentTab); };
+      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "", by: (sessionUser && sessionUser.email) || "", at: Date.now() }); weeklyDirty.add(dept); saveEdits("Weekly duty added · " + dept); go(currentTab); };
     });
     document.querySelectorAll(".wk-file").forEach((inp) => {
       inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) uploadWeeklyFile(dept, inp.dataset.kind, +inp.dataset.i, f); };
@@ -6264,13 +6268,13 @@
       const url = await ref.getDownloadURL();
       if (t.filePath && t.filePath !== path) { try { await storage.ref().child(t.filePath).delete(); } catch (e) {} }
       t.fileName = file.name; t.fileUrl = url; t.filePath = path;
-      saveEdits("Weekly duty file · " + dept); go(currentTab);
+      weeklyDirty.add(dept); saveEdits("Weekly duty file · " + dept); go(currentTab);
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
   async function removeWeeklyFile(dept, kind, i) {
     const t = weeklyList(dept, kind)[i]; if (!t) return;
     const path = t.filePath; delete t.fileName; delete t.fileUrl; delete t.filePath;
-    saveEdits("Weekly duty file removed · " + dept); go(currentTab);
+    weeklyDirty.add(dept); saveEdits("Weekly duty file removed · " + dept); go(currentTab);
     if (path && storage) { try { await storage.ref().child(path).delete(); } catch (e) {} }
   }
 
@@ -7674,15 +7678,37 @@
       const at = Date.now();
       const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
       editsUpdatedAt = at; editsUpdatedBy = by;
-      // Record the stable page id too — labels get renamed, ids don't, so the
-      // per-page log keeps matching after a tab is renamed.
-      editsLog.unshift({ by, at, tab: tabLabel, tabId: currentTab, what: desc });
-      if (editsLog.length > 300) editsLog.length = 300;
+      const newEntry = { by, at, tab: tabLabel, tabId: currentTab, what: desc };
+
+      // Re-read the newest doc first, so this (possibly older) snapshot doesn't
+      // clobber concurrent changes to the shared weekly-duties rule book or the
+      // activity log made by other people since we loaded.
+      let serverData = null;
+      try { const cur = await db.collection("edits").doc("overrides").get(); serverData = cur.exists ? (cur.data() || {}) : {}; } catch (e) { serverData = null; }
+      let mergedWeekly, mergedLog;
+      if (serverData) {
+        // Weekly duties: keep every department, but take the SERVER's copy for
+        // the departments this session didn't touch — only overwrite ours.
+        const srvWeekly = (serverData.weeklyTasks && typeof serverData.weeklyTasks === "object") ? serverData.weeklyTasks : {};
+        mergedWeekly = JSON.parse(JSON.stringify(weeklyTasks));
+        Object.keys(srvWeekly).forEach((d) => { if (!weeklyDirty.has(d)) mergedWeekly[d] = srvWeekly[d]; });
+        Object.keys(mergedWeekly).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, JSON.parse(JSON.stringify(mergedWeekly)));
+        // Activity log: merge the server's entries with ours (newest first, deduped).
+        const srvLog = Array.isArray(serverData.log) ? serverData.log : [];
+        mergedLog = [newEntry].concat(srvLog.filter((x) => !(x && x.at === newEntry.at && x.by === newEntry.by && x.what === newEntry.what)));
+        if (mergedLog.length > 300) mergedLog.length = 300;
+        editsLog.length = 0; Array.prototype.push.apply(editsLog, mergedLog);
+      } else {
+        // Re-read failed — don't risk wiping history; keep our local state.
+        editsLog.unshift(newEntry); if (editsLog.length > 300) editsLog.length = 300;
+        mergedWeekly = weeklyTasks; mergedLog = editsLog;
+      }
+      weeklyDirty.clear();
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks, regAdds, regMoved, updatedBy: by, updatedAt: at, log: editsLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
       } catch (e) {
