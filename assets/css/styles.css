@@ -978,8 +978,21 @@ textarea.mk-in { resize: vertical; line-height: 1.45; }
 /* Narrow phones: keep the top bar uncluttered and give tables more room. */
 @media (max-width: 560px) {
   .user-pill { display: none !important; }
-  .topbar { padding: 10px 14px; gap: 10px; }
-  .topbar-meta { gap: 8px; }
+  .topbar { padding: 10px 14px; gap: 10px; flex-wrap: nowrap; }
+  .topbar-meta { gap: 8px; flex-wrap: nowrap; }
+  .brand-text { display: none; }               /* red wordmark is enough branding */
+  .mode-btn .mb-txt { display: none; }          /* icon-only Password / Sign out / mode */
+  .mode-btn { padding: 0 10px; }
+  /* New-user / bulk bars: inputs go full width so nothing overflows. */
+  .bulk-bar { padding: 10px; }
+  .bulk-bar input.select, .bulk-bar select.select { flex: 1 1 100%; max-width: 100% !important; }
+  /* Admin per-user panel + passwords search fill the width. */
+  .admin-pick-lbl select { flex: 1 1 100%; }
+  .pw-toolbar #pwFilter { flex: 1 1 100%; max-width: 100% !important; }
+  .acc-row .mx-sel { min-width: 104px; }
+  .acc-grid { grid-template-columns: 1fr; }
+  .admin-panel-head, .admin-panel-act { width: 100%; }
+  .admin-panel-act { justify-content: flex-start; }
   .tabs { top: 58px; }              /* match the shorter mobile top bar */
   .subtabs { top: 102px; }          /* sit just below the shorter mobile tabs */
   .view { padding: 16px 14px 40px; }
