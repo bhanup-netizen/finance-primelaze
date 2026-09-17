@@ -7781,7 +7781,15 @@
   }
   // The banner element markup, prepended to every rendered page (always shown).
   function pageEditNote(tabId) {
-    return `<div id="pageEditNote" class="page-edit-note">${pageEditInner(tabId)}</div>`;
+    // For view-role users who hold edit grants (editors), show plainly whether
+    // THIS page is editable for them — so "I can't edit" is never a mystery.
+    let editChip = "";
+    if (!roleIsAdmin() && hasAnyEditGrant() && tabId !== "admin") {
+      editChip = canEditPage(tabId)
+        ? `<span class="edit-chip can" title="You were granted Edit on this page">✎ You can edit this page</span>`
+        : `<span class="edit-chip no" title="You have View access here">👁 View only here</span>`;
+    }
+    return `<div id="pageEditNote" class="page-edit-note">${pageEditInner(tabId)}${editChip}</div>`;
   }
   function wirePageEditNote() {
     const pt = document.querySelector("#pageEditNote .pen-toggle");
