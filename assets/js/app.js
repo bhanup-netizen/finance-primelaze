@@ -8303,9 +8303,14 @@
     p.pages = pages; p.editPages = ed;
     const label = (PERMISSION_PAGES.find((t) => t.id === page) || {}).label || page;
     const lvl = edit ? "Edit" : view ? "View" : "No access";
-    return db.collection("users").doc(uid).set({ pages, editPages: ed }, { merge: true })
-      .then(() => { if (!silent) toast(`✓ Saved — ${wkShortName(p.email)} · ${label}: ${lvl}`); })
-      .catch((e) => { toast("✕ Save failed", "bad"); window.alert("Save failed: " + (e.message || e)); });
+    const ok = () => { if (!silent) toast(`✓ Saved — ${wkShortName(p.email)} · ${label}: ${lvl}` + (p.pending ? " (invite)" : "")); };
+    const bad = (e) => { toast("✕ Save failed", "bad"); window.alert("Save failed: " + (e.message || e)); };
+    // Pending invite (person hasn't signed in yet) → update the invite in
+    // config/app; it's applied verbatim when they first sign in.
+    if (p.pending) {
+      return db.collection("config").doc("app").set({ invites: { [p.email]: { email: p.email, role: p.role || "view", pages, editPages: ed, hqs: p.hqs || "all", landing: !!p.landing, managerInc: !!p.managerInc, by: (sessionUser && sessionUser.email) || "", at: Date.now() } } }, { merge: true }).then(ok).catch(bad);
+    }
+    return db.collection("users").doc(uid).set({ pages, editPages: ed }, { merge: true }).then(ok).catch(bad);
   }
   // Super-admin bulk access: set one page's access (View / Edit / No access) for
   // every ticked user at once — no need to open each user.
@@ -8351,6 +8356,20 @@
         userPermsMap[doc.id] = { email: u.email || "", role: u.role || "view", pages: u.pages === "all" ? "all" : (u.pages || []), editPages: u.editPages === "all" ? "all" : (u.editPages || []), hqs: u.hqs || [], landing: !!u.landing, managerInc: !!u.managerInc };
         users.push({ uid: doc.id, email: u.email || "", roleLabel, roleCls, isAll });
       });
+      // Pending invites: people granted access who haven't signed in yet. Show
+      // them so the admin can find and configure them before first sign-in.
+      try {
+        const cfg = await db.collection("config").doc("app").get();
+        const invites = (cfg.exists && cfg.data().invites) || {};
+        const have = new Set(users.map((u) => u.email.toLowerCase()));
+        Object.keys(invites).forEach((em) => {
+          if (have.has(em)) return;
+          const inv = invites[em] || {};
+          const key = "invite:" + em;
+          userPermsMap[key] = { email: em, role: inv.role || "view", pages: inv.pages || [], editPages: inv.editPages || [], hqs: inv.hqs || "all", landing: !!inv.landing, managerInc: !!inv.managerInc, pending: true };
+          users.push({ uid: key, email: em, roleLabel: "invited · not signed in", roleCls: "b-warn", isAll: false, pending: true });
+        });
+      } catch (e) { /* config unreadable — just skip invites */ }
       users.sort((a, b) => a.email.localeCompare(b.email));
       const newRow = `<div class="bulk-bar">
         <b>＋ New user</b>
@@ -8392,10 +8411,11 @@
         const u = users.find((x) => x.uid === uid), p = userPermsMap[uid];
         if (!u || !p) return `<div class="empty">User not found.</div>`;
         const acts = `<div class="admin-panel-act">
-          ${u.isAll ? "" : `<button class="ghost-btn u-flags" data-uid="${uid}" title="Role, landing, manager-incentive, HQ">⚙ Advanced</button>`}
-          <button class="ghost-btn u-pwd" data-email="${esc(u.email)}">Reset pwd</button>
-          <button class="ghost-btn danger u-del" data-uid="${uid}" data-email="${esc(u.email)}">Revoke</button></div>`;
+          ${(u.isAll || u.pending) ? "" : `<button class="ghost-btn u-flags" data-uid="${uid}" title="Role, landing, manager-incentive, HQ">⚙ Advanced</button>`}
+          <button class="ghost-btn u-pwd" data-email="${esc(u.email)}">${u.pending ? "Resend link" : "Reset pwd"}</button>
+          <button class="ghost-btn danger u-del" data-uid="${uid}" data-email="${esc(u.email)}" data-pending="${u.pending ? "1" : ""}">${u.pending ? "Cancel invite" : "Revoke"}</button></div>`;
         const header = `<div class="admin-panel-head"><div class="admin-panel-who"><b>${esc(u.email)}</b> <span class="badge ${u.roleCls}">${esc(u.roleLabel)}</span></div>${acts}</div>`;
+        const pendNote = u.pending ? `<div class="callout warn" style="margin-top:12px">⏳ <b>Invited — hasn't signed in yet.</b> The access you set below is saved and applied automatically the first time they sign in. Ask them to open the dashboard and sign in (a reset-link email was sent when they were invited).</div>` : "";
         if (u.isAll) return header + `<div class="callout teal" style="margin-top:12px">This user has <b>full access</b> to every page. To limit access, lower their role under <b>⚙ Advanced</b>.</div>`;
         const quick = `<div class="admin-panel-quick"><span class="muted-note">Set every page:</span>
           <button class="ghost-btn acc-all" data-uid="${uid}" data-lvl="view">All View</button>
@@ -8415,7 +8435,7 @@
           }).join("");
           return `<div class="acc-grp"><h4>${esc(g)}</h4>${rows}</div>`;
         }).join("");
-        return header + quick + `<div class="acc-grid">${grps}</div>`;
+        return header + pendNote + quick + `<div class="acc-grid">${grps}</div>`;
       }
       function renderPanel(uid) {
         const panel = document.getElementById("mxUserPanel"); if (!panel) return;
@@ -8451,6 +8471,12 @@
         }));
         panel.querySelectorAll(".u-del").forEach((b) => (b.onclick = async () => {
           if (b.dataset.email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) { window.alert("The bootstrap admin can't be revoked here."); return; }
+          if (b.dataset.pending) {
+            if (!window.confirm("Cancel the pending invite for " + b.dataset.email + "?")) return;
+            try { await clearAccessInvite(b.dataset.email); toast("✓ Invite cancelled"); loadUserList(); }
+            catch (e) { window.alert("Could not cancel: " + (e.message || e)); }
+            return;
+          }
           if (!window.confirm("Revoke access for " + b.dataset.email + "?\n\nThis removes their permissions from the database only. Their login still exists — to re-grant later, use ＋ New user with the same email.")) return;
           try { await db.collection("users").doc(b.dataset.uid).delete(); await clearAccessInvite(b.dataset.email); toast("✓ Revoked " + b.dataset.email); loadUserList(); }
           catch (e) { window.alert("Could not revoke: " + (e.message || e)); }
