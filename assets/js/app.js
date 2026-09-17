@@ -8286,7 +8286,8 @@
           if (isAll) return `<td class="mx-cell"><span class="mx-all" title="all access">✓</span></td>`;
           const pv = Array.isArray(u.pages) && u.pages.includes(t.id);
           const pe = Array.isArray(u.editPages) && u.editPages.includes(t.id);
-          return `<td class="mx-cell"><input type="checkbox" class="mx-view" data-uid="${doc.id}" data-page="${t.id}"${(pv || pe) ? " checked" : ""}><button type="button" class="mx-edit${pe ? " on" : ""}" data-uid="${doc.id}" data-page="${t.id}" title="Edit rights (✎ = can edit)">✎</button></td>`;
+          const val = pe ? "edit" : pv ? "view" : "none";
+          return `<td class="mx-cell"><select class="mx-sel select mx-lvl-${val}" data-uid="${doc.id}" data-page="${t.id}"><option value="none"${val === "none" ? " selected" : ""}>—</option><option value="view"${val === "view" ? " selected" : ""}>View</option><option value="edit"${val === "edit" ? " selected" : ""}>Edit</option></select></td>`;
         }).join("");
         rows.push(`<tr>
           ${selCell}
@@ -8309,7 +8310,7 @@
         <button id="bulkApply" class="dl-btn" type="button">Apply to selected</button>
         <span id="bulkCount" class="t-muted">0 selected</span>
       </div>`;
-      const pageHead = PERMISSION_PAGES.map((t) => `<th class="mx-th" title="${esc((t.group ? t.group + " · " : "") + t.label)}">${esc(t.label)}</th>`).join("");
+      const pageHead = PERMISSION_PAGES.map((t) => `<th class="mx-th" title="${esc((t.group ? t.group + " · " : "") + t.label)}">${t.group ? `<span class="mx-th-grp">${esc(t.group)}</span>` : ""}${esc(t.label)}</th>`).join("");
       const filterBar = rows.length ? `<div class="bulk-bar">
         <b>🔍 Filter users</b>
         <input id="mxFilter" type="text" placeholder="Type a name or email…" class="select" style="max-width:260px">
@@ -8317,10 +8318,10 @@
       </div>` : "";
       box.innerHTML = newRow + bulkBar + filterBar
         + `<div class="callout teal" style="margin-bottom:10px;font-size:13px;line-height:1.6">
-            <b>How access works</b> — each click saves right away and shows a <b>“✓ Saved”</b> confirmation at the bottom, so there's no separate submit.<br>
-            • <b>＋ New user</b> — add an account, then tick its pages.<br>
-            • <b>☑ box</b> = the user <b>can view</b> that page. &nbsp; • <b>✎ pencil</b> (turns blue) = the user <b>can edit</b> it (editing also turns view on).<br>
-            • <b>Untick</b> the box = removes both view and edit for that page.<br>
+            <b>How access works</b> — one dropdown per page. Each change saves right away and shows a <b>“✓ Saved”</b> confirmation at the bottom, so there's no separate submit.<br>
+            • <b>—</b> = no access (page hidden) &nbsp; · &nbsp; <b>View</b> = can see it (read-only) &nbsp; · &nbsp; <b>Edit</b> = can see <i>and</i> change it (add/edit/upload).<br>
+            • Each column header shows its department (e.g. <b>HR · Weekly Duties</b>) — pick the right one.<br>
+            • <b>＋ New user</b> — add an account, then set its pages.<br>
             • <b>Bulk access</b> bar — tick several users, pick a page + level, Apply to all at once.<br>
             • <b>⚙</b> = role / landing / manager-incentive / HQ &nbsp; · &nbsp; <b>Reset pwd</b> = email a reset link &nbsp; · &nbsp; <b>Revoke</b> = remove the user.
           </div>`
@@ -8358,19 +8359,11 @@
       box.querySelectorAll(".u-select").forEach((cb) => (cb.onchange = updateCount));
       const bApply = document.getElementById("bulkApply");
       if (bApply) bApply.onclick = bulkApplyAccess;
-      // Matrix cell toggles — view checkbox + edit pencil, save instantly.
-      box.querySelectorAll(".mx-view").forEach((cb) => (cb.onchange = () => {
-        const eb = cb.parentElement.querySelector(".mx-edit");
-        let edit = eb.classList.contains("on");
-        if (!cb.checked) { edit = false; eb.classList.remove("on"); }
-        mxApply(cb.dataset.uid, cb.dataset.page, cb.checked, edit);
-      }));
-      box.querySelectorAll(".mx-edit").forEach((b) => (b.onclick = () => {
-        const vcb = b.parentElement.querySelector(".mx-view");
-        const nowEdit = !b.classList.contains("on");
-        b.classList.toggle("on", nowEdit);
-        if (nowEdit) vcb.checked = true;
-        mxApply(b.dataset.uid, b.dataset.page, vcb.checked, nowEdit);
+      // Matrix cell — one dropdown per page (— / View / Edit), saves instantly.
+      box.querySelectorAll(".mx-sel").forEach((sel) => (sel.onchange = () => {
+        const v = sel.value;
+        sel.className = "mx-sel select mx-lvl-" + v;
+        mxApply(sel.dataset.uid, sel.dataset.page, v === "view" || v === "edit", v === "edit");
       }));
       // ⚙ = open the advanced form (role, landing, manager-incentive, HQ) for this user.
       box.querySelectorAll(".u-flags").forEach((b) => (b.onclick = () => {

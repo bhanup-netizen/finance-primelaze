@@ -214,12 +214,13 @@ thead th.sort-desc::after { content: "↓"; opacity: 1; }
 .bulk-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 13px; }
 .bulk-bar .select { max-width: 260px; }
 /* Access matrix (super admin) */
-.mx-th { font-size: 11px; font-weight: 700; white-space: nowrap; text-align: center; vertical-align: bottom; min-width: 54px; }
+.mx-th { font-size: 11px; font-weight: 700; white-space: nowrap; text-align: center; vertical-align: bottom; min-width: 70px; }
+.mx-th-grp { display: block; font-size: 9px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-2); opacity: .8; margin-bottom: 1px; }
 .mx-cell { text-align: center; white-space: nowrap; padding: 5px 6px !important; }
-.mx-cell .mx-view { transform: scale(1.15); vertical-align: middle; cursor: pointer; }
-.mx-edit { border: none; background: transparent; cursor: pointer; font-size: 13px; opacity: .3; padding: 0 2px; vertical-align: middle; }
-.mx-edit.on { opacity: 1; color: var(--accent); }
-.mx-edit:hover { opacity: .8; }
+.mx-sel { font-size: 11.5px; padding: 3px 4px; min-width: 62px; border-radius: 6px; cursor: pointer; }
+.mx-sel.mx-lvl-none { color: var(--text-2); opacity: .7; }
+.mx-sel.mx-lvl-view { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.mx-sel.mx-lvl-edit { border-color: var(--good); color: var(--good); font-weight: 700; background: color-mix(in srgb, var(--good) 8%, transparent); }
 .mx-all { color: var(--good); font-weight: 800; }
 .mx-user { position: sticky; left: 0; background: var(--surface); z-index: 2; min-width: 190px; box-shadow: 1px 0 0 var(--border); }
 thead th.mx-user { z-index: 3; }
