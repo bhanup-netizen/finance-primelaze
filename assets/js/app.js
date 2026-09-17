@@ -6075,15 +6075,16 @@
       const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
     });
+    const cp = (v, label) => `<button class="soc-copy" data-copy="${esc(v)}" title="Copy ${label}">📋</button>`;
     const sections = ordered.map((pl) => {
-      const body = groups[pl].map((a) => `<tr>
+      const body = groups[pl].map((a) => `<tr data-s="${esc(((a.brand || "") + " " + (a.id || "") + " " + (a.login || "") + " " + pl).toLowerCase())}">
         <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
         <td class="t-name">${esc(a.id)}</td>
-        <td class="cell-note">${a.login ? esc(a.login) : "—"}</td>
-        <td>${a.pass ? `<span class="soc-pass" data-pass="${esc(a.pass)}">••••••••</span>` : "—"}</td>
+        <td class="cell-note">${a.login ? `${esc(a.login)} ${cp(a.login, "login")}` : "—"}</td>
+        <td>${a.pass ? `<span class="soc-pass" data-pass="${esc(a.pass)}">••••••••</span> ${cp(a.pass, "password")}` : "—"}</td>
         <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
       </tr>`).join("");
-      return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">${ICON[pl] || "🔗"} ${esc(pl)}</h3>
+      return `<div class="block pw-block" data-pl="${esc(pl)}" style="margin-top:16px"><h3 style="margin:0 0 8px">${ICON[pl] || "🔗"} ${esc(pl)} <span class="t-muted" style="font-weight:400">· ${groups[pl].length}</span></h3>
         ${table(["Brand", "Account", "Login", "Password", "Notes"].map((x) => `<th>${x}</th>`).join(""), body)}</div>`;
     }).join("");
     setTimeout(() => {
@@ -6100,12 +6101,34 @@
         el.style.cursor = "pointer"; el.title = "Click to reveal / hide";
         el.onclick = () => { el.textContent = el.textContent.indexOf("•") === 0 ? el.dataset.pass : "••••••••"; };
       });
+      document.querySelectorAll(".soc-copy").forEach((b) => {
+        b.onclick = async (e) => {
+          e.stopPropagation();
+          const v = b.dataset.copy || "";
+          try { await navigator.clipboard.writeText(v); toast("✓ Copied"); }
+          catch (err) { const ta = document.createElement("textarea"); ta.value = v; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); toast("✓ Copied"); } catch (e2) { window.alert(v); } ta.remove(); }
+        };
+      });
+      const pf = document.getElementById("pwFilter");
+      if (pf) pf.oninput = () => {
+        const q = pf.value.trim().toLowerCase();
+        document.querySelectorAll(".pw-block").forEach((blk) => {
+          let shown = 0;
+          blk.querySelectorAll("tbody tr").forEach((tr) => {
+            const m = !q || (tr.dataset.s || "").indexOf(q) >= 0;
+            tr.style.display = m ? "" : "none"; if (m) shown++;
+          });
+          blk.style.display = shown ? "" : "none";
+        });
+      };
     }, 0);
+    const total = withPass.length;
     return `
       <div class="section-head"><h1>🔑 Passwords</h1>
-        <p>Logins for every online-marketing account. Super admin only — do not share outside the team.</p></div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-        <div class="callout warn" style="margin:0;flex:1;min-width:220px">🔒 Sensitive — stored for team continuity. Passwords are masked; click one to reveal.</div>
+        <p>Logins for every online-marketing account — ${total} saved. Super admin only — do not share outside the team.</p></div>
+      <div class="pw-toolbar">
+        <div class="callout warn" style="margin:0;flex:1;min-width:220px">🔒 Sensitive — stored for team continuity. Passwords are masked; click one to reveal, or 📋 to copy.</div>
+        <input id="pwFilter" type="text" class="select" placeholder="🔍 Search brand, account, login…" style="max-width:260px">
         <button id="pwReveal" class="ghost-btn" type="button">👁 Show all passwords</button>
       </div>
       ${sections}`;
@@ -7889,7 +7912,7 @@
       <div class="card">
         <h2 style="margin-top:0">${superMode ? "Existing users" : "Viewers you manage"}</h2>
         <p class="muted-note" style="margin-top:0">${superMode
-          ? `Add a user in the <b>＋ New user</b> row, then tick the pages they can see (✎ = can edit). <b>⚙</b> sets role / landing / HQ; <b>Reset pwd</b> emails a new-password link; <b>Revoke</b> removes access.`
+          ? `Add someone in the <b>＋ New user</b> row, then <b>pick them from the dropdown</b> to set each page to <b>—</b> (no access), <b>View</b> or <b>Edit</b>. Every change saves instantly. <b>⚙ Advanced</b> sets role / landing / HQ; <b>Reset pwd</b> emails a new-password link; <b>Revoke</b> removes access.`
           : `<b>Every viewer</b> in the system is listed below — including people other admins added. Set your page to <b>View</b> to grant access or <b>No access</b> to remove it. Their access to other pages (set by other admins) stays untouched. Use <b>Reset pwd</b> to email a new-password link, or <b>Remove</b> to permanently delete a contact who has left.`}</p>
         <div id="userList"><div class="empty">Loading…</div></div>
       </div>
@@ -8266,7 +8289,7 @@
     if (!box) return;
     try {
       const snap = await db.collection("users").get();
-      const rows = [];
+      const users = [];
       const superMode = isSuperAdmin();
       if (!superMode) { renderPageAdminUserList(box, snap); return; }
       Object.keys(userPermsMap).forEach((k) => delete userPermsMap[k]);
@@ -8281,53 +8304,25 @@
         else if (Array.isArray(u.editPages) && u.editPages.length) { roleLabel = "editor"; roleCls = "b-info"; }
         else { roleLabel = "view"; roleCls = "b-neutral"; }
         userPermsMap[doc.id] = { email: u.email || "", role: u.role || "view", pages: u.pages === "all" ? "all" : (u.pages || []), editPages: u.editPages === "all" ? "all" : (u.editPages || []), hqs: u.hqs || [], landing: !!u.landing, managerInc: !!u.managerInc };
-        const selCell = `<td class="num">${isAll ? "" : `<input type="checkbox" class="u-select" data-uid="${doc.id}">`}</td>`;
-        const pageCells = PERMISSION_PAGES.map((t) => {
-          if (isAll) return `<td class="mx-cell"><span class="mx-all" title="all access">✓</span></td>`;
-          const pv = Array.isArray(u.pages) && u.pages.includes(t.id);
-          const pe = Array.isArray(u.editPages) && u.editPages.includes(t.id);
-          const val = pe ? "edit" : pv ? "view" : "none";
-          return `<td class="mx-cell"><select class="mx-sel select mx-lvl-${val}" data-uid="${doc.id}" data-page="${t.id}"><option value="none"${val === "none" ? " selected" : ""}>—</option><option value="view"${val === "view" ? " selected" : ""}>View</option><option value="edit"${val === "edit" ? " selected" : ""}>Edit</option></select></td>`;
-        }).join("");
-        rows.push(`<tr>
-          ${selCell}
-          <td class="t-name mx-user">${esc(u.email || "—")}<div><span class="badge ${roleCls}">${esc(roleLabel)}</span></div></td>
-          ${pageCells}
-          <td class="mx-act" style="white-space:nowrap">${isAll ? "" : `<button class="ghost-btn u-flags" data-uid="${doc.id}" title="Role, landing, manager-incentive, HQ access">⚙</button> `}<button class="ghost-btn u-pwd" data-email="${esc(u.email || "")}">Reset pwd</button> <button class="ghost-btn danger u-del" data-uid="${doc.id}" data-email="${esc(u.email || "")}">Revoke</button></td>
-        </tr>`);
+        users.push({ uid: doc.id, email: u.email || "", roleLabel, roleCls, isAll });
       });
+      users.sort((a, b) => a.email.localeCompare(b.email));
       const newRow = `<div class="bulk-bar">
         <b>＋ New user</b>
         <input id="mxNewEmail" type="email" placeholder="person@primelaze.com" class="select" style="max-width:230px">
         <input id="mxNewPass" type="text" placeholder="temp password (min 6)" class="select" style="max-width:190px">
         <button id="mxNewCreate" class="dl-btn" type="button">Create</button>
-        <span id="mxNewMsg" class="t-muted">then tick their pages below</span>
+        <span id="mxNewMsg" class="t-muted">created as view-only — then set their pages below</span>
       </div>`;
-      const bulkBar = `<div class="bulk-bar">
-        <b>Bulk access</b> — tick users, then set a page:
-        <select id="bulkPage" class="select">${PERMISSION_PAGES.map((t) => `<option value="${t.id}">${esc(t.group ? t.group + " · " : "")}${esc(t.label)}</option>`).join("")}</select>
-        <select id="bulkLevel" class="select"><option value="view">View</option><option value="edit">Edit</option><option value="none">No access</option></select>
-        <button id="bulkApply" class="dl-btn" type="button">Apply to selected</button>
-        <span id="bulkCount" class="t-muted">0 selected</span>
-      </div>`;
-      const pageHead = PERMISSION_PAGES.map((t) => `<th class="mx-th" title="${esc((t.group ? t.group + " · " : "") + t.label)}">${t.group ? `<span class="mx-th-grp">${esc(t.group)}</span>` : ""}${esc(t.label)}</th>`).join("");
-      const filterBar = rows.length ? `<div class="bulk-bar">
-        <b>🔍 Filter users</b>
-        <input id="mxFilter" type="text" placeholder="Type a name or email…" class="select" style="max-width:260px">
-        <span id="mxFilterCount" class="t-muted"></span>
-      </div>` : "";
-      box.innerHTML = newRow + bulkBar + filterBar
-        + `<div class="callout teal" style="margin-bottom:10px;font-size:13px;line-height:1.6">
-            <b>How access works</b> — one dropdown per page. Each change saves right away and shows a <b>“✓ Saved”</b> confirmation at the bottom, so there's no separate submit.<br>
-            • <b>—</b> = no access (page hidden) &nbsp; · &nbsp; <b>View</b> = can see it (read-only) &nbsp; · &nbsp; <b>Edit</b> = can see <i>and</i> change it (add/edit/upload).<br>
-            • Each column header shows its department (e.g. <b>HR · Weekly Duties</b>) — pick the right one.<br>
-            • <b>＋ New user</b> — add an account, then set its pages.<br>
-            • <b>Bulk access</b> bar — tick several users, pick a page + level, Apply to all at once.<br>
-            • <b>⚙</b> = role / landing / manager-incentive / HQ &nbsp; · &nbsp; <b>Reset pwd</b> = email a reset link &nbsp; · &nbsp; <b>Revoke</b> = remove the user.
-          </div>`
-        + (rows.length
-          ? table(`<th class="num"><input type='checkbox' id='uSelectAll' title='Select all'></th><th class="mx-user">User</th>${pageHead}<th></th>`, rows.join(""))
-          : `<div class="empty">No users yet — add one above.</div>`);
+      const userOpts = users.map((u) => `<option value="${u.uid}">${esc(u.email || "—")}  ·  ${esc(u.roleLabel)}</option>`).join("");
+      const picker = users.length ? `<div class="card admin-pick">
+          <label class="admin-pick-lbl"><span>Manage access for</span>
+            <select id="mxUserPick" class="select"><option value="">— choose a person —</option>${userOpts}</select></label>
+          <div class="muted-note" style="margin-top:8px">Pick a person to see every page and choose what they can open. <b>—</b> = no access · <b>View</b> = read-only · <b>Edit</b> = can change it. Each choice saves instantly with a ✓ confirmation.</div>
+        </div>
+        <div id="mxUserPanel" class="card admin-panel"><div class="empty">Choose a person above to manage their access.</div></div>`
+        : `<div class="empty">No users yet — add one above.</div>`;
+      box.innerHTML = newRow + picker;
       const nc = document.getElementById("mxNewCreate");
       if (nc) nc.onclick = async () => {
         const email = (document.getElementById("mxNewEmail").value || "").trim();
@@ -8340,67 +8335,80 @@
           loadUserList();
         } catch (err) { m.style.color = "var(--bad)"; m.textContent = authErr(err); nc.disabled = false; }
       };
-      const mxFilter = document.getElementById("mxFilter");
-      if (mxFilter) mxFilter.oninput = () => {
-        const q = mxFilter.value.trim().toLowerCase();
-        let shown = 0, total = 0;
-        box.querySelectorAll("tbody tr").forEach((tr) => {
-          const u = tr.querySelector(".mx-user"); if (!u) return;
-          total++;
-          const match = !q || u.textContent.toLowerCase().indexOf(q) >= 0;
-          tr.style.display = match ? "" : "none";
-          if (match) shown++;
-        });
-        const c = document.getElementById("mxFilterCount"); if (c) c.textContent = q ? shown + " of " + total + " shown" : "";
-      };
-      const updateCount = () => { const n = box.querySelectorAll(".u-select:checked").length; const c = document.getElementById("bulkCount"); if (c) c.textContent = n + " selected"; };
-      const selAll = document.getElementById("uSelectAll");
-      if (selAll) selAll.onchange = () => { box.querySelectorAll(".u-select").forEach((cb) => { cb.checked = selAll.checked; }); updateCount(); };
-      box.querySelectorAll(".u-select").forEach((cb) => (cb.onchange = updateCount));
-      const bApply = document.getElementById("bulkApply");
-      if (bApply) bApply.onclick = bulkApplyAccess;
-      // Matrix cell — one dropdown per page (— / View / Edit), saves instantly.
-      box.querySelectorAll(".mx-sel").forEach((sel) => (sel.onchange = () => {
-        const v = sel.value;
-        sel.className = "mx-sel select mx-lvl-" + v;
-        mxApply(sel.dataset.uid, sel.dataset.page, v === "view" || v === "edit", v === "edit");
-      }));
-      // ⚙ = open the advanced form (role, landing, manager-incentive, HQ) for this user.
-      box.querySelectorAll(".u-flags").forEach((b) => (b.onclick = () => {
-        const p = userPermsMap[b.dataset.uid]; if (!p) return;
-        const d = document.querySelector(".adv-add"); if (d) d.open = true;
-        fillUserForm(p, b.dataset.uid);
-      }));
-      box.querySelectorAll(".u-view").forEach((b) => {
-        b.onclick = () => {
-          const det = box.querySelector('.ua-tr[data-uid="' + b.dataset.uid + '"]');
-          if (det) { det.hidden = !det.hidden; b.textContent = det.hidden ? "View" : "Hide"; }
-        };
-      });
-      box.querySelectorAll(".u-edit").forEach((b) => {
-        b.onclick = () => { try { fillUserForm(JSON.parse(b.dataset.perms), b.dataset.uid); } catch (e) {} };
-      });
-      box.querySelectorAll(".u-pwd").forEach((b) => {
-        b.onclick = async () => {
-          const email = b.dataset.email;
-          if (!email) return;
-          if (!window.confirm("Send a password-reset email to " + email + "?\n\nThey'll get a link to set a new password themselves. (To set a specific password directly, use the Firebase console.)")) return;
+      // Department order for the per-user page list.
+      const GROUP_ORDER = [];
+      PERMISSION_PAGES.forEach((t) => { const g = t.group || "Overview"; if (GROUP_ORDER.indexOf(g) < 0) GROUP_ORDER.push(g); });
+      // Build the access panel HTML for one user.
+      function accessPanelHtml(uid) {
+        const u = users.find((x) => x.uid === uid), p = userPermsMap[uid];
+        if (!u || !p) return `<div class="empty">User not found.</div>`;
+        const acts = `<div class="admin-panel-act">
+          ${u.isAll ? "" : `<button class="ghost-btn u-flags" data-uid="${uid}" title="Role, landing, manager-incentive, HQ">⚙ Advanced</button>`}
+          <button class="ghost-btn u-pwd" data-email="${esc(u.email)}">Reset pwd</button>
+          <button class="ghost-btn danger u-del" data-uid="${uid}" data-email="${esc(u.email)}">Revoke</button></div>`;
+        const header = `<div class="admin-panel-head"><div class="admin-panel-who"><b>${esc(u.email)}</b> <span class="badge ${u.roleCls}">${esc(u.roleLabel)}</span></div>${acts}</div>`;
+        if (u.isAll) return header + `<div class="callout teal" style="margin-top:12px">This user has <b>full access</b> to every page. To limit access, lower their role under <b>⚙ Advanced</b>.</div>`;
+        const quick = `<div class="admin-panel-quick"><span class="muted-note">Set every page:</span>
+          <button class="ghost-btn acc-all" data-uid="${uid}" data-lvl="view">All View</button>
+          <button class="ghost-btn acc-all" data-uid="${uid}" data-lvl="edit">All Edit</button>
+          <button class="ghost-btn acc-all" data-uid="${uid}" data-lvl="none">Clear all</button></div>`;
+        const grps = GROUP_ORDER.map((g) => {
+          const pages = PERMISSION_PAGES.filter((t) => (t.group || "Overview") === g);
+          const rows = pages.map((t) => {
+            const pv = Array.isArray(p.pages) && p.pages.includes(t.id);
+            const pe = Array.isArray(p.editPages) && p.editPages.includes(t.id);
+            const val = pe ? "edit" : pv ? "view" : "none";
+            return `<div class="acc-row"><span class="acc-lbl">${esc(t.label)}</span>
+              <select class="mx-sel select mx-lvl-${val}" data-uid="${uid}" data-page="${t.id}">
+                <option value="none"${val === "none" ? " selected" : ""}>— No access</option>
+                <option value="view"${val === "view" ? " selected" : ""}>View</option>
+                <option value="edit"${val === "edit" ? " selected" : ""}>Edit</option></select></div>`;
+          }).join("");
+          return `<div class="acc-grp"><h4>${esc(g)}</h4>${rows}</div>`;
+        }).join("");
+        return header + quick + `<div class="acc-grid">${grps}</div>`;
+      }
+      function renderPanel(uid) {
+        const panel = document.getElementById("mxUserPanel"); if (!panel) return;
+        panel.innerHTML = uid ? accessPanelHtml(uid) : `<div class="empty">Choose a person above to manage their access.</div>`;
+        wireAccessPanel();
+      }
+      function wireAccessPanel() {
+        const panel = document.getElementById("mxUserPanel"); if (!panel) return;
+        panel.querySelectorAll(".mx-sel").forEach((sel) => (sel.onchange = () => {
+          const v = sel.value; sel.className = "mx-sel select mx-lvl-" + v;
+          mxApply(sel.dataset.uid, sel.dataset.page, v === "view" || v === "edit", v === "edit");
+        }));
+        panel.querySelectorAll(".acc-all").forEach((b) => (b.onclick = () => {
+          const uid = b.dataset.uid, lvl = b.dataset.lvl;
+          if (!window.confirm(`Set ALL pages to ${lvl === "none" ? "No access" : lvl === "edit" ? "Edit" : "View"} for this user?`)) return;
+          PERMISSION_PAGES.forEach((t) => mxApply(uid, t.id, lvl === "view" || lvl === "edit", lvl === "edit", true));
+          toast("✓ Saved — all pages updated");
+          renderPanel(uid);
+        }));
+        panel.querySelectorAll(".u-flags").forEach((b) => (b.onclick = () => {
+          const p = userPermsMap[b.dataset.uid]; if (!p) return;
+          const d = document.querySelector(".adv-add"); if (d) d.open = true;
+          fillUserForm(p, b.dataset.uid);
+          d && d.scrollIntoView({ behavior: "smooth", block: "start" });
+        }));
+        panel.querySelectorAll(".u-pwd").forEach((b) => (b.onclick = async () => {
+          const email = b.dataset.email; if (!email) return;
+          if (!window.confirm("Send a password-reset email to " + email + "?\n\nThey'll get a link to set a new password themselves.")) return;
           const orig = b.textContent; b.disabled = true; b.textContent = "Sending…";
-          try { await auth.sendPasswordResetEmail(email); window.alert("Reset link sent to " + email + " ✓"); }
+          try { await auth.sendPasswordResetEmail(email); toast("✓ Reset link sent to " + email); }
           catch (e) { window.alert("Could not send reset email: " + (e.message || e)); }
           finally { b.disabled = false; b.textContent = orig; }
-        };
-      });
-      box.querySelectorAll(".u-del").forEach((b) => {
-        b.onclick = async () => {
-          if (b.dataset.email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) {
-            window.alert("The bootstrap admin can't be revoked here."); return;
-          }
-          if (!window.confirm("Revoke access for " + b.dataset.email + "?\n\nThis removes their permissions from the database only. Their login still exists — to re-grant later, use Add user with the same email (enter their password to re-link).")) return;
-          try { await db.collection("users").doc(b.dataset.uid).delete(); loadUserList(); }
+        }));
+        panel.querySelectorAll(".u-del").forEach((b) => (b.onclick = async () => {
+          if (b.dataset.email.toLowerCase() === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()) { window.alert("The bootstrap admin can't be revoked here."); return; }
+          if (!window.confirm("Revoke access for " + b.dataset.email + "?\n\nThis removes their permissions from the database only. Their login still exists — to re-grant later, use ＋ New user with the same email.")) return;
+          try { await db.collection("users").doc(b.dataset.uid).delete(); toast("✓ Revoked " + b.dataset.email); loadUserList(); }
           catch (e) { window.alert("Could not revoke: " + (e.message || e)); }
-        };
-      });
+        }));
+      }
+      const pick = document.getElementById("mxUserPick");
+      if (pick) pick.onchange = () => renderPanel(pick.value);
     } catch (e) {
       box.innerHTML = `<div class="empty">Could not load users (${esc(e.message || "" + e)}).</div>`;
     }

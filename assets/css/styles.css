@@ -221,6 +221,21 @@ thead th.sort-desc::after { content: "↓"; opacity: 1; }
 .mx-sel.mx-lvl-none { color: var(--text-2); opacity: .7; }
 .mx-sel.mx-lvl-view { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .mx-sel.mx-lvl-edit { border-color: var(--good); color: var(--good); font-weight: 700; background: color-mix(in srgb, var(--good) 8%, transparent); }
+/* Per-user access panel (Admin) */
+.admin-pick { display: block; }
+.admin-pick-lbl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 700; }
+.admin-pick-lbl select { min-width: 260px; max-width: 100%; }
+.admin-panel { margin-top: 12px; }
+.admin-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.admin-panel-who { font-size: 15px; }
+.admin-panel-act { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-panel-quick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+.acc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 22px; margin-top: 10px; }
+.acc-grp h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-2); border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
+.acc-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; }
+.acc-lbl { font-size: 13.5px; }
+.acc-row .mx-sel { min-width: 116px; }
+@media (max-width: 520px) { .admin-pick-lbl select { min-width: 100%; } }
 .mx-all { color: var(--good); font-weight: 800; }
 .mx-user { position: sticky; left: 0; background: var(--surface); z-index: 2; min-width: 190px; box-shadow: 1px 0 0 var(--border); }
 thead th.mx-user { z-index: 3; }
@@ -705,6 +720,9 @@ tr.total-row:hover td { background: var(--surface-3); }
 .muted-note { color: var(--text-3); font-size: 12.5px; margin-top: 10px; }
 /* Social media account passwords — masked monospace until revealed. */
 .soc-pass { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; letter-spacing: .5px; }
+.soc-copy { border: none; background: transparent; cursor: pointer; font-size: 12px; opacity: .55; padding: 0 2px; vertical-align: middle; }
+.soc-copy:hover { opacity: 1; }
+.pw-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
 .soc-addr { margin: 6px 0 0; padding-left: 18px; }
 .soc-addr li { margin-bottom: 5px; color: var(--text); font-size: 13.5px; }
 /* Wrapping sub-line under a platform name (which accounts / emails / URLs). */
