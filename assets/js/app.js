@@ -6184,7 +6184,7 @@
   const weeklyDirty = new Set();
   let weeklySeq = 100;
   const weeklyList = (dept, kind) => {
-    const d = (weeklyTasks[dept] = weeklyTasks[dept] || { mandatory: [], optional: [] });
+    const d = (weeklyTasks[dept] = weeklyTasks[dept] || { mandatory: [], monthly: [], optional: [] });
     return (d[kind] = d[kind] || []);
   };
   const prioBadge = (p) => `<span class="badge ${p === "High" ? "b-bad" : p === "Medium" ? "b-warn" : "b-good"}">${esc(p || "—")}</span>`;
@@ -6234,10 +6234,11 @@
         ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn wk-add" data-kind="${kind}">＋ Add duty</button></div>` : ""}</div>`;
     };
     return `
-      <div class="section-head"><h1>${esc(dept)} — Weekly Duties</h1>
-        <p>What each ${esc(dept)} team member does every week — our shared rule book, split into mandatory and optional.${ed ? " Editable — saves for everyone." : ""}</p></div>
-      ${section("mandatory", "Mandatory weekly duties", "Must be done every week, without fail.")}
-      ${section("optional", "Optional weekly duties", "Do these when time allows — good-to-have, not compulsory.")}`;
+      <div class="section-head"><h1>${esc(dept)} — Duties</h1>
+        <p>What each ${esc(dept)} team member does — our shared rule book, split into weekly, monthly and optional.${ed ? " Editable — saves for everyone." : ""}</p></div>
+      ${section("mandatory", "Weekly duties", "Must be done every week, without fail.")}
+      ${section("monthly", "Monthly duties", "Must be done every month.")}
+      ${section("optional", "Optional duties", "Do these when time allows — good-to-have, not compulsory.")}`;
   }
 
   function wireWeekly(dept) {
@@ -7591,7 +7592,7 @@
       if (Array.isArray(e.socPageAdds)) { socPageAdds.length = 0; e.socPageAdds.forEach((x) => socPageAdds.push(x)); const ids = socPageAdds.map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); socPageSeq = Math.max(socPageSeq, ...(ids.length ? ids : [0])) + 1; }
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
-      if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
+      if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
@@ -7687,12 +7688,15 @@
       try { const cur = await db.collection("edits").doc("overrides").get(); serverData = cur.exists ? (cur.data() || {}) : {}; } catch (e) { serverData = null; }
       let mergedWeekly, mergedLog;
       if (serverData) {
-        // Weekly duties: keep every department, but take the SERVER's copy for
-        // the departments this session didn't touch — only overwrite ours.
+        // Weekly duties for the WRITE only: our local copy for departments this
+        // session edited (weeklyDirty is sticky — never cleared — so in-progress
+        // adds are always kept), and the server's copy for departments we never
+        // touched (so we don't clobber other people). We deliberately do NOT
+        // mutate the live local weeklyTasks here — doing so races with the user's
+        // ongoing typing/adding and was dropping rows.
         const srvWeekly = (serverData.weeklyTasks && typeof serverData.weeklyTasks === "object") ? serverData.weeklyTasks : {};
         mergedWeekly = JSON.parse(JSON.stringify(weeklyTasks));
         Object.keys(srvWeekly).forEach((d) => { if (!weeklyDirty.has(d)) mergedWeekly[d] = srvWeekly[d]; });
-        Object.keys(mergedWeekly).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, JSON.parse(JSON.stringify(mergedWeekly)));
         // Activity log: merge the server's entries with ours (newest first, deduped).
         const srvLog = Array.isArray(serverData.log) ? serverData.log : [];
         mergedLog = [newEntry].concat(srvLog.filter((x) => !(x && x.at === newEntry.at && x.by === newEntry.by && x.what === newEntry.what)));
@@ -7703,7 +7707,6 @@
         editsLog.unshift(newEntry); if (editsLog.length > 300) editsLog.length = 300;
         mergedWeekly = weeklyTasks; mergedLog = editsLog;
       }
-      weeklyDirty.clear();
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
