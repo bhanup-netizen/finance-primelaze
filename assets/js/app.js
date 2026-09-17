@@ -7733,7 +7733,10 @@
     const t = TABS.find((x) => x.id === tabId);
     if (!t) return [];
     const labels = new Set([t.label].concat(TAB_PAST_LABELS[tabId] || []));
-    return editsLog.filter((e) => e.tabId === tabId || labels.has(e.tab));
+    // Match on the stable page id when the entry has one (so identically-named
+    // tabs — e.g. each department's "Weekly Duties" — don't cross-contaminate).
+    // Only legacy entries with no tabId fall back to label matching.
+    return editsLog.filter((e) => e.tabId ? e.tabId === tabId : labels.has(e.tab));
   }
   // Inner HTML for the per-page activity log: last change + expandable history.
   function pageEditInner(tabId) {
