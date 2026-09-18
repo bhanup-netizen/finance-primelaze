@@ -8578,12 +8578,19 @@
         <span id="mxNewMsg" class="t-muted">created as view-only — then set their pages below</span>
       </div>`;
       const userOpts = users.map((u) => `<option value="${u.uid}">${esc(u.email || "—")}  ·  ${esc(u.roleLabel)}</option>`).join("");
+      const pageOpts = PERMISSION_PAGES.map((t) => `<option value="${t.id}">${esc((t.group ? t.group + " · " : "") + t.label)}</option>`).join("");
       const picker = users.length ? `<div class="card admin-pick">
           <label class="admin-pick-lbl"><span>Manage access for</span>
             <select id="mxUserPick" class="select"><option value="">— choose a person —</option>${userOpts}</select></label>
           <div class="muted-note" style="margin-top:8px">Pick a person to see every page and choose what they can open. <b>—</b> = no access · <b>View</b> = read-only · <b>Edit</b> = can change it. Each choice saves instantly with a ✓ confirmation.</div>
         </div>
-        <div id="mxUserPanel" class="card admin-panel"><div class="empty">Choose a person above to manage their access.</div></div>`
+        <div id="mxUserPanel" class="card admin-panel"><div class="empty">Choose a person above to manage their access.</div></div>
+        <div class="card admin-pick" style="margin-top:14px">
+          <label class="admin-pick-lbl"><span>Or manage one page</span>
+            <select id="mxPagePick" class="select"><option value="">— choose a page —</option>${pageOpts}</select></label>
+          <div class="muted-note" style="margin-top:8px">Pick a page to see <b>every person</b> at once and set who can open it (— / View / Edit). The reverse of the box above.</div>
+        </div>
+        <div id="mxPagePanel" class="card admin-panel"><div class="empty">Choose a page above to grant it to people.</div></div>`
         : `<div class="empty">No users yet — add one above.</div>`;
       box.innerHTML = newRow + picker;
       const nc = document.getElementById("mxNewCreate");
@@ -8683,6 +8690,52 @@
       }
       const pick = document.getElementById("mxUserPick");
       if (pick) pick.onchange = () => renderPanel(pick.value);
+
+      // ---- Manage-by-page: pick a page, set access for every person ----
+      function pagePanelHtml(pageId) {
+        const t = PERMISSION_PAGES.find((x) => x.id === pageId);
+        if (!t) return `<div class="empty">Page not found.</div>`;
+        const label = (t.group ? t.group + " · " : "") + t.label;
+        const quick = `<div class="admin-panel-quick"><span class="muted-note">Set every person:</span>
+          <button class="ghost-btn pacc-all" data-page="${pageId}" data-lvl="view">All View</button>
+          <button class="ghost-btn pacc-all" data-page="${pageId}" data-lvl="edit">All Edit</button>
+          <button class="ghost-btn pacc-all" data-page="${pageId}" data-lvl="none">Clear all</button></div>`;
+        const rows = users.map((u) => {
+          if (u.isAll) return `<div class="acc-row"><span class="acc-lbl">${esc(u.email)} <span class="badge ${u.roleCls}">${esc(u.roleLabel)}</span></span><span class="muted-note">full access</span></div>`;
+          const p = userPermsMap[u.uid] || {};
+          const pv = Array.isArray(p.pages) && p.pages.includes(pageId);
+          const pe = Array.isArray(p.editPages) && p.editPages.includes(pageId);
+          const val = pe ? "edit" : pv ? "view" : "none";
+          return `<div class="acc-row"><span class="acc-lbl">${esc(u.email)}${u.pending ? ' <span class="badge b-warn">invited</span>' : ""}</span>
+            <select class="mx-sel select mx-lvl-${val} psel" data-uid="${u.uid}" data-page="${pageId}">
+              <option value="none"${val === "none" ? " selected" : ""}>— No access</option>
+              <option value="view"${val === "view" ? " selected" : ""}>View</option>
+              <option value="edit"${val === "edit" ? " selected" : ""}>Edit</option></select></div>`;
+        }).join("");
+        return `<div class="admin-panel-head"><div class="admin-panel-who"><b>${esc(label)}</b> <span class="muted-note">— who can open this page</span></div></div>${quick}<div class="acc-grp" style="margin-top:10px">${rows}</div>`;
+      }
+      function renderPagePanel(pageId) {
+        const panel = document.getElementById("mxPagePanel"); if (!panel) return;
+        panel.innerHTML = pageId ? pagePanelHtml(pageId) : `<div class="empty">Choose a page above to grant it to people.</div>`;
+        wirePagePanel();
+      }
+      function wirePagePanel() {
+        const panel = document.getElementById("mxPagePanel"); if (!panel) return;
+        panel.querySelectorAll(".psel").forEach((sel) => (sel.onchange = () => {
+          const v = sel.value; sel.className = "mx-sel select mx-lvl-" + v + " psel";
+          mxApply(sel.dataset.uid, sel.dataset.page, v === "view" || v === "edit", v === "edit");
+        }));
+        panel.querySelectorAll(".pacc-all").forEach((b) => (b.onclick = () => {
+          const page = b.dataset.page, lvl = b.dataset.lvl;
+          const t = PERMISSION_PAGES.find((x) => x.id === page); const label = t ? ((t.group ? t.group + " · " : "") + t.label) : page;
+          if (!window.confirm(`Set “${label}” to ${lvl === "none" ? "No access" : lvl === "edit" ? "Edit" : "View"} for ALL non-admin people?`)) return;
+          users.forEach((u) => { if (!u.isAll) mxApply(u.uid, page, lvl === "view" || lvl === "edit", lvl === "edit", true); });
+          toast("✓ Saved — everyone updated for this page");
+          renderPagePanel(page);
+        }));
+      }
+      const pgPick = document.getElementById("mxPagePick");
+      if (pgPick) pgPick.onchange = () => renderPagePanel(pgPick.value);
     } catch (e) {
       box.innerHTML = `<div class="empty">Could not load users (${esc(e.message || "" + e)}).</div>`;
     }
