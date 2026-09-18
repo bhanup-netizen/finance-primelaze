@@ -6233,7 +6233,7 @@
       return `<td class="wk-by"><span title="${esc(t.by)}${esc(when)}">${esc(name)}</span></td>`;
     };
     const timeCell = (kind, i, val) => ed
-      ? `<td><input class="wk-in" data-kind="${kind}" data-i="${i}" data-field="time" value="${esc(val == null ? "" : val)}" placeholder="hrs (0.5 = 30 min)"></td>`
+      ? `<td><input class="wk-in" type="number" step="0.25" min="0" inputmode="decimal" data-kind="${kind}" data-i="${i}" data-field="time" value="${esc(val == null ? "" : val)}" placeholder="hrs" style="max-width:80px"></td>`
       : `<td>${esc(wkTimeDisplay(val))}</td>`;
     const head = ["#", "Task", "Time (hrs)", "Priority", "Remark", "Link", "File", "Added by"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
@@ -6254,7 +6254,7 @@
         ${table(head, rows)}
         ${ed ? `<div class="wk-addform" data-kind="${kind}">
           <input type="text" class="wk-nf" data-nf="task" placeholder="Task *">
-          <input type="text" class="wk-nf wk-nf-sm" data-nf="time" placeholder="Hours * (0.5 = 30 min)">
+          <input type="number" step="0.25" min="0" inputmode="decimal" class="wk-nf wk-nf-sm" data-nf="time" placeholder="Hours * e.g. 0.5">
           <select class="wk-nf wk-nf-sm" data-nf="priority">${WEEKLY_PRIOS.map((p) => `<option${p === "Medium" ? " selected" : ""}>${p}</option>`).join("")}</select>
           <input type="text" class="wk-nf" data-nf="remark" placeholder="Remark (optional)">
           <input type="text" class="wk-nf" data-nf="link" placeholder="Link (optional)">
@@ -6271,10 +6271,10 @@
 
   function wireWeekly(dept) {
     document.querySelectorAll(".wk-in").forEach((el) => {
-      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.dataset.field === "time" ? parseHours(el.value) : el.value.trim(); weeklyDirty.add(dept); saveEdits("Weekly duty · " + dept); } };
+      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.dataset.field === "time" ? parseHours(el.value) : el.value.trim(); weeklyDirty.add(dept); saveWeekly("Weekly duty · " + dept); } };
     });
     document.querySelectorAll(".wk-del").forEach((b) => {
-      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveEdits("Weekly duty removed · " + dept, true); go(currentTab); };
+      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveWeekly("Weekly duty removed · " + dept); go(currentTab); };
     });
     document.querySelectorAll(".wk-submit").forEach((b) => {
       b.onclick = () => {
@@ -6283,7 +6283,7 @@
         const task = get("task"), time = get("time"), priority = get("priority") || "Medium";
         if (!task || !time || !priority) { window.alert("Please fill Task, Time (hours) and Priority — these are required."); return; }
         weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task, time: parseHours(time), priority, remark: get("remark"), link: get("link"), by: (sessionUser && sessionUser.email) || "", at: Date.now() });
-        weeklyDirty.add(dept); saveEdits("Weekly duty added · " + dept, true); go(currentTab);
+        weeklyDirty.add(dept); saveWeekly("Weekly duty added · " + dept); go(currentTab);
       };
     });
     document.querySelectorAll(".wk-file").forEach((inp) => {
@@ -6304,13 +6304,13 @@
       const url = await ref.getDownloadURL();
       if (t.filePath && t.filePath !== path) { try { await storage.ref().child(t.filePath).delete(); } catch (e) {} }
       t.fileName = file.name; t.fileUrl = url; t.filePath = path;
-      weeklyDirty.add(dept); saveEdits("Weekly duty file · " + dept, true); go(currentTab);
+      weeklyDirty.add(dept); saveWeekly("Weekly duty file · " + dept); go(currentTab);
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
   async function removeWeeklyFile(dept, kind, i) {
     const t = weeklyList(dept, kind)[i]; if (!t) return;
     const path = t.filePath; delete t.fileName; delete t.fileUrl; delete t.filePath;
-    weeklyDirty.add(dept); saveEdits("Weekly duty file removed · " + dept, true); go(currentTab);
+    weeklyDirty.add(dept); saveWeekly("Weekly duty file removed · " + dept); go(currentTab);
     if (path && storage) { try { await storage.ref().child(path).delete(); } catch (e) {} }
   }
 
@@ -7690,6 +7690,7 @@
 
     D = await decryptData(key);
     await loadEdits();
+    await loadWeekly();
     seedServiceTeam();
     seedDemoNames();
     seedHqTargets();
@@ -7808,6 +7809,63 @@
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
       updateLastUpdatedUI();
     } catch (err) { console.warn("edits read failed", err); }
+  }
+
+  // ---- Weekly duties live in their OWN small document (edits/weekly) ----
+  // Keeps them off the big shared doc, so they can't hit its size limit or be
+  // clobbered by saves from other areas. Writes are durable (offline
+  // persistence) and merge per-department.
+  let weeklySaveTimer = null;
+  function saveWeekly(what) {
+    if (!db || !(roleIsAdmin() || hasAnyEditGrant())) return;
+    const desc = String(what == null ? "" : what).slice(0, 120);
+    const by = (sessionUser && sessionUser.email) || "";
+    const at = Date.now();
+    const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
+    const newEntry = { by, at, tab: tabLabel, tabId: currentTab, what: desc };
+    editsLog.unshift(newEntry); if (editsLog.length > 300) editsLog.length = 300;
+    editsUpdatedAt = at; editsUpdatedBy = by;
+    updateLastUpdatedUI(); refreshPageEditNote();
+    clearTimeout(weeklySaveTimer);
+    weeklySaveTimer = setTimeout(async () => {
+      try {
+        const ref = db.collection("edits").doc("weekly");
+        let server = {};
+        try { const s = await ref.get(); server = s.exists ? (s.data() || {}) : {}; } catch (e) {}
+        const srvTasks = (server.tasks && typeof server.tasks === "object") ? server.tasks : {};
+        const merged = JSON.parse(JSON.stringify(weeklyTasks));
+        Object.keys(srvTasks).forEach((d) => { if (!weeklyDirty.has(d)) merged[d] = srvTasks[d]; });
+        const srvLog = Array.isArray(server.log) ? server.log : [];
+        const mLog = [newEntry].concat(srvLog.filter((x) => !(x && x.at === newEntry.at && x.by === newEntry.by && x.what === newEntry.what)));
+        if (mLog.length > 300) mLog.length = 300;
+        await ref.set({ tasks: merged, log: mLog, updatedAt: at, updatedBy: by }, { merge: true });
+        toast("✓ Saved to the database");
+      } catch (e) {
+        const reason = (e && (e.code || e.message)) ? (e.code || e.message) : String(e);
+        console.warn("weekly save failed", e);
+        toast("✕ NOT saved: " + reason, "bad");
+        window.alert("⚠ Weekly duty NOT saved.\n\nExact error: " + reason);
+      }
+    }, 0);
+  }
+  async function loadWeekly() {
+    try {
+      const s = await db.collection("edits").doc("weekly").get();
+      if (!s.exists) return;
+      const d = s.data() || {};
+      if (d.tasks && typeof d.tasks === "object") {
+        Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]);
+        Object.assign(weeklyTasks, d.tasks);
+        const ids = Object.values(weeklyTasks).flatMap((x) => [...((x && x.mandatory) || []), ...((x && x.monthly) || []), ...((x && x.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n));
+        weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1;
+      }
+      if (Array.isArray(d.log) && d.log.length) {
+        const seen = new Set(editsLog.map((e) => e.at + "|" + e.by + "|" + e.what));
+        d.log.forEach((e) => { const k = e.at + "|" + e.by + "|" + e.what; if (!seen.has(k)) { seen.add(k); editsLog.push(e); } });
+        editsLog.sort((a, b) => (b.at || 0) - (a.at || 0));
+        if (editsLog.length > 300) editsLog.length = 300;
+      }
+    } catch (e) { console.warn("weekly load failed", e); }
   }
 
   let saveTimer = null;
