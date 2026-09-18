@@ -6798,6 +6798,10 @@
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
   const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, ordered: {}, orderedOn: {}, damaged: {}, cat: "All", status: "all", q: "", lineData: {} };
+  // Set true once this session edits inventory. Sticky — so a save from another
+  // area (e.g. weekly duties) doesn't overwrite the inventory with this session's
+  // stale copy, and vice-versa (single shared edits doc).
+  let invDirty = false;
   // Esthemax has the full reorder plan; Devices & Celluma are simple stock logs.
   const INVENTORY_LINES = [
     { id: "esthemax", label: "Esthemax", ready: true },
@@ -6865,7 +6869,7 @@
     if (invSimpleItems(lineId).some((n) => n.toLowerCase() === name.toLowerCase())) { window.alert("That item already exists."); return; }
     (invAdds[lineId] = invAdds[lineId] || []).push(name);
     invRemovals[lineId] = (invRemovals[lineId] || []).filter((n) => n.toLowerCase() !== name.toLowerCase());
-    saveEdits("Added inventory item: " + name);
+    invDirty = true; saveEdits("Added inventory item: " + name);
     renderTab("order");
   }
   function invEditSimple(lineId, oldName) {
@@ -6880,7 +6884,7 @@
       (invRemovals[lineId] = invRemovals[lineId] || []).push(oldName);
       (invAdds[lineId] = invAdds[lineId] || []).push(nn);
     }
-    saveEdits("Renamed inventory item: " + oldName + " → " + nn);
+    invDirty = true; saveEdits("Renamed inventory item: " + oldName + " → " + nn);
     renderTab("order");
   }
   function invDeleteSimple(lineId, name) {
@@ -6888,7 +6892,7 @@
     const data = orderState.lineData[lineId]; if (data) delete data[name];
     if ((invAdds[lineId] || []).includes(name)) invAdds[lineId] = invAdds[lineId].filter((n) => n !== name);
     else (invRemovals[lineId] = invRemovals[lineId] || []).push(name);
-    saveEdits("Deleted inventory item: " + name);
+    invDirty = true; saveEdits("Deleted inventory item: " + name);
     renderTab("order");
   }
 
@@ -6917,7 +6921,7 @@
       invRemovals.esthemax = (invRemovals.esthemax || []).filter((n) => n.toLowerCase() !== it.name.toLowerCase());
       rebuildEsthItems();
     });
-    saveEdits("Added Esthemax item: " + it.name);
+    invDirty = true; saveEdits("Added Esthemax item: " + it.name);
     renderTab("order");
   }
   function esthEditItem(name) {
@@ -6934,7 +6938,7 @@
       }
       rebuildEsthItems();
     });
-    saveEdits("Edited Esthemax item: " + name);
+    invDirty = true; saveEdits("Edited Esthemax item: " + name);
     renderTab("order");
   }
   function esthDeleteItem(name) {
@@ -6945,7 +6949,7 @@
       delete esthOverrides[name];
       rebuildEsthItems();
     });
-    saveEdits("Deleted Esthemax item: " + name);
+    invDirty = true; saveEdits("Deleted Esthemax item: " + name);
     renderTab("order");
   }
 
@@ -7043,7 +7047,7 @@
         const el = document.getElementById(id);
         if (el) el.oninput = (e) => {
           const v = parseFloat(e.target.value);
-          if (!isNaN(v)) { orderState[key] = factor ? v / 100 : v; orderPaint(); saveEdits("Updated " + id.replace(/^ord/, "")); }
+          if (!isNaN(v)) { orderState[key] = factor ? v / 100 : v; orderPaint(); invDirty = true; saveEdits("Updated " + id.replace(/^ord/, "")); }
         };
       };
       wire("ordUsd", "usdInr", false);
@@ -7071,7 +7075,7 @@
         const p = D.esthemaxOrder.params;
         orderState.usdInr = p.usdInr; orderState.customs = p.customsRate;
         orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.ordered = {}; orderState.orderedOn = {}; orderState.damaged = {};
-        saveEdits(); renderTab("order");
+        invDirty = true; saveEdits(); renderTab("order");
       };
       const addBtn = document.getElementById("ordAddBtn");
       if (addBtn) addBtn.onclick = () => esthAddItem();
@@ -7255,7 +7259,7 @@
         const rec = data[el.dataset.item] = data[el.dataset.item] || {};
         const numF = el.dataset.f === "stock" || el.dataset.f === "ordered" || el.dataset.f === "damaged";
         rec[el.dataset.f] = numF ? (el.value === "" ? "" : Math.max(0, parseFloat(el.value) || 0)) : el.value;
-        saveEdits(`${el.dataset.item} · ${el.dataset.f} → ${el.value || "—"}`);
+        invDirty = true; saveEdits(`${el.dataset.item} · ${el.dataset.f} → ${el.value || "—"}`);
       };
     });
     const addBtn = document.getElementById("invAddBtn");
@@ -7303,7 +7307,7 @@
         orderState.stock[idx] = isNaN(v) ? 0 : v;
         orderPaint();
         const it = D.esthemaxOrder.items[idx];
-        saveEdits(`Stock · ${(it && it.name) || "item"} → ${orderState.stock[idx]}`);
+        invDirty = true; saveEdits(`Stock · ${(it && it.name) || "item"} → ${orderState.stock[idx]}`);
       };
     });
     // Ordered — qty ordered from the supplier (Ayush).
@@ -7312,12 +7316,12 @@
         const v = parseFloat(e.target.value);
         orderState.ordered[+e.target.dataset.idx] = e.target.value === "" ? "" : (isNaN(v) ? "" : Math.max(0, v));
         orderPaint();
-        saveEdits("Updated ordered qty");
+        invDirty = true; saveEdits("Updated ordered qty");
       };
     });
     // Ordered date.
     document.querySelectorAll(".orderedon-input").forEach((inp) => {
-      inp.onchange = (e) => { orderState.orderedOn[+e.target.dataset.idx] = e.target.value; saveEdits("Updated order date"); };
+      inp.onchange = (e) => { orderState.orderedOn[+e.target.dataset.idx] = e.target.value; invDirty = true; saveEdits("Updated order date"); };
     });
     // Damaged — removed from usable stock.
     document.querySelectorAll(".damaged-input").forEach((inp) => {
@@ -7325,7 +7329,7 @@
         const v = parseFloat(e.target.value);
         orderState.damaged[+e.target.dataset.idx] = e.target.value === "" ? "" : (isNaN(v) ? "" : Math.max(0, v));
         orderPaint();
-        saveEdits("Updated damaged qty");
+        invDirty = true; saveEdits("Updated damaged qty");
       };
     });
   }
@@ -7845,11 +7849,25 @@
         editsLog.unshift(newEntry); if (editsLog.length > 300) editsLog.length = 300;
         mergedWeekly = weeklyTasks; mergedLog = editsLog;
       }
+      // Inventory: if this session never edited inventory, write back the
+      // SERVER's copy so a save from another area doesn't clobber it with our
+      // stale snapshot (mirrors the weekly-duties protection).
+      let wStock = stock, wOrdered = ordered, wOrderedOn = orderedOn, wDamaged = damaged;
+      let wInvLines = orderState.lineData, wInvAdds = invAdds, wInvRemovals = invRemovals;
+      if (serverData && !invDirty) {
+        if (serverData.stock) wStock = serverData.stock;
+        if (serverData.ordered) wOrdered = serverData.ordered;
+        if (serverData.orderedOn) wOrderedOn = serverData.orderedOn;
+        if (serverData.damaged) wDamaged = serverData.damaged;
+        if (serverData.invLines) wInvLines = serverData.invLines;
+        if (serverData.invAdds) wInvAdds = serverData.invAdds;
+        if (serverData.invRemovals) wInvRemovals = serverData.invRemovals;
+      }
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
