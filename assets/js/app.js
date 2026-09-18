@@ -7584,9 +7584,9 @@
     const email = (user.email || "").toLowerCase();
     const isBootstrap = email && email === String(window.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase();
 
-    let udoc = null;
+    let udoc = null, userReadError = null;
     try { const s = await db.collection("users").doc(user.uid).get(); if (s.exists) udoc = s.data(); }
-    catch (e) { console.warn("users read failed", e); }
+    catch (e) { console.warn("users read failed", e); userReadError = e; }
 
     if (!udoc && isBootstrap) {
       udoc = { email, role: "superadmin", pages: "all", hqs: "all", landing: true, managerInc: true, editPages: "all", name: "Administrator" };
@@ -7611,7 +7611,13 @@
         }
       } catch (e) { console.warn("invite activation failed", e); }
     }
-    if (!udoc) throw new Error("no-access");
+    if (!udoc) {
+      // If the users read actually errored (network / transient), this is NOT a
+      // genuine "no access" — signal a retryable error so we don't sign the user
+      // out and bounce them to login on every refresh.
+      if (userReadError) throw new Error("session-load-failed");
+      throw new Error("no-access");
+    }
 
     // "superadmin" and "admin" both edit all content; only super manages users.
     // The bootstrap admin is always super, regardless of the stored role.
@@ -8014,14 +8020,32 @@
     };
     auth.onAuthStateChanged(async (user) => {
       if (!user) { showLogin(); return; }
-      try { await loadSession(user); showApp(); }
-      catch (err) {
-        console.warn("session load", err);
-        errEl.textContent = err && err.message === "no-access"
-          ? "This account has no access yet. Ask your administrator to add you."
-          : "Sign-in problem: " + ((err && err.message) || err);
+      let lastErr = null;
+      // Retry transient failures (network / Firestore hiccups) before giving up,
+      // so a momentary glitch doesn't bounce a signed-in user to the login screen.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { await loadSession(user); showApp(); return; }
+        catch (err) {
+          lastErr = err;
+          if (err && err.message === "no-access") break; // genuine — no point retrying
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        }
+      }
+      console.warn("session load failed", lastErr);
+      if (lastErr && lastErr.message === "no-access") {
+        // Genuinely no access record — sign out and explain.
+        errEl.style.color = "";
+        errEl.textContent = "This account has no access yet. Ask your administrator to add you.";
         try { await auth.signOut(); } catch (e) {}
         showLogin();
+      } else {
+        // Transient / load error — keep the user SIGNED IN (do not sign out) so a
+        // reload retries instead of forcing them to log in again every time.
+        showLogin();
+        errEl.style.color = "";
+        errEl.innerHTML = "Couldn’t load your dashboard — this is usually a brief connection issue. <a href=\"#\" id=\"retryLoad\">Tap to retry</a>.";
+        const rb = document.getElementById("retryLoad");
+        if (rb) rb.onclick = (ev) => { ev.preventDefault(); location.reload(); };
       }
     });
   }
