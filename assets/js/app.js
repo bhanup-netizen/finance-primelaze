@@ -7612,6 +7612,12 @@
       // "Keep me signed in" box can downgrade this to SESSION (per browser tab).
       try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) {}
       db = firebase.firestore();
+      // Offline persistence: durably queue writes in IndexedDB so a change made
+      // just before a refresh still completes after reload (instead of being
+      // lost). Must be enabled before any other Firestore call. synchronizeTabs
+      // lets multiple tabs share it; if it can't enable (private mode, older
+      // browser), we carry on without it.
+      try { db.enablePersistence({ synchronizeTabs: true }).catch((e) => console.warn("firestore persistence off:", e && e.code)); } catch (e) { console.warn("firestore persistence err", e); }
       try { storage = firebase.storage ? firebase.storage() : null; } catch (e) { storage = null; }
       return true;
     } catch (e) { console.error("Firebase init failed", e); return false; }
