@@ -6246,10 +6246,10 @@
       el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.value.trim(); weeklyDirty.add(dept); saveEdits("Weekly duty · " + dept); } };
     });
     document.querySelectorAll(".wk-del").forEach((b) => {
-      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveEdits("Weekly duty removed · " + dept); go(currentTab); };
+      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveEdits("Weekly duty removed · " + dept, true); go(currentTab); };
     });
     document.querySelectorAll(".wk-add").forEach((b) => {
-      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "", by: (sessionUser && sessionUser.email) || "", at: Date.now() }); weeklyDirty.add(dept); saveEdits("Weekly duty added · " + dept); go(currentTab); };
+      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "", by: (sessionUser && sessionUser.email) || "", at: Date.now() }); weeklyDirty.add(dept); saveEdits("Weekly duty added · " + dept, true); go(currentTab); };
     });
     document.querySelectorAll(".wk-file").forEach((inp) => {
       inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) uploadWeeklyFile(dept, inp.dataset.kind, +inp.dataset.i, f); };
@@ -6269,13 +6269,13 @@
       const url = await ref.getDownloadURL();
       if (t.filePath && t.filePath !== path) { try { await storage.ref().child(t.filePath).delete(); } catch (e) {} }
       t.fileName = file.name; t.fileUrl = url; t.filePath = path;
-      weeklyDirty.add(dept); saveEdits("Weekly duty file · " + dept); go(currentTab);
+      weeklyDirty.add(dept); saveEdits("Weekly duty file · " + dept, true); go(currentTab);
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
   async function removeWeeklyFile(dept, kind, i) {
     const t = weeklyList(dept, kind)[i]; if (!t) return;
     const path = t.filePath; delete t.fileName; delete t.fileUrl; delete t.filePath;
-    weeklyDirty.add(dept); saveEdits("Weekly duty file removed · " + dept); go(currentTab);
+    weeklyDirty.add(dept); saveEdits("Weekly duty file removed · " + dept, true); go(currentTab);
     if (path && storage) { try { await storage.ref().child(path).delete(); } catch (e) {} }
   }
 
@@ -7663,7 +7663,7 @@
   }
 
   let saveTimer = null;
-  function saveEdits(what) {
+  function saveEdits(what, immediate) {
     if (!db || !(roleIsAdmin() || hasAnyEditGrant() || canSeePage("leads"))) return;
     clearTimeout(saveTimer);
     const desc = (what == null ? "" : String(what)).slice(0, 120);
@@ -7727,7 +7727,7 @@
           window.alert("⚠ Your change was NOT saved to the database.\n\nIt shows on your screen but has not stored — so it will disappear on reload. Most likely your account doesn’t have permission to save this page yet, or there’s a network problem.\n\nPlease tell a super admin before making more changes.");
         }
       }
-    }, 800);
+    }, immediate ? 0 : 800);
   }
   let saveErrorShown = false;
 
