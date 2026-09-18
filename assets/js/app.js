@@ -8072,7 +8072,35 @@
       } finally { forgot.disabled = false; }
     };
     auth.onAuthStateChanged(async (user) => {
-      if (!user) { showLogin(); return; }
+      if (!user) {
+        showLogin();
+        // Diagnostic: if the user asked to stay signed in but arrived with no
+        // session, the browser is almost certainly not keeping Firebase's
+        // storage. Tell them precisely, and whether storage is the problem.
+        try {
+          if (localStorage.getItem("pl-remember") === "1") {
+            let lsOk = true;
+            try { localStorage.setItem("pl-t", "1"); localStorage.removeItem("pl-t"); } catch (e) { lsOk = false; }
+            const idbOk = !!window.indexedDB;
+            let idbWrite = "unknown";
+            try {
+              await new Promise((res) => {
+                const r = window.indexedDB.open("pl-probe", 1);
+                r.onerror = () => { idbWrite = "blocked"; res(); };
+                r.onsuccess = () => { idbWrite = "ok"; try { r.result.close(); window.indexedDB.deleteDatabase("pl-probe"); } catch (e) {} res(); };
+                setTimeout(() => { if (idbWrite === "unknown") { idbWrite = "timeout"; res(); } }, 1500);
+              });
+            } catch (e) { idbWrite = "error"; }
+            errEl.style.color = "";
+            if (!lsOk || !idbOk || idbWrite !== "ok") {
+              errEl.innerHTML = "⚠ Your browser is <b>blocking site storage</b>, so it can't keep you signed in. Allow cookies / site data for this site, or turn off strict privacy for it. (storage check: localStorage " + (lsOk ? "ok" : "BLOCKED") + ", IndexedDB " + idbWrite + ")";
+            } else {
+              errEl.textContent = "Signed out on reload, but storage looks OK — please sign in again and tell the admin this exact wording so we can dig into the auth token.";
+            }
+          }
+        } catch (e) {}
+        return;
+      }
       let lastErr = null;
       // Retry transient failures (network / Firestore hiccups) before giving up,
       // so a momentary glitch doesn't bounce a signed-in user to the login screen.
