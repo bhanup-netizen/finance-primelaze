@@ -762,6 +762,12 @@ tr.ind-done .ind-check span { color: var(--good); }
 .pl-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .pl-toast.bad { background: var(--bad, #c0392b); }
 @media (max-width: 560px) { .wk-in { min-width: 64px; font-size: 12px; padding: 4px 6px; } }
+.wk-addform { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding: 12px; border: 1px dashed var(--border-strong); border-radius: 10px; background: var(--surface-2); }
+.wk-nf { flex: 1 1 160px; min-width: 120px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 13px; background: var(--surface); color: var(--text); }
+.wk-nf-sm { flex: 0 1 130px; min-width: 90px; }
+.wk-nf:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.wk-addform .wk-submit { flex: 0 0 auto; }
+@media (max-width: 560px) { .wk-nf, .wk-nf-sm { flex: 1 1 100%; } }
 /* Clickable Active / Not Active status pill for an online page. */
 .soc-status { border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .soc-status.on { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }

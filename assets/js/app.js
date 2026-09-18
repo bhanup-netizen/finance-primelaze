@@ -6227,12 +6227,19 @@
         ${inCell(kind, i, "link", t.link, "Paste a how-to link")}
         ${fileCell(kind, i, t)}
         ${byCell(t)}
-      </tr>`).join("") || `<tr><td colspan="8" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Click “Add duty”." : ""}</td></tr>`;
+      </tr>`).join("") || `<tr><td colspan="8" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
       return `<div class="block" style="margin-top:16px">
         <h2 style="margin:0 0 4px">${esc(title)}</h2>
         <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
         ${table(head, rows)}
-        ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn wk-add" data-kind="${kind}">＋ Add duty</button></div>` : ""}</div>`;
+        ${ed ? `<div class="wk-addform" data-kind="${kind}">
+          <input type="text" class="wk-nf" data-nf="task" placeholder="Task *">
+          <input type="text" class="wk-nf wk-nf-sm" data-nf="time" placeholder="Time it takes *">
+          <select class="wk-nf wk-nf-sm" data-nf="priority">${WEEKLY_PRIOS.map((p) => `<option${p === "Medium" ? " selected" : ""}>${p}</option>`).join("")}</select>
+          <input type="text" class="wk-nf" data-nf="remark" placeholder="Remark (optional)">
+          <input type="text" class="wk-nf" data-nf="link" placeholder="Link (optional)">
+          <button type="button" class="dl-btn wk-submit" data-kind="${kind}">＋ Add duty</button>
+        </div>` : ""}</div>`;
     };
     return `
       <div class="section-head"><h1>${esc(dept)} — Duties</h1>
@@ -6249,8 +6256,15 @@
     document.querySelectorAll(".wk-del").forEach((b) => {
       b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveEdits("Weekly duty removed · " + dept, true); go(currentTab); };
     });
-    document.querySelectorAll(".wk-add").forEach((b) => {
-      b.onclick = () => { weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task: "", time: "", priority: "Medium", remark: "", link: "", by: (sessionUser && sessionUser.email) || "", at: Date.now() }); weeklyDirty.add(dept); saveEdits("Weekly duty added · " + dept, true); go(currentTab); };
+    document.querySelectorAll(".wk-submit").forEach((b) => {
+      b.onclick = () => {
+        const form = b.closest(".wk-addform"); if (!form) return;
+        const get = (nf) => { const el = form.querySelector('.wk-nf[data-nf="' + nf + '"]'); return el ? el.value.trim() : ""; };
+        const task = get("task"), time = get("time"), priority = get("priority") || "Medium";
+        if (!task || !time || !priority) { window.alert("Please fill Task, Time it takes and Priority — these are required."); return; }
+        weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task, time, priority, remark: get("remark"), link: get("link"), by: (sessionUser && sessionUser.email) || "", at: Date.now() });
+        weeklyDirty.add(dept); saveEdits("Weekly duty added · " + dept, true); go(currentTab);
+      };
     });
     document.querySelectorAll(".wk-file").forEach((inp) => {
       inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) uploadWeeklyFile(dept, inp.dataset.kind, +inp.dataset.i, f); };
