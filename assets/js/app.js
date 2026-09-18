@@ -6288,29 +6288,25 @@
   let induction = JSON.parse(JSON.stringify(INDUCTION_SEED));
   let indSeq = 100;
   function indAllItems() { return (induction.phases || []).flatMap((p) => p.items || []); }
-  function indProgress() { const a = indAllItems(); const done = a.filter((x) => x.done).length; return { done, total: a.length, pct: a.length ? Math.round((done / a.length) * 100) : 0 }; }
 
   function renderInduction() {
     const ed = isAdmin();
     setTimeout(wireInduction, 0);
-    const pr = indProgress();
     const cell = (pi, ii, field, val, ph) => ed
       ? `<td><input class="ind-in" data-p="${pi}" data-i="${ii}" data-f="${field}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
       : `<td>${esc(val || "—")}</td>`;
     const phaseBlocks = (induction.phases || []).map((ph, pi) => {
-      const rows = (ph.items || []).map((it, ii) => `<tr class="${it.done ? "ind-done" : ""}">
+      const rows = (ph.items || []).map((it, ii) => `<tr>
         <td class="num">${ii + 1}${ed ? ` <button type="button" class="linkish ind-del" data-p="${pi}" data-i="${ii}" title="Remove">✕</button>` : ""}</td>
-        <td><label class="ind-check"><input type="checkbox" class="ind-status" data-p="${pi}" data-i="${ii}"${it.done ? " checked" : ""}${ed ? "" : " disabled"}> <span>${it.done ? "Done" : "Pending"}</span></label></td>
         ${cell(pi, ii, "activity", it.activity, "Activity")}
         ${cell(pi, ii, "resp", it.resp, "Responsibility")}
         ${cell(pi, ii, "spoc", it.spoc, "SPOC")}
         ${cell(pi, ii, "when", it.when, "When")}
         ${cell(pi, ii, "remark", it.remark, "Remark")}
-      </tr>`).join("") || `<tr><td colspan="7" class="empty">No steps yet.${ed ? " Click “Add step”." : ""}</td></tr>`;
-      const head = ["#", "Status", "Induction activity", "Responsibility", "SPOC", "When", "Remarks"].map((x) => `<th>${x}</th>`).join("");
-      const doneN = (ph.items || []).filter((x) => x.done).length;
+      </tr>`).join("") || `<tr><td colspan="6" class="empty">No steps yet.${ed ? " Click “Add step”." : ""}</td></tr>`;
+      const head = ["#", "Induction activity", "Responsibility", "SPOC", "When", "Remarks"].map((x) => `<th>${x}</th>`).join("");
       return `<div class="block ind-phase" style="margin-top:18px">
-        <div class="section-title" style="margin-bottom:4px"><h2 style="margin:0">${ed ? `<input class="ind-in ind-title" data-p="${pi}" data-f="title" value="${esc(ph.title || "")}">` : esc(ph.title || "")}</h2><span class="muted-note">${doneN}/${(ph.items || []).length} done</span></div>
+        <div class="section-title" style="margin-bottom:4px"><h2 style="margin:0">${ed ? `<input class="ind-in ind-title" data-p="${pi}" data-f="title" value="${esc(ph.title || "")}">` : esc(ph.title || "")}</h2></div>
         ${ph.subtitle || ed ? `<p class="muted-note" style="margin:0 0 8px">${ed ? `<input class="ind-in" data-p="${pi}" data-f="subtitle" value="${esc(ph.subtitle || "")}" style="width:100%">` : esc(ph.subtitle || "")}</p>` : ""}
         ${table(head, rows)}
         ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn ind-add" data-p="${pi}">＋ Add step</button>${(ph.items || []).length === 0 ? ` <button type="button" class="ghost-btn ind-delphase" data-p="${pi}">Remove phase</button>` : ""}</div>` : ""}</div>`;
@@ -6318,21 +6314,12 @@
     return `
       <div class="section-head"><h1>New-Joinee Induction &amp; Onboarding</h1>
         <p>${ed ? `<input class="ind-in" data-f="note" value="${esc(induction.note || "")}" style="width:100%">` : esc(induction.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
-      <div class="callout teal" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <div><b>Progress:</b> ${pr.done} of ${pr.total} steps done (${pr.pct}%)</div>
-        <div class="ind-bar" style="flex:1;min-width:160px;height:10px;background:var(--surface-3);border-radius:999px;overflow:hidden"><div style="width:${pr.pct}%;height:100%;background:var(--good)"></div></div>
-      </div>
       ${phaseBlocks}
       ${ed ? `<div style="margin-top:18px"><button type="button" class="ghost-btn" id="indAddPhase">＋ Add phase</button> <button type="button" class="ghost-btn" id="indReset" title="Restore the default plan">↺ Restore default plan</button></div>` : ""}`;
   }
 
   function indSave(what) { saveEdits(what || "Induction updated", true); }
   function wireInduction() {
-    document.querySelectorAll(".ind-status").forEach((cb) => (cb.onchange = () => {
-      const p = induction.phases[+cb.dataset.p]; if (!p) return; const it = p.items[+cb.dataset.i]; if (!it) return;
-      it.done = cb.checked; if (it.done) { it.doneBy = (sessionUser && sessionUser.email) || ""; it.doneAt = Date.now(); }
-      indSave("Induction · " + (it.done ? "done" : "reopened") + " — " + (it.activity || "")); go(currentTab);
-    }));
     document.querySelectorAll(".ind-in").forEach((el) => (el.onchange = () => {
       const f = el.dataset.f;
       if (el.dataset.p == null && f === "note") { induction.note = el.value; indSave("Induction note"); return; }
