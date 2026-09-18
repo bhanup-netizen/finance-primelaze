@@ -89,4 +89,18 @@ window.INDUCTION_SEED = {
       ],
     },
   ],
+  flowNote: "The information chain — who tells whom, when, and what. Following this keeps every SPOC ready on time.",
+  flow: [
+    { id: "f1", when: "As soon as offer is accepted", from: "HR (Sandeepika)", to: "Admin (Ayush)", what: "New joinee confirmed + start date. Arrange laptop, SIM, ID card, visiting cards, WhatsApp group and demo kit (needs 7–10 days)." },
+    { id: "f2", when: "As soon as offer is accepted", from: "HR (Sandeepika)", to: "IT (Bhanu)", what: "Create Unified Dashboard credentials (Casovil) before Day 1." },
+    { id: "f3", when: "As soon as offer is accepted", from: "HR (Sandeepika)", to: "Reporting Manager", what: "New joinee, role & start date. Assign a buddy, plan Day 1 and 30-60-90 goals." },
+    { id: "f4", when: "Before Day 1", from: "HR (Sandeepika)", to: "Finance (Sonal)", what: "Set up Zoho Expense access and a Day-1 finance induction slot." },
+    { id: "f5", when: "Before Day 1", from: "HR (Sandeepika)", to: "Dept heads (Vikas / Ayush / Akshay)", what: "Book Day-1 induction slots — Sales support, Admin, Marketing." },
+    { id: "f6", when: "Before Week 1", from: "PM Casovil (Sparsha)", to: "Admin (Ayush)", what: "Confirm Dashboard access & devices are ready before Casovil Dashboard training starts." },
+    { id: "f7", when: "Before Week 1", from: "PM Primelaze (Vikas)", to: "Trainers (Naresh / Lubdha)", what: "Schedule product & business training for Day 2–Day 8." },
+    { id: "f8", when: "Day 1", from: "Reporting Manager", to: "Team", what: "Introduce the new joinee to the team." },
+    { id: "f9", when: "End of Week 1", from: "Reporting Manager", to: "HR (Sandeepika)", what: "Training complete — schedule the first-week review." },
+    { id: "f10", when: "Day 30 / end of Month 1", from: "HR (Sandeepika)", to: "Reporting Manager", what: "Schedule the 30-day check-in and first-month review." },
+    { id: "f11", when: "Around 6 months", from: "HR (Sandeepika)", to: "Reporting Manager & Director", what: "Schedule the probation / confirmation review." },
+  ],
 };

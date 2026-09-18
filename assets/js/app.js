@@ -6311,18 +6311,47 @@
         ${table(head, rows)}
         ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn ind-add" data-p="${pi}">＋ Add step</button>${(ph.items || []).length === 0 ? ` <button type="button" class="ghost-btn ind-delphase" data-p="${pi}">Remove phase</button>` : ""}</div>` : ""}</div>`;
     }).join("");
+    // Communication / hand-off flow — who informs whom, when, and what.
+    const fcell = (i, field, val, ph) => ed
+      ? `<td><input class="ind-in ind-fin" data-i="${i}" data-f="${field}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
+      : `<td>${esc(val || "—")}</td>`;
+    const flowRows = (induction.flow || []).map((f, i) => `<tr>
+      <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish ind-fdel" data-i="${i}" title="Remove">✕</button>` : ""}</td>
+      ${fcell(i, "when", f.when, "When / trigger")}
+      ${fcell(i, "from", f.from, "Who informs")}
+      ${fcell(i, "to", f.to, "Whom")}
+      ${fcell(i, "what", f.what, "What to share / action needed")}
+    </tr>`).join("") || `<tr><td colspan="5" class="empty">No hand-offs yet.${ed ? " Click “Add hand-off”." : ""}</td></tr>`;
+    const flowHead = ["#", "When / trigger", "From (informs)", "To (informed)", "What to share / action"].map((x) => `<th>${x}</th>`).join("");
+    const flowBlock = `<div class="block ind-phase" style="margin-top:24px">
+      <div class="section-title" style="margin-bottom:4px"><h2 style="margin:0">🔔 Communication &amp; hand-off flow</h2></div>
+      <p class="muted-note" style="margin:0 0 8px">${ed ? `<input class="ind-in" data-f="flowNote" value="${esc(induction.flowNote || "")}" style="width:100%">` : esc(induction.flowNote || "")}</p>
+      ${table(flowHead, flowRows)}
+      ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn ind-fadd">＋ Add hand-off</button></div>` : ""}</div>`;
     return `
       <div class="section-head"><h1>New-Joinee Induction &amp; Onboarding</h1>
         <p>${ed ? `<input class="ind-in" data-f="note" value="${esc(induction.note || "")}" style="width:100%">` : esc(induction.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
       ${phaseBlocks}
+      ${flowBlock}
       ${ed ? `<div style="margin-top:18px"><button type="button" class="ghost-btn" id="indAddPhase">＋ Add phase</button> <button type="button" class="ghost-btn" id="indReset" title="Restore the default plan">↺ Restore default plan</button></div>` : ""}`;
   }
 
   function indSave(what) { saveEdits(what || "Induction updated", true); }
   function wireInduction() {
-    document.querySelectorAll(".ind-in").forEach((el) => (el.onchange = () => {
+    document.querySelectorAll(".ind-fin").forEach((el) => (el.onchange = () => {
+      const f = induction.flow && induction.flow[+el.dataset.i]; if (f) { f[el.dataset.f] = el.value.trim(); indSave("Induction hand-off"); }
+    }));
+    document.querySelectorAll(".ind-fadd").forEach((b) => (b.onclick = () => {
+      (induction.flow = induction.flow || []).push({ id: "f" + (indSeq++), when: "", from: "", to: "", what: "" });
+      indSave("Induction hand-off added"); go(currentTab);
+    }));
+    document.querySelectorAll(".ind-fdel").forEach((b) => (b.onclick = () => {
+      if (!window.confirm("Remove this hand-off?")) return;
+      (induction.flow || []).splice(+b.dataset.i, 1); indSave("Induction hand-off removed"); go(currentTab);
+    }));
+    document.querySelectorAll(".ind-in:not(.ind-fin)").forEach((el) => (el.onchange = () => {
       const f = el.dataset.f;
-      if (el.dataset.p == null && f === "note") { induction.note = el.value; indSave("Induction note"); return; }
+      if (el.dataset.p == null) { if (f === "note") induction.note = el.value; else if (f === "flowNote") induction.flowNote = el.value; indSave("Induction note"); return; }
       const p = induction.phases[+el.dataset.p]; if (!p) return;
       if (el.dataset.i == null) { p[f] = el.value; indSave("Induction phase"); return; }
       const it = p.items[+el.dataset.i]; if (it) { it[f] = el.value.trim(); indSave("Induction step · " + (it.activity || "")); }
@@ -7661,7 +7690,7 @@
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
-      if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
+      if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
