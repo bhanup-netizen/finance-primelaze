@@ -6189,6 +6189,23 @@
     return (d[kind] = d[kind] || []);
   };
   const prioBadge = (p) => `<span class="badge ${p === "High" ? "b-bad" : p === "Medium" ? "b-warn" : "b-good"}">${esc(p || "—")}</span>`;
+  // Time is kept in hours. Accept "0.5", "2 hrs", or minutes like "30 min" and
+  // convert to hours (30 min → 0.5). Non-numeric text (e.g. "ongoing") is kept.
+  function parseHours(s) {
+    const str = String(s == null ? "" : s).trim();
+    if (!str) return "";
+    let m = str.match(/^(\d+(?:\.\d+)?)\s*(m|min|mins|minute|minutes)\b/i);
+    if (m) return Math.round((parseFloat(m[1]) / 60) * 100) / 100;
+    m = str.match(/^(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours)?\b/i);
+    if (m) return parseFloat(m[1]);
+    return str;
+  }
+  function wkTimeDisplay(val) {
+    if (val === "" || val == null) return "—";
+    const n = typeof val === "number" ? val : (String(val).trim() !== "" && !isNaN(val) ? parseFloat(val) : null);
+    if (n != null && !isNaN(n)) return n + " hr" + (n === 1 ? "" : "s");
+    return String(val);
+  }
   // Turn an email into a short display name, e.g. "sonal@primelaze.com" → "Sonal".
   const wkShortName = (email) => {
     const p = String(email || "").split("@")[0].replace(/[._]+/g, " ").trim();
@@ -6215,13 +6232,16 @@
       const when = t.at ? " · " + new Date(t.at).toLocaleDateString("en-GB") : "";
       return `<td class="wk-by"><span title="${esc(t.by)}${esc(when)}">${esc(name)}</span></td>`;
     };
-    const head = ["#", "Task", "Time it takes", "Priority", "Remark", "Link", "File", "Added by"].map((x) => `<th>${x}</th>`).join("");
+    const timeCell = (kind, i, val) => ed
+      ? `<td><input class="wk-in" data-kind="${kind}" data-i="${i}" data-field="time" value="${esc(val == null ? "" : val)}" placeholder="hrs (0.5 = 30 min)"></td>`
+      : `<td>${esc(wkTimeDisplay(val))}</td>`;
+    const head = ["#", "Task", "Time (hrs)", "Priority", "Remark", "Link", "File", "Added by"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
       const rows = list.map((t, i) => `<tr>
         <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish wk-del" data-kind="${kind}" data-i="${i}" title="Remove">✕</button>` : ""}</td>
         ${inCell(kind, i, "task", t.task, "Task")}
-        ${inCell(kind, i, "time", t.time, "e.g. 30 min")}
+        ${timeCell(kind, i, t.time)}
         ${prioCell(kind, i, t.priority)}
         ${inCell(kind, i, "remark", t.remark, "Remark / note")}
         ${inCell(kind, i, "link", t.link, "Paste a how-to link")}
@@ -6234,7 +6254,7 @@
         ${table(head, rows)}
         ${ed ? `<div class="wk-addform" data-kind="${kind}">
           <input type="text" class="wk-nf" data-nf="task" placeholder="Task *">
-          <input type="text" class="wk-nf wk-nf-sm" data-nf="time" placeholder="Time it takes *">
+          <input type="text" class="wk-nf wk-nf-sm" data-nf="time" placeholder="Hours * (0.5 = 30 min)">
           <select class="wk-nf wk-nf-sm" data-nf="priority">${WEEKLY_PRIOS.map((p) => `<option${p === "Medium" ? " selected" : ""}>${p}</option>`).join("")}</select>
           <input type="text" class="wk-nf" data-nf="remark" placeholder="Remark (optional)">
           <input type="text" class="wk-nf" data-nf="link" placeholder="Link (optional)">
@@ -6251,7 +6271,7 @@
 
   function wireWeekly(dept) {
     document.querySelectorAll(".wk-in").forEach((el) => {
-      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.value.trim(); weeklyDirty.add(dept); saveEdits("Weekly duty · " + dept); } };
+      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.dataset.field === "time" ? parseHours(el.value) : el.value.trim(); weeklyDirty.add(dept); saveEdits("Weekly duty · " + dept); } };
     });
     document.querySelectorAll(".wk-del").forEach((b) => {
       b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveEdits("Weekly duty removed · " + dept, true); go(currentTab); };
@@ -6261,8 +6281,8 @@
         const form = b.closest(".wk-addform"); if (!form) return;
         const get = (nf) => { const el = form.querySelector('.wk-nf[data-nf="' + nf + '"]'); return el ? el.value.trim() : ""; };
         const task = get("task"), time = get("time"), priority = get("priority") || "Medium";
-        if (!task || !time || !priority) { window.alert("Please fill Task, Time it takes and Priority — these are required."); return; }
-        weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task, time, priority, remark: get("remark"), link: get("link"), by: (sessionUser && sessionUser.email) || "", at: Date.now() });
+        if (!task || !time || !priority) { window.alert("Please fill Task, Time (hours) and Priority — these are required."); return; }
+        weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task, time: parseHours(time), priority, remark: get("remark"), link: get("link"), by: (sessionUser && sessionUser.email) || "", at: Date.now() });
         weeklyDirty.add(dept); saveEdits("Weekly duty added · " + dept, true); go(currentTab);
       };
     });
