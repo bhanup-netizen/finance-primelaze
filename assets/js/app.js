@@ -124,6 +124,7 @@
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
     { id: "weeklyHr", label: "Weekly Duties", group: "HR", render: () => renderWeekly("HR") },
+    { id: "induction", label: "Induction", group: "HR", render: renderInduction },
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
     { id: "weeklyOnline", label: "Online Duties", group: "Marketing", render: () => renderWeekly("Online Marketing") },
@@ -6279,6 +6280,86 @@
     if (path && storage) { try { await storage.ref().child(path).delete(); } catch (e) {} }
   }
 
+  /* ================= HR · NEW-JOINEE INDUCTION / ONBOARDING ================= */
+  // A shared, editable onboarding checklist organised into phases. The live copy
+  // is stored in the edits doc (induction); admins/HR can tick items done, edit
+  // any field, add/remove rows and phases.
+  const INDUCTION_SEED = window.INDUCTION_SEED || { note: "", phases: [] };
+  let induction = JSON.parse(JSON.stringify(INDUCTION_SEED));
+  let indSeq = 100;
+  function indAllItems() { return (induction.phases || []).flatMap((p) => p.items || []); }
+  function indProgress() { const a = indAllItems(); const done = a.filter((x) => x.done).length; return { done, total: a.length, pct: a.length ? Math.round((done / a.length) * 100) : 0 }; }
+
+  function renderInduction() {
+    const ed = isAdmin();
+    setTimeout(wireInduction, 0);
+    const pr = indProgress();
+    const cell = (pi, ii, field, val, ph) => ed
+      ? `<td><input class="ind-in" data-p="${pi}" data-i="${ii}" data-f="${field}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
+      : `<td>${esc(val || "—")}</td>`;
+    const phaseBlocks = (induction.phases || []).map((ph, pi) => {
+      const rows = (ph.items || []).map((it, ii) => `<tr class="${it.done ? "ind-done" : ""}">
+        <td class="num">${ii + 1}${ed ? ` <button type="button" class="linkish ind-del" data-p="${pi}" data-i="${ii}" title="Remove">✕</button>` : ""}</td>
+        <td><label class="ind-check"><input type="checkbox" class="ind-status" data-p="${pi}" data-i="${ii}"${it.done ? " checked" : ""}${ed ? "" : " disabled"}> <span>${it.done ? "Done" : "Pending"}</span></label></td>
+        ${cell(pi, ii, "activity", it.activity, "Activity")}
+        ${cell(pi, ii, "resp", it.resp, "Responsibility")}
+        ${cell(pi, ii, "spoc", it.spoc, "SPOC")}
+        ${cell(pi, ii, "when", it.when, "When")}
+        ${cell(pi, ii, "remark", it.remark, "Remark")}
+      </tr>`).join("") || `<tr><td colspan="7" class="empty">No steps yet.${ed ? " Click “Add step”." : ""}</td></tr>`;
+      const head = ["#", "Status", "Induction activity", "Responsibility", "SPOC", "When", "Remarks"].map((x) => `<th>${x}</th>`).join("");
+      const doneN = (ph.items || []).filter((x) => x.done).length;
+      return `<div class="block ind-phase" style="margin-top:18px">
+        <div class="section-title" style="margin-bottom:4px"><h2 style="margin:0">${ed ? `<input class="ind-in ind-title" data-p="${pi}" data-f="title" value="${esc(ph.title || "")}">` : esc(ph.title || "")}</h2><span class="muted-note">${doneN}/${(ph.items || []).length} done</span></div>
+        ${ph.subtitle || ed ? `<p class="muted-note" style="margin:0 0 8px">${ed ? `<input class="ind-in" data-p="${pi}" data-f="subtitle" value="${esc(ph.subtitle || "")}" style="width:100%">` : esc(ph.subtitle || "")}</p>` : ""}
+        ${table(head, rows)}
+        ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn ind-add" data-p="${pi}">＋ Add step</button>${(ph.items || []).length === 0 ? ` <button type="button" class="ghost-btn ind-delphase" data-p="${pi}">Remove phase</button>` : ""}</div>` : ""}</div>`;
+    }).join("");
+    return `
+      <div class="section-head"><h1>New-Joinee Induction &amp; Onboarding</h1>
+        <p>${ed ? `<input class="ind-in" data-f="note" value="${esc(induction.note || "")}" style="width:100%">` : esc(induction.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
+      <div class="callout teal" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div><b>Progress:</b> ${pr.done} of ${pr.total} steps done (${pr.pct}%)</div>
+        <div class="ind-bar" style="flex:1;min-width:160px;height:10px;background:var(--surface-3);border-radius:999px;overflow:hidden"><div style="width:${pr.pct}%;height:100%;background:var(--good)"></div></div>
+      </div>
+      ${phaseBlocks}
+      ${ed ? `<div style="margin-top:18px"><button type="button" class="ghost-btn" id="indAddPhase">＋ Add phase</button> <button type="button" class="ghost-btn" id="indReset" title="Restore the default plan">↺ Restore default plan</button></div>` : ""}`;
+  }
+
+  function indSave(what) { saveEdits(what || "Induction updated", true); }
+  function wireInduction() {
+    document.querySelectorAll(".ind-status").forEach((cb) => (cb.onchange = () => {
+      const p = induction.phases[+cb.dataset.p]; if (!p) return; const it = p.items[+cb.dataset.i]; if (!it) return;
+      it.done = cb.checked; if (it.done) { it.doneBy = (sessionUser && sessionUser.email) || ""; it.doneAt = Date.now(); }
+      indSave("Induction · " + (it.done ? "done" : "reopened") + " — " + (it.activity || "")); go(currentTab);
+    }));
+    document.querySelectorAll(".ind-in").forEach((el) => (el.onchange = () => {
+      const f = el.dataset.f;
+      if (el.dataset.p == null && f === "note") { induction.note = el.value; indSave("Induction note"); return; }
+      const p = induction.phases[+el.dataset.p]; if (!p) return;
+      if (el.dataset.i == null) { p[f] = el.value; indSave("Induction phase"); return; }
+      const it = p.items[+el.dataset.i]; if (it) { it[f] = el.value.trim(); indSave("Induction step · " + (it.activity || "")); }
+    }));
+    document.querySelectorAll(".ind-add").forEach((b) => (b.onclick = () => {
+      const p = induction.phases[+b.dataset.p]; if (!p) return;
+      (p.items = p.items || []).push({ id: "in" + (indSeq++), activity: "", resp: "", spoc: "", when: "", remark: "", done: false });
+      indSave("Induction step added"); go(currentTab);
+    }));
+    document.querySelectorAll(".ind-del").forEach((b) => (b.onclick = () => {
+      if (!window.confirm("Remove this step?")) return;
+      const p = induction.phases[+b.dataset.p]; if (!p) return; p.items.splice(+b.dataset.i, 1);
+      indSave("Induction step removed"); go(currentTab);
+    }));
+    document.querySelectorAll(".ind-delphase").forEach((b) => (b.onclick = () => {
+      if (!window.confirm("Remove this (empty) phase?")) return;
+      induction.phases.splice(+b.dataset.p, 1); indSave("Induction phase removed"); go(currentTab);
+    }));
+    const ap = document.getElementById("indAddPhase");
+    if (ap) ap.onclick = () => { (induction.phases = induction.phases || []).push({ id: "p" + (indSeq++), title: "New phase", subtitle: "", items: [] }); indSave("Induction phase added"); go(currentTab); };
+    const rs = document.getElementById("indReset");
+    if (rs) rs.onclick = () => { if (!window.confirm("Restore the default induction plan? This replaces the current one for everyone.")) return; induction = JSON.parse(JSON.stringify(INDUCTION_SEED)); indSave("Induction · restored default plan"); go(currentTab); };
+  }
+
   function renderChallan() {
     setTimeout(initChallanUI, 0);
     return `
@@ -7593,6 +7674,7 @@
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
+      if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
@@ -7711,7 +7793,7 @@
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock, ordered, orderedOn, damaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: orderState.lineData, invAdds, invRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
