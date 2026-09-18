@@ -7854,15 +7854,16 @@
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
       } catch (e) {
+        const reason = (e && (e.code || e.message)) ? (e.code || e.message) : String(e);
         console.warn("edits save failed", e);
-        if (/^Weekly duty/.test(desc)) toast("✕ NOT saved — no permission / connection", "bad");
+        toast("✕ NOT saved: " + reason, "bad");
         // Make the failure VISIBLE — a silent failure looks "saved" but is lost.
         const el = document.getElementById("lastUpdated");
-        if (el) { el.style.color = "var(--bad)"; el.textContent = "⚠ NOT saved — your last change did not store. Check your access/connection."; }
+        if (el) { el.style.color = "var(--bad)"; el.textContent = "⚠ NOT saved (" + reason + ") — check the message shown."; }
         const dot = document.getElementById("luDot"); if (dot) dot.hidden = false;
         if (!saveErrorShown) {
           saveErrorShown = true;
-          window.alert("⚠ Your change was NOT saved to the database.\n\nIt shows on your screen but has not stored — so it will disappear on reload. Most likely your account doesn’t have permission to save this page yet, or there’s a network problem.\n\nPlease tell a super admin before making more changes.");
+          window.alert("⚠ Your change was NOT saved to the database.\n\nExact error: " + reason + "\n\nIt shows on your screen but has not stored, so it will disappear on reload.\n\nPlease send this exact error text to the admin.");
         }
       }
     }, immediate ? 0 : 800);
