@@ -6330,10 +6330,10 @@
 
   function wireWeekly(dept) {
     document.querySelectorAll(".wk-in").forEach((el) => {
-      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.dataset.field === "time" ? parseHours(el.value) : el.value.trim(); weeklyDirty.add(dept); saveWeekly("Weekly duty · " + dept); } };
+      el.onchange = () => { const t = weeklyList(dept, el.dataset.kind)[+el.dataset.i]; if (t) { t[el.dataset.field] = el.dataset.field === "time" ? parseHours(el.value) : el.value.trim(); weeklyDirty.add(dept); saveWeekly(dept, "Weekly duty · " + dept); } };
     });
     document.querySelectorAll(".wk-del").forEach((b) => {
-      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveWeekly("Weekly duty removed · " + dept); go(currentTab); };
+      b.onclick = () => { if (!window.confirm("Remove this duty?")) return; weeklyList(dept, b.dataset.kind).splice(+b.dataset.i, 1); weeklyDirty.add(dept); saveWeekly(dept, "Weekly duty removed · " + dept); go(currentTab); };
     });
     document.querySelectorAll(".wk-submit").forEach((b) => {
       b.onclick = () => {
@@ -6342,7 +6342,7 @@
         const task = get("task"), time = get("time"), priority = get("priority") || "Medium";
         if (!task || !time || !priority) { window.alert("Please fill Task, Time (hours) and Priority — these are required."); return; }
         weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task, time: parseHours(time), priority, remark: get("remark"), link: get("link"), by: (sessionUser && sessionUser.email) || "", at: Date.now() });
-        weeklyDirty.add(dept); saveWeekly("Weekly duty added · " + dept); go(currentTab);
+        weeklyDirty.add(dept); saveWeekly(dept, "Weekly duty added · " + dept); go(currentTab);
       };
     });
     document.querySelectorAll(".wk-file").forEach((inp) => {
@@ -6363,13 +6363,13 @@
       const url = await ref.getDownloadURL();
       if (t.filePath && t.filePath !== path) { try { await storage.ref().child(t.filePath).delete(); } catch (e) {} }
       t.fileName = file.name; t.fileUrl = url; t.filePath = path;
-      weeklyDirty.add(dept); saveWeekly("Weekly duty file · " + dept); go(currentTab);
+      weeklyDirty.add(dept); saveWeekly(dept, "Weekly duty file · " + dept); go(currentTab);
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
   async function removeWeeklyFile(dept, kind, i) {
     const t = weeklyList(dept, kind)[i]; if (!t) return;
     const path = t.filePath; delete t.fileName; delete t.fileUrl; delete t.filePath;
-    weeklyDirty.add(dept); saveWeekly("Weekly duty file removed · " + dept); go(currentTab);
+    weeklyDirty.add(dept); saveWeekly(dept, "Weekly duty file removed · " + dept); go(currentTab);
     if (path && storage) { try { await storage.ref().child(path).delete(); } catch (e) {} }
   }
 
@@ -7870,17 +7870,62 @@
     } catch (err) { console.warn("edits read failed", err); }
   }
 
-  // ---- Weekly duties: single source of truth = the shared edits doc ----
-  // They briefly lived in a separate edits/weekly document, but keeping them in
-  // two places let a stale (or rules-blocked) copy of that doc silently wipe the
-  // good copy on load — the activity log survived because it rides the shared
-  // doc, but the task ROWS vanished. Weekly tasks are tiny, so they now live in
-  // the shared doc like everything else, protected from cross-area clobbering by
-  // the weeklyDirty set (same mechanism as inventory and leads). saveWeekly is a
-  // thin wrapper over saveEdits so every existing call site keeps working.
-  // Callers add their department to weeklyDirty before calling this, so the
-  // shared-doc merge keeps their edits and never clobbers other departments.
-  function saveWeekly(what) { saveEdits(what, true); }
+  // ---- Weekly duties: written with a TARGETED field update ----
+  // The permanent fix for "duties keep vanishing". Instead of rewriting the
+  // whole shared record (which let any save clobber other areas), a weekly save
+  // updates ONLY this one department's field — weeklyTasks.<dept> — plus the
+  // activity log. It is therefore physically impossible for a weekly save to
+  // touch leads, inventory or another department. The shared doc is still the
+  // single source of truth (loadEdits reads weeklyTasks), and other areas no
+  // longer write the weeklyTasks field at all, so nothing can overwrite it.
+  let weeklyWriteTimer = null;
+  function saveWeekly(dept, what) {
+    if (!db || !(roleIsAdmin() || hasAnyEditGrant())) return;
+    const desc = String(what == null ? "" : what).slice(0, 120);
+    const by = (sessionUser && sessionUser.email) || "";
+    const at = Date.now();
+    const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
+    const newEntry = { by, at, tab: tabLabel, tabId: currentTab, what: desc };
+    editsLog.unshift(newEntry); if (editsLog.length > 300) editsLog.length = 300;
+    editsUpdatedAt = at; editsUpdatedBy = by;
+    updateLastUpdatedUI(); refreshPageEditNote();
+    // Snapshot this department's tasks now, so a later edit doesn't change what
+    // we write for this save.
+    const deptData = JSON.parse(JSON.stringify(weeklyTasks[dept] || { mandatory: [], monthly: [], optional: [] }));
+    clearTimeout(weeklyWriteTimer);
+    weeklyWriteTimer = setTimeout(async () => {
+      const ref = db.collection("edits").doc("overrides");
+      try {
+        // Merge the server's log so concurrent activity elsewhere isn't lost,
+        // then write ONLY the one department field + the log. Nothing else in
+        // the record is included in the write payload.
+        let srvLog = [];
+        try { const s = await ref.get(); const sd = s.exists ? (s.data() || {}) : {}; srvLog = Array.isArray(sd.log) ? sd.log : []; } catch (e) {}
+        const mLog = [newEntry].concat(srvLog.filter((x) => !(x && x.at === newEntry.at && x.by === newEntry.by && x.what === newEntry.what)));
+        if (mLog.length > 300) mLog.length = 300;
+        editsLog.length = 0; Array.prototype.push.apply(editsLog, mLog);
+        const FieldPath = firebase.firestore.FieldPath;
+        try {
+          await ref.update(new FieldPath("weeklyTasks", dept), deptData, "log", mLog, "updatedAt", at, "updatedBy", by);
+        } catch (e1) {
+          // update() fails if the doc doesn't exist yet — fall back to a scoped
+          // merge that still only carries these fields.
+          if (e1 && (e1.code === "not-found" || /No document to update/i.test(e1.message || ""))) {
+            const obj = { log: mLog, updatedAt: at, updatedBy: by, weeklyTasks: {} };
+            obj.weeklyTasks[dept] = deptData;
+            await ref.set(obj, { merge: true });
+          } else { throw e1; }
+        }
+        toast("✓ Saved to the database");
+        updateLastUpdatedUI(); refreshPageEditNote();
+      } catch (e) {
+        const reason = (e && (e.code || e.message)) ? (e.code || e.message) : String(e);
+        console.warn("weekly save failed", e);
+        toast("✕ NOT saved: " + reason, "bad");
+        window.alert("⚠ Weekly duty NOT saved.\n\nExact error: " + reason);
+      }
+    }, 0);
+  }
   // One-time migration + safety net: fold anything still stored only in the old
   // edits/weekly document into the in-memory tasks WITHOUT ever deleting. Runs
   // after loadEdits (which already loaded weeklyTasks from the shared doc), so it
@@ -7939,18 +7984,12 @@
       // activity log made by other people since we loaded.
       let serverData = null;
       try { const cur = await db.collection("edits").doc("overrides").get(); serverData = cur.exists ? (cur.data() || {}) : {}; } catch (e) { serverData = null; }
-      let mergedWeekly, mergedLog;
+      let mergedLog;
       if (serverData) {
-        // Weekly duties for the WRITE only: our local copy for departments this
-        // session edited (weeklyDirty is sticky — never cleared — so in-progress
-        // adds are always kept), and the server's copy for departments we never
-        // touched (so we don't clobber other people). We deliberately do NOT
-        // mutate the live local weeklyTasks here — doing so races with the user's
-        // ongoing typing/adding and was dropping rows.
-        const srvWeekly = (serverData.weeklyTasks && typeof serverData.weeklyTasks === "object") ? serverData.weeklyTasks : {};
-        mergedWeekly = JSON.parse(JSON.stringify(weeklyTasks));
-        Object.keys(srvWeekly).forEach((d) => { if (!weeklyDirty.has(d)) mergedWeekly[d] = srvWeekly[d]; });
-        // Activity log: merge the server's entries with ours (newest first, deduped).
+        // Weekly duties are NO LONGER written here — they are saved on their own
+        // via saveWeekly() with a targeted weeklyTasks.<dept> field update, so no
+        // other area's save can ever overwrite them. We only merge the activity
+        // log: the server's entries with ours (newest first, deduped).
         const srvLog = Array.isArray(serverData.log) ? serverData.log : [];
         mergedLog = [newEntry].concat(srvLog.filter((x) => !(x && x.at === newEntry.at && x.by === newEntry.by && x.what === newEntry.what)));
         if (mergedLog.length > 300) mergedLog.length = 300;
@@ -7958,7 +7997,7 @@
       } else {
         // Re-read failed — don't risk wiping history; keep our local state.
         editsLog.unshift(newEntry); if (editsLog.length > 300) editsLog.length = 300;
-        mergedWeekly = weeklyTasks; mergedLog = editsLog;
+        mergedLog = editsLog;
       }
       // Inventory: if this session never edited inventory, write back the
       // SERVER's copy so a save from another area doesn't clobber it with our
@@ -7994,7 +8033,7 @@
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
