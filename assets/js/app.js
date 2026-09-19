@@ -4083,6 +4083,7 @@
     { key: "new", label: "New" },
     { key: "contacted", label: "Contacted" },
     { key: "working", label: "Actively working" },
+    { key: "demosched", label: "Demo scheduled" },
     { key: "demo", label: "Demo done" },
     { key: "negotiation", label: "Negotiation" },
     { key: "sold", label: "Sold ✓" },
@@ -4091,7 +4092,7 @@
     { key: "lost", label: "Lost" },
   ];
   const LEAD_STAGE_LABEL = {}; LEAD_STAGES.forEach((s) => (LEAD_STAGE_LABEL[s.key] = s.label));
-  const LEAD_OPEN = ["new", "contacted", "working", "demo", "negotiation"]; // still in play
+  const LEAD_OPEN = ["new", "contacted", "working", "demosched", "demo", "negotiation"]; // still in play
   const LEAD_WON = ["sold", "dispatched", "delivered"];           // converted (post-sale too)
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
   const customLeadSources = []; // admin-added lead sources, persisted for everyone
@@ -4203,7 +4204,7 @@
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
     "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
     "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
-  const LEAD_STEP_KEYS = ["new", "contacted", "working", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
+  const LEAD_STEP_KEYS = ["new", "contacted", "working", "demosched", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
   const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
