@@ -1072,13 +1072,14 @@ tr.ind-done .ind-check span { color: var(--good); }
 /* ================= LEADS · SALES PIPELINE ================= */
 /* Stage accent colours (shared by chips, dots and stage pills). */
 :root {
-  --lst-new: #64748b; --lst-contacted: #2563eb; --lst-demo: #7c3aed;
+  --lst-new: #64748b; --lst-contacted: #2563eb; --lst-working: #0891b2; --lst-demo: #7c3aed;
   --lst-negotiation: #d97706; --lst-sold: #16a34a; --lst-lost: #dc2626;
 }
 .lead-chips { margin-bottom: 2px; }
 .lead-chip .lead-chip-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); }
 .lch-new .lead-chip-dot { background: var(--lst-new); }
 .lch-contacted .lead-chip-dot { background: var(--lst-contacted); }
+.lch-working .lead-chip-dot { background: var(--lst-working); }
 .lch-demo .lead-chip-dot { background: var(--lst-demo); }
 .lch-negotiation .lead-chip-dot { background: var(--lst-negotiation); }
 .lch-sold .lead-chip-dot { background: var(--lst-sold); }
@@ -1109,6 +1110,7 @@ tr.ind-done .ind-check span { color: var(--good); }
 /* Stage pill (read-only) + stage select colouring */
 .lead-stage { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; }
 .lst-new { background: var(--lst-new); } .lst-contacted { background: var(--lst-contacted); }
+.lst-working { background: var(--lst-working); }
 .lst-demo { background: var(--lst-demo); } .lst-negotiation { background: var(--lst-negotiation); }
 .lst-sold { background: var(--lst-sold); } .lst-lost { background: var(--lst-lost); }
 select.lead-stage-sel { color: #fff; border: none; font-weight: 700; border-radius: 999px; }
@@ -1144,6 +1146,7 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-step.done { background: var(--lst-sold); }
 .lead-step.cur { transform: scale(1.35); box-shadow: 0 0 0 3px var(--accent-soft); }
 .lead-step.cur.lst-new { background: var(--lst-new); } .lead-step.cur.lst-contacted { background: var(--lst-contacted); }
+.lead-step.cur.lst-working { background: var(--lst-working); }
 .lead-step.cur.lst-demo { background: var(--lst-demo); } .lead-step.cur.lst-negotiation { background: var(--lst-negotiation); }
 .lead-step.cur.lst-sold { background: var(--lst-sold); }
 .lead-step-bar { height: 2px; width: 16px; background: var(--border); flex: 0 0 auto; }
@@ -1154,6 +1157,13 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-remark-tools { display: flex; gap: 12px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
 .lead-sold-note { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; background: var(--lst-sold); padding: 1px 8px; border-radius: 999px; margin-bottom: 4px; }
 .lead-stage-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; vertical-align: middle; }
+/* Activity-type badge on a timeline entry (Meeting / Calling / WhatsApp / Email) */
+.lead-act-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--text); background: var(--bg); border: 1px solid var(--border); vertical-align: middle; }
+/* Follow-up reminder chips */
+.lead-follow { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-bottom: 4px; }
+.lead-follow-overdue { color: #fff; background: var(--lst-lost); }
+.lead-follow-today { color: #fff; background: var(--lst-negotiation); }
+.lead-follow-upcoming { color: var(--text-2); background: var(--bg); border: 1px solid var(--border); }
 .lead-tl-created, .lead-tl-dot.lead-tl-created { background: var(--text-3); }
 .linkish.lead-del { color: var(--lst-lost); }
 .lead-timeline-btn { font-weight: 600; }

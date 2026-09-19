@@ -4082,6 +4082,7 @@
   const LEAD_STAGES = [
     { key: "new", label: "New" },
     { key: "contacted", label: "Contacted" },
+    { key: "working", label: "Actively working" },
     { key: "demo", label: "Demo done" },
     { key: "negotiation", label: "Negotiation" },
     { key: "sold", label: "Sold ✓" },
@@ -4090,7 +4091,7 @@
     { key: "lost", label: "Lost" },
   ];
   const LEAD_STAGE_LABEL = {}; LEAD_STAGES.forEach((s) => (LEAD_STAGE_LABEL[s.key] = s.label));
-  const LEAD_OPEN = ["new", "contacted", "demo", "negotiation"]; // still in play
+  const LEAD_OPEN = ["new", "contacted", "working", "demo", "negotiation"]; // still in play
   const LEAD_WON = ["sold", "dispatched", "delivered"];           // converted (post-sale too)
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
   const customLeadSources = []; // admin-added lead sources, persisted for everyone
@@ -4192,7 +4193,7 @@
       const name = (window.prompt("New city name:") || "").trim();
       if (name) {
         const nc = normalizeCity(name);
-        if (!citiesForState(st.value).includes(nc)) { customCities.push({ state: st.value, city: nc }); saveEdits("Added city: " + nc); }
+        if (!citiesForState(st.value).includes(nc)) { customCities.push({ state: st.value, city: nc }); leadDirty = true; saveEdits("Added city: " + nc); }
         ct.innerHTML = cityOptionsHtml(st.value, nc); ct.value = nc; lastCity = nc;
       } else { ct.value = lastCity; }
     };
@@ -4201,17 +4202,23 @@
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
     "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
-    "createdBy", "createdAt", "updatedAt"];
-  const LEAD_STEP_KEYS = ["new", "contacted", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
+    "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
+  const LEAD_STEP_KEYS = ["new", "contacted", "working", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
   const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
   const leadRemovals = []; // ids permanently removed (super-admin only)
   const leadArchive = [];  // ids archived — kept in the database, hidden from the active board
   const leadFiles = {};    // "<id>#<n>" -> {name,url,path,size,at,by} uploaded attachments
+  // Sticky "this session edited leads" flag. Leads live in the big shared doc,
+  // so a save triggered from ANY other area used to write back this session's
+  // (possibly stale) copy of the leads — silently deleting leads that other
+  // people added meanwhile. When this stays false, saveEdits writes the SERVER's
+  // copy of every lead field back instead of ours (mirrors invDirty).
+  let leadDirty = false;
   let leadSeq = 0;
   let leadViewArchived = false; // board showing the archived leads instead of active
-  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false };
+  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false, follow: false };
   const canEditLeads = () => isAdmin();
   const leadToday = () => new Date().toISOString().slice(0, 10);
   // Default transit window: when a lead is dispatched, this is how many days
@@ -4290,6 +4297,25 @@
   // A lead is "stuck" when it's still open and has sat in its stage too long.
   const LEAD_STUCK_DAYS = 14;
   const leadIsStuck = (r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0 && (daysSince(leadStageSince(r)) || 0) >= LEAD_STUCK_DAYS;
+  // ---- Follow-up reminders (Casovil MOM) ----
+  // A follow-up is "due" when its date is today or in the past and the lead is
+  // still open (won/lost leads don't need chasing).
+  function leadFollowState(r) {
+    const d = r.nextFollowUp;
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
+    if (LEAD_OPEN.indexOf(r.stage || "new") < 0) return "";
+    const today = leadToday();
+    if (d < today) return "overdue";
+    if (d === today) return "today";
+    return "upcoming";
+  }
+  const leadFollowDue = (r) => { const s = leadFollowState(r); return s === "overdue" || s === "today"; };
+  function leadFollowNote(r) {
+    const st = leadFollowState(r);
+    if (!st) return "";
+    const map = { overdue: "🔔 Follow-up overdue", today: "🔔 Follow-up due today", upcoming: "🔔 Follow-up" };
+    return `<div class="lead-follow lead-follow-${st}">${map[st]} · ${esc(r.nextFollowUp)}</div>`;
+  }
   // Best-effort match of the logged-in user to a sales owner name (by email).
   function myLeadOwner() {
     const email = ((sessionUser && sessionUser.email) || "").toLowerCase();
@@ -4336,6 +4362,7 @@
       const a = leadAdds.find((x) => x.id === id);
       if (a) { a[field] = value; a.updatedAt = Date.now(); }
     }
+    leadDirty = true;
     saveEdits("Lead updated (" + field + ")");
   }
   // Archive keeps the lead in the database — it is only hidden from the active
@@ -4344,6 +4371,7 @@
     const i = leadArchive.indexOf(id);
     if (on && i < 0) { leadArchive.push(id); leadAddHistory(id, null, "Lead archived", "archive"); }
     else if (!on && i >= 0) { leadArchive.splice(i, 1); leadAddHistory(id, null, "Lead restored from archive", "restore"); }
+    leadDirty = true;
     saveEdits(on ? "Archived a lead" : "Restored a lead");
   }
   // Hard delete — super-admin only. Everything else is preserved forever.
@@ -4351,12 +4379,14 @@
     if (!canDeleteLeads()) { window.alert("Only a super-admin can permanently delete a lead. Use Archive instead."); return; }
     if (String(id).charAt(0) === "L") { if (!leadRemovals.includes(id)) leadRemovals.push(id); }
     else { const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) leadAdds.splice(i, 1); }
+    leadDirty = true;
     saveEdits("Deleted a lead (super-admin)");
   }
   function leadAddNew(obj) {
     const id = "u" + (leadSeq++);
     const now = Date.now();
     leadAdds.push(Object.assign({ id, stage: "new", stageSince: now, createdBy: (sessionUser && sessionUser.email) || "", createdAt: now, updatedAt: now }, obj));
+    leadDirty = true;
     saveEdits("Added lead " + (obj.name || obj.company || ""));
     return id;
   }
@@ -4390,6 +4420,7 @@
         merged++;
       });
     });
+    leadDirty = true;
     saveEdits("Merged " + merged + " duplicate leads");
     leadRepaint();
     window.alert("Merged " + merged + " duplicate record" + (merged === 1 ? "" : "s") + ". The extra copies were archived and can be restored if needed.");
@@ -4411,7 +4442,7 @@
   function addNewRepPrompt() {
     const name = (window.prompt("New salesperson name:") || "").trim();
     if (!name) return "";
-    if (!leadOwners().some((o) => o.toLowerCase() === name.toLowerCase())) { customLeadOwners.push(name); saveEdits("Added salesperson: " + name); }
+    if (!leadOwners().some((o) => o.toLowerCase() === name.toLowerCase())) { customLeadOwners.push(name); leadDirty = true; saveEdits("Added salesperson: " + name); }
     return name;
   }
   function leadUniq(rows, field) {
@@ -4428,6 +4459,7 @@
       if (leadFilter.state && r.state !== leadFilter.state) return false;
       if (leadFilter.product && !(String(r.product || "").indexOf(leadFilter.product) >= 0)) return false;
       if (leadFilter.stuck && !leadIsStuck(r)) return false;
+      if (leadFilter.follow && !leadFollowDue(r)) return false;
       if (q) {
         const hay = [r.name, r.company, r.mobile, r.city, r.state, r.owner, r.notes, r.source, r.product].join(" ").toLowerCase();
         if (hay.indexOf(q) < 0) return false;
@@ -4560,7 +4592,7 @@
     const archBtn = admin ? (archived
       ? `<button type="button" class="linkish lead-unarchive" data-id="${esc(r.id)}" title="Restore to the active board">↩ Restore</button>`
       : `<button type="button" class="linkish lead-archive" data-id="${esc(r.id)}" title="Archive — hides it but keeps it in the database">🗄 Archive</button>`) : "";
-    return `${archTag}${leadStepper(r)}${ageHtml}${sold}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}</div>`;
+    return `${archTag}${leadStepper(r)}${ageHtml}${leadFollowNote(r)}${sold}<div class="lead-remark-tools">${tlBtn}${addBtn}${archBtn}</div>`;
   }
   // Full lead detail popup — editable fields (admin), contact actions, ageing,
   // and the complete lifecycle timeline. This is the primary way to open a lead.
@@ -4572,7 +4604,7 @@
     const enteredBy = r.createdBy ? esc(r.createdBy) : "Lead sheet import";
     const enteredWhen = r.createdAt ? esc(fmtWhen(r.createdAt)) : "—";
     const events = [{ kind: "created", at: r.createdAt || 0, by: r.createdBy || "", stage: "new", text: "Lead entered into the system" }]
-      .concat(hist.map((h) => ({ kind: h.kind || "stage", at: h.at, by: h.by, stage: h.stage, text: h.text })));
+      .concat(hist.map((h) => ({ kind: h.kind || "stage", at: h.at, by: h.by, stage: h.stage, text: h.text, act: h.act || "" })));
     const dot = (e) => (e.kind === "created" || e.kind === "archive" || e.kind === "restore") ? "lead-tl-created" : "lst-" + (e.stage || "new");
     const tag = (e) => {
       if (e.kind === "created") return `<span class="lead-stage-tag lead-tl-created">Entered</span>`;
@@ -4584,7 +4616,7 @@
       <li class="lead-tl-item">
         <span class="lead-tl-dot ${dot(e)}"></span>
         <div class="lead-tl-body">
-          <div class="lead-tl-head">${tag(e)}<span class="lead-tl-when">${esc(leadWhen(e))}</span></div>
+          <div class="lead-tl-head">${tag(e)}${e.act ? `<span class="lead-act-tag">${esc(leadActLabel(e.act))}</span>` : ""}<span class="lead-tl-when">${esc(leadWhen(e))}</span></div>
           <div class="lead-tl-text">${esc(e.text)}</div>
           <div class="lead-tl-by">${e.by ? "— " + esc(e.by) : (e.kind === "created" ? "— " + enteredBy : "")}</div>
         </div>
@@ -4609,6 +4641,7 @@
         <span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>
       </div>
       ${leadAgeLabel(r) ? `<div class="t-muted lead-age" style="margin:-4px 0 10px">${esc(leadAgeLabel(r))}</div>` : ""}
+      ${leadFollowNote(r)}
       ${r.mobile ? `<div class="lead-tl-contact">${leadContactCell(r)}</div>` : ""}
       <div class="ld-grid">
         ${fText("name", "Name", "Contact name")}
@@ -4825,22 +4858,31 @@
       await ref.put(file, { contentType: file.type || "application/octet-stream" });
       const url = await ref.getDownloadURL();
       leadFiles[id + "#" + Date.now()] = { name: file.name, url, path, size: file.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
-      saveEdits("Attached a file"); if (paint) paint();
+      leadDirty = true; saveEdits("Attached a file"); if (paint) paint();
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
   async function removeLeadFile(key, paint) {
     const rec = leadFiles[key]; delete leadFiles[key];
-    saveEdits("Removed a file"); if (paint) paint();
+    leadDirty = true; saveEdits("Removed a file"); if (paint) paint();
     if (rec && rec.path && storage) { try { await storage.ref().child(rec.path).delete(); } catch (e) {} }
   }
   // Append a timestamped entry to a lead's journey. `kind` marks special events
   // (archive/restore/created); a normal update leaves it blank.
-  function leadAddHistory(id, stage, text, kind) {
+  function leadAddHistory(id, stage, text, kind, act) {
     const l = leadAll().find((x) => x.id === id); if (!l) return;
     const hist = leadHistory(l).slice();
-    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text, kind: kind || "" });
+    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text, kind: kind || "", act: act || "" });
     leadUpdate(id, "history", hist);
   }
+  // Activity types a rep logs against a lead (Casovil MOM). "" = a plain note.
+  const LEAD_ACTS = [
+    { key: "", label: "📝 Note", icon: "📝" },
+    { key: "meeting", label: "🤝 Meeting", icon: "🤝" },
+    { key: "call", label: "📞 Calling", icon: "📞" },
+    { key: "whatsapp", label: "💬 WhatsApp", icon: "💬" },
+    { key: "email", label: "✉️ Email", icon: "✉️" },
+  ];
+  const leadActLabel = (k) => (LEAD_ACTS.find((a) => a.key === (k || "")) || LEAD_ACTS[0]).label;
   // "Add to timeline" popup — always lets you record an update and, in the same
   // step, set the stage (defaults to the current stage). Choosing Sold reveals
   // the deal value + date. Opened from the row stage dropdown or the ＋ button.
@@ -4854,8 +4896,12 @@
     wrap.className = "lead-modal";
     wrap.innerHTML = `<div class="lead-modal-card">
       <h3>Add to timeline — ${esc(l.name || l.company || "lead")}</h3>
+      <label class="lead-remark-label">Activity type
+        <select id="lrAct" class="select">${LEAD_ACTS.map((a) => `<option value="${a.key}">${esc(a.label)}</option>`).join("")}</select></label>
       <label class="lead-remark-label">Update / note
         <textarea id="lrText" rows="3" placeholder="e.g. Called, shared brochure, asked to follow up next week"></textarea></label>
+      <label class="lead-remark-label">🔔 Next follow-up (optional) — set a reminder date
+        <input id="lrFollow" type="date" value="${esc(l.nextFollowUp || "")}"></label>
       ${canMove ? `<label class="lead-remark-label">Stage (leave as current, or move it)
         <select id="lrStage" class="select">${LEAD_STAGES.map((s) => `<option value="${s.key}"${preStage === s.key ? " selected" : ""}>${esc(s.label)}${s.key === curStage ? " · current" : ""}</option>`).join("")}</select></label>
       <div class="lead-form-grid" id="lrSoldBox"${preStage === "sold" ? "" : " hidden"}>
@@ -4891,12 +4937,19 @@
     document.getElementById("lrCancel").onclick = () => { revert(); close(); };
     document.getElementById("lrSave").onclick = () => {
       let text = (document.getElementById("lrText").value || "").trim();
+      const act = (document.getElementById("lrAct") || {}).value || "";
+      const followEl = document.getElementById("lrFollow");
+      const follow = followEl ? (followEl.value || "").trim() : "";
       const chosen = stageSel ? stageSel.value : curStage;
       const moved = chosen !== curStage;
-      // A note is only required when nothing is changing. Moving the stage is a
-      // valid update on its own — auto-note it so the change always saves.
-      if (!text && !moved) { window.alert("Please enter an update / note."); return; }
-      if (!text && moved) text = "Moved to " + (LEAD_STAGE_LABEL[chosen] || chosen);
+      // Setting a follow-up date, logging an activity, or moving the stage each
+      // count as a valid update on their own — a note is only required when
+      // nothing at all is changing.
+      const hasSomething = text || moved || act || (follow !== (l.nextFollowUp || ""));
+      if (!hasSomething) { window.alert("Please enter an update / note, pick an activity, set a follow-up date, or move the stage."); return; }
+      if (!text) text = moved ? ("Moved to " + (LEAD_STAGE_LABEL[chosen] || chosen)) : (act ? leadActLabel(act) : "Follow-up set");
+      // Save / clear the next-follow-up reminder.
+      if (follow !== (l.nextFollowUp || "")) leadUpdate(id, "nextFollowUp", follow);
       if (moved && chosen === "sold") {
         const n = parseFloat(String(document.getElementById("lrAmt").value).replace(/[^0-9.]/g, "")) || 0;
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
@@ -4913,7 +4966,7 @@
         leadUpdate(id, "deliveredDate", (document.getElementById("lrDelivDate").value || "").trim() || leadToday());
       }
       if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
-      leadAddHistory(id, chosen, text);
+      leadAddHistory(id, chosen, text, "", act);
       close(); leadRepaint();
     };
     setTimeout(() => { const t = document.getElementById("lrText"); if (t) t.focus(); }, 0);
@@ -4961,7 +5014,7 @@
       if (srcSel.value !== "__new__") { lastSource = srcSel.value; return; }
       const name = (window.prompt("New lead source name:") || "").trim();
       if (name) {
-        if (!allLeadSources().some((s) => s.toLowerCase() === name.toLowerCase())) { customLeadSources.push(name); saveEdits("Added lead source: " + name); }
+        if (!allLeadSources().some((s) => s.toLowerCase() === name.toLowerCase())) { customLeadSources.push(name); leadDirty = true; saveEdits("Added lead source: " + name); }
         srcSel.innerHTML = allLeadSources().map((s) => `<option${s === name ? " selected" : ""}>${esc(s)}</option>`).join("") + `<option value="__new__">＋ Add new source…</option>`;
         srcSel.value = name; lastSource = name;
       } else { srcSel.value = lastSource; }
@@ -5074,6 +5127,7 @@
         leadAdds.push(Object.assign({ id: "u" + (leadSeq++), stage: m.stage || "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, m));
         added++;
       });
+      leadDirty = true;
       saveEdits("Imported " + added + " leads");
       leadRepaint();
       let msg = "✅ Imported " + added + " new lead" + (added === 1 ? "" : "s") + ".";
@@ -5134,13 +5188,15 @@
       const s = document.getElementById("leadSearch");
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
-      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false }; renderTab("leads"); };
+      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false, follow: false }; renderTab("leads"); };
       const arch = document.getElementById("leadArchBtn");
       if (arch) arch.onclick = () => { leadViewArchived = !leadViewArchived; leadFilter.stage = ""; leadFilter.stuck = false; renderTab("leads"); };
       const mine = document.getElementById("leadMine");
       if (mine) mine.onclick = () => { const me = myLeadOwner(); leadFilter.owner = (leadFilter.owner === me ? "" : me); renderTab("leads"); };
       const stuckB = document.getElementById("leadStuck");
       if (stuckB) stuckB.onclick = () => { leadFilter.stuck = !leadFilter.stuck; renderTab("leads"); };
+      const followB = document.getElementById("leadFollow");
+      if (followB) followB.onclick = () => { leadFilter.follow = !leadFilter.follow; renderTab("leads"); };
       const merge = document.getElementById("leadMerge"); if (merge) merge.onclick = leadMergeDuplicates;
       const addB = document.getElementById("leadAddBtn"); if (addB) addB.onclick = leadAddDialog;
       const fab = document.getElementById("leadFab"); if (fab) fab.onclick = leadAddDialog;
@@ -5151,6 +5207,7 @@
     }, 0);
     const me = myLeadOwner();
     const stuckN = rows0.filter(leadIsStuck).length;
+    const followN = rows0.filter(leadFollowDue).length;
     const sel = (id, cur, values, label) => `<label class="ord-field"><span>${esc(label)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>`;
     return `
       <div class="section-head">
@@ -5170,6 +5227,7 @@
         <label class="ord-field"><span>Stage</span><select id="leadStageSel" class="select"><option value="">All</option>${LEAD_STAGES.map((s) => `<option value="${s.key}"${leadFilter.stage === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
         ${me ? `<button id="leadMine" class="ghost-btn${leadFilter.owner === me ? " active" : ""}" type="button" title="Show only leads assigned to you">👤 My leads</button>` : ""}
         <button id="leadStuck" class="ghost-btn${leadFilter.stuck ? " active" : ""}" type="button" title="Leads sitting over ${LEAD_STUCK_DAYS} days in one stage">⚠ Stuck (${stuckN})</button>
+        <button id="leadFollow" class="ghost-btn${leadFilter.follow ? " active" : ""}" type="button" title="Open leads whose follow-up date is today or overdue">🔔 Follow-ups due (${followN})</button>
         <button id="leadClear" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
           ${admin ? `<button id="leadAddBtn" class="dl-btn" type="button">＋ Add lead</button>` : ""}
@@ -7927,11 +7985,27 @@
         if (serverData.invAdds) wInvAdds = serverData.invAdds;
         if (serverData.invRemovals) wInvRemovals = serverData.invRemovals;
       }
+      // Leads: same protection. If this session never edited leads, write the
+      // SERVER's copy of every lead field back so a save from another area can't
+      // clobber it with our stale snapshot (fixes "leads deleting automatically").
+      let wLeadEdits = leadEdits, wLeadAdds = leadAdds, wLeadRemovals = leadRemovals,
+          wLeadArchive = leadArchive, wLeadFiles = leadFiles,
+          wCustomLeadSources = customLeadSources, wCustomCities = customCities, wCustomLeadOwners = customLeadOwners;
+      if (serverData && !leadDirty) {
+        if (serverData.leadEdits) wLeadEdits = serverData.leadEdits;
+        if (Array.isArray(serverData.leadAdds)) wLeadAdds = serverData.leadAdds;
+        if (Array.isArray(serverData.leadRemovals)) wLeadRemovals = serverData.leadRemovals;
+        if (Array.isArray(serverData.leadArchive)) wLeadArchive = serverData.leadArchive;
+        if (serverData.leadFiles) wLeadFiles = serverData.leadFiles;
+        if (Array.isArray(serverData.customLeadSources)) wCustomLeadSources = serverData.customLeadSources;
+        if (Array.isArray(serverData.customCities)) wCustomCities = serverData.customCities;
+        if (Array.isArray(serverData.customLeadOwners)) wCustomLeadOwners = serverData.customLeadOwners;
+      }
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits, leadAdds, leadRemovals, leadArchive, leadFiles, customLeadSources, customCities, customLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, weeklyTasks: mergedWeekly, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
