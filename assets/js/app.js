@@ -7870,54 +7870,42 @@
     } catch (err) { console.warn("edits read failed", err); }
   }
 
-  // ---- Weekly duties live in their OWN small document (edits/weekly) ----
-  // Keeps them off the big shared doc, so they can't hit its size limit or be
-  // clobbered by saves from other areas. Writes are durable (offline
-  // persistence) and merge per-department.
-  let weeklySaveTimer = null;
-  function saveWeekly(what) {
-    if (!db || !(roleIsAdmin() || hasAnyEditGrant())) return;
-    const desc = String(what == null ? "" : what).slice(0, 120);
-    const by = (sessionUser && sessionUser.email) || "";
-    const at = Date.now();
-    const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
-    const newEntry = { by, at, tab: tabLabel, tabId: currentTab, what: desc };
-    editsLog.unshift(newEntry); if (editsLog.length > 300) editsLog.length = 300;
-    editsUpdatedAt = at; editsUpdatedBy = by;
-    updateLastUpdatedUI(); refreshPageEditNote();
-    clearTimeout(weeklySaveTimer);
-    weeklySaveTimer = setTimeout(async () => {
-      try {
-        const ref = db.collection("edits").doc("weekly");
-        let server = {};
-        try { const s = await ref.get(); server = s.exists ? (s.data() || {}) : {}; } catch (e) {}
-        const srvTasks = (server.tasks && typeof server.tasks === "object") ? server.tasks : {};
-        const merged = JSON.parse(JSON.stringify(weeklyTasks));
-        Object.keys(srvTasks).forEach((d) => { if (!weeklyDirty.has(d)) merged[d] = srvTasks[d]; });
-        const srvLog = Array.isArray(server.log) ? server.log : [];
-        const mLog = [newEntry].concat(srvLog.filter((x) => !(x && x.at === newEntry.at && x.by === newEntry.by && x.what === newEntry.what)));
-        if (mLog.length > 300) mLog.length = 300;
-        await ref.set({ tasks: merged, log: mLog, updatedAt: at, updatedBy: by }, { merge: true });
-        toast("✓ Saved to the database");
-      } catch (e) {
-        const reason = (e && (e.code || e.message)) ? (e.code || e.message) : String(e);
-        console.warn("weekly save failed", e);
-        toast("✕ NOT saved: " + reason, "bad");
-        window.alert("⚠ Weekly duty NOT saved.\n\nExact error: " + reason);
-      }
-    }, 0);
-  }
+  // ---- Weekly duties: single source of truth = the shared edits doc ----
+  // They briefly lived in a separate edits/weekly document, but keeping them in
+  // two places let a stale (or rules-blocked) copy of that doc silently wipe the
+  // good copy on load — the activity log survived because it rides the shared
+  // doc, but the task ROWS vanished. Weekly tasks are tiny, so they now live in
+  // the shared doc like everything else, protected from cross-area clobbering by
+  // the weeklyDirty set (same mechanism as inventory and leads). saveWeekly is a
+  // thin wrapper over saveEdits so every existing call site keeps working.
+  // Callers add their department to weeklyDirty before calling this, so the
+  // shared-doc merge keeps their edits and never clobbers other departments.
+  function saveWeekly(what) { saveEdits(what, true); }
+  // One-time migration + safety net: fold anything still stored only in the old
+  // edits/weekly document into the in-memory tasks WITHOUT ever deleting. Runs
+  // after loadEdits (which already loaded weeklyTasks from the shared doc), so it
+  // can only ADD recovered rows, never wipe what the shared doc provided.
   async function loadWeekly() {
     try {
       const s = await db.collection("edits").doc("weekly").get();
       if (!s.exists) return;
       const d = s.data() || {};
-      if (d.tasks && typeof d.tasks === "object") {
-        Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]);
-        Object.assign(weeklyTasks, d.tasks);
-        const ids = Object.values(weeklyTasks).flatMap((x) => [...((x && x.mandatory) || []), ...((x && x.monthly) || []), ...((x && x.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n));
-        weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1;
-      }
+      const srv = (d.tasks && typeof d.tasks === "object") ? d.tasks : {};
+      Object.keys(srv).forEach((dept) => {
+        const sd = srv[dept] || {};
+        const cur = (weeklyTasks[dept] = weeklyTasks[dept] || { mandatory: [], monthly: [], optional: [] });
+        ["mandatory", "monthly", "optional"].forEach((kind) => {
+          const from = Array.isArray(sd[kind]) ? sd[kind] : [];
+          cur[kind] = Array.isArray(cur[kind]) ? cur[kind] : [];
+          // Shared doc had nothing here → adopt the old doc's rows wholesale;
+          // otherwise only append rows whose id isn't already present.
+          if (!cur[kind].length) { cur[kind] = JSON.parse(JSON.stringify(from)); return; }
+          const have = new Set(cur[kind].map((t) => t && t.id));
+          from.forEach((t) => { if (t && !have.has(t.id)) cur[kind].push(t); });
+        });
+      });
+      const ids = Object.values(weeklyTasks).flatMap((x) => [...((x && x.mandatory) || []), ...((x && x.monthly) || []), ...((x && x.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n));
+      weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1;
       if (Array.isArray(d.log) && d.log.length) {
         const seen = new Set(editsLog.map((e) => e.at + "|" + e.by + "|" + e.what));
         d.log.forEach((e) => { const k = e.at + "|" + e.by + "|" + e.what; if (!seen.has(k)) { seen.add(k); editsLog.push(e); } });
