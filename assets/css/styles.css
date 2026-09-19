@@ -754,6 +754,14 @@ textarea.mk-in { resize: vertical; line-height: 1.45; }
 tr.ind-done td { background: color-mix(in srgb, var(--good) 8%, transparent); }
 tr.ind-done .ind-check span { color: var(--good); }
 @media (max-width: 560px) { .ind-in { min-width: 64px; font-size: 12px; padding: 4px 6px; } }
+/* Attendance & Bigin compliance protocol */
+.att-in { width: 100%; min-width: 120px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 12px; line-height: 1.4; background: var(--surface); color: var(--text); box-sizing: border-box; resize: vertical; }
+.att-in:focus, .att-gin:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.att-area { font-weight: 700; }
+.att-gin { padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 12px; background: var(--surface); color: var(--text); margin: 1px 0; }
+.att-legend { margin: 0; padding-left: 18px; }
+.att-legend li { margin: 4px 0; font-size: 13px; line-height: 1.5; }
+.att-in-note { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 13px; background: var(--surface); color: var(--text); box-sizing: border-box; }
 .pl-toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(16px);
   background: var(--good, #1a7f43); color: #fff; padding: 10px 18px; border-radius: 10px;

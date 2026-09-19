@@ -125,6 +125,7 @@
     { id: "team", label: "Team", group: "HR", render: renderTeam },
     { id: "weeklyHr", label: "Weekly Duties", group: "HR", render: () => renderWeekly("HR") },
     { id: "induction", label: "Induction", group: "HR", render: renderInduction },
+    { id: "attendance", label: "Attendance Protocol", group: "HR", render: renderAttendance },
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
     { id: "weeklyOnline", label: "Online Duties", group: "Marketing", render: () => renderWeekly("Online Marketing") },
@@ -6469,6 +6470,57 @@
     if (rs) rs.onclick = () => { if (!window.confirm("Restore the default induction plan? This replaces the current one for everyone.")) return; induction = JSON.parse(JSON.stringify(INDUCTION_SEED)); indSave("Induction · restored default plan"); go(currentTab); };
   }
 
+  /* ================= HR · ATTENDANCE & BIGIN COMPLIANCE PROTOCOL ================= */
+  // A shared, editable disciplinary/compliance protocol for field attendance and
+  // daily Bigin reporting. Stored as `attendance` in the shared edits doc;
+  // admins/HR can edit any field, add/remove rows and abbreviations.
+  const ATTENDANCE_SEED = window.ATTENDANCE_SEED || { note: "", validNote: "", rows: [], legendNote: "", legend: [] };
+  let attendance = JSON.parse(JSON.stringify(ATTENDANCE_SEED));
+  let attSeq = 100;
+  function attSave(what) { saveEdits(what || "Attendance protocol updated", true); }
+
+  function renderAttendance() {
+    const ed = isAdmin();
+    setTimeout(wireAttendance, 0);
+    const cell = (i, field, val, ph) => ed
+      ? `<td><textarea class="att-in" rows="2" data-i="${i}" data-f="${field}" placeholder="${esc(ph || "")}">${esc(val || "")}</textarea></td>`
+      : `<td>${esc(val || "—")}</td>`;
+    const rows = (attendance.rows || []).map((r, i) => `<tr>
+      <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish att-del" data-i="${i}" title="Remove">✕</button>` : ""}</td>
+      ${ed ? `<td><textarea class="att-in att-area" rows="2" data-i="${i}" data-f="area" placeholder="Compliance area">${esc(r.area || "")}</textarea></td>` : `<td><b>${esc(r.area || "—")}</b></td>`}
+      ${cell(i, "trigger", r.trigger, "Requirement / trigger")}
+      ${cell(i, "action", r.action, "Action / consequence")}
+      ${cell(i, "monitor", r.monitor, "HR / Management monitoring")}
+    </tr>`).join("") || `<tr><td colspan="5" class="empty">No rows yet.${ed ? " Click “Add row”." : ""}</td></tr>`;
+    const head = ["#", "Compliance area", "Requirement / trigger", "Action / consequence", "HR / Management monitoring"].map((x) => `<th>${x}</th>`).join("");
+    const legend = (attendance.legend || []).map((g, i) => `<li>${ed ? `<button type="button" class="linkish att-gdel" data-i="${i}" title="Remove">✕</button> ` : ""}<b>${ed ? `<input class="att-gin" data-i="${i}" data-f="term" value="${esc(g.term || "")}" style="width:90px">` : esc(g.term || "")}</b> — ${ed ? `<input class="att-gin" data-i="${i}" data-f="meaning" value="${esc(g.meaning || "")}" style="width:min(520px,70%)">` : esc(g.meaning || "")}</li>`).join("");
+    return `
+      <div class="section-head"><h1>Attendance &amp; Bigin Reporting — Compliance Protocol</h1>
+        <p>${ed ? `<input class="att-in-note" data-f="note" value="${esc(attendance.note || "")}" style="width:100%">` : esc(attendance.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
+      <div class="callout warn" style="margin:0 0 12px"><b>What is a “valid, acceptable reason”?</b><br>${ed ? `<textarea class="att-in-note" data-f="validNote" rows="3" style="width:100%;margin-top:6px">${esc(attendance.validNote || "")}</textarea>` : esc(attendance.validNote || "")}</div>
+      ${table(head, rows)}
+      ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn" id="attAdd">＋ Add row</button> <button type="button" class="ghost-btn" id="attReset" title="Restore the default protocol">↺ Restore default protocol</button></div>` : ""}
+      <div class="block" style="margin-top:20px">
+        <h2 style="margin:0 0 6px">Abbreviations</h2>
+        <p class="muted-note" style="margin:0 0 8px">${esc(attendance.legendNote || "")}</p>
+        <ul class="att-legend">${legend || `<li class="t-muted">None.</li>`}</ul>
+        ${ed ? `<button type="button" class="ghost-btn att-gadd" style="margin-top:6px">＋ Add abbreviation</button>` : ""}
+      </div>`;
+  }
+  function wireAttendance() {
+    document.querySelectorAll(".att-in-note").forEach((el) => (el.onchange = () => { attendance[el.dataset.f] = el.value; attSave("Attendance protocol note"); }));
+    document.querySelectorAll(".att-in").forEach((el) => (el.onchange = () => { const r = attendance.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); attSave("Attendance protocol · " + (r.area || "")); } }));
+    document.querySelectorAll(".att-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this row?")) return; attendance.rows.splice(+b.dataset.i, 1); attSave("Attendance row removed"); go(currentTab); }));
+    const add = document.getElementById("attAdd");
+    if (add) add.onclick = () => { (attendance.rows = attendance.rows || []).push({ id: "a" + (attSeq++), area: "", trigger: "", action: "", monitor: "" }); attSave("Attendance row added"); go(currentTab); };
+    document.querySelectorAll(".att-gin").forEach((el) => (el.onchange = () => { const g = attendance.legend[+el.dataset.i]; if (g) { g[el.dataset.f] = el.value.trim(); attSave("Attendance legend"); } }));
+    document.querySelectorAll(".att-gdel").forEach((b) => (b.onclick = () => { attendance.legend.splice(+b.dataset.i, 1); attSave("Attendance legend removed"); go(currentTab); }));
+    const gadd = document.querySelector(".att-gadd");
+    if (gadd) gadd.onclick = () => { (attendance.legend = attendance.legend || []).push({ id: "g" + (attSeq++), term: "", meaning: "" }); attSave("Attendance legend added"); go(currentTab); };
+    const rs = document.getElementById("attReset");
+    if (rs) rs.onclick = () => { if (!window.confirm("Restore the default protocol? This replaces the current one for everyone.")) return; attendance = JSON.parse(JSON.stringify(ATTENDANCE_SEED)); attSave("Attendance · restored default"); go(currentTab); };
+  }
+
   function renderChallan() {
     setTimeout(initChallanUI, 0);
     return `
@@ -7801,6 +7853,7 @@
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
       if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
+      if (e.attendance && typeof e.attendance === "object" && Array.isArray(e.attendance.rows)) { attendance = e.attendance; const aids = (attendance.rows || []).concat(attendance.legend || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); attSeq = Math.max(attSeq, ...(aids.length ? aids : [0])) + 1; }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
@@ -8033,7 +8086,7 @@
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
