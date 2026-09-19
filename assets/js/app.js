@@ -6375,6 +6375,76 @@
   }
 
   /* ================= HR · NEW-JOINEE INDUCTION / ONBOARDING ================= */
+
+  // ---- Print a document to PDF (no library — uses the browser's print/Save-as-PDF
+  // via a hidden iframe, so no pop-up is needed). The document <title> becomes the
+  // default PDF file name. Content is built from the live data, formatted cleanly.
+  const PRINT_CSS = `
+    * { box-sizing: border-box; }
+    body { font: 12px/1.5 -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #1a1a1a; margin: 28px; }
+    .doc-head { border-bottom: 3px solid #C1272D; padding-bottom: 10px; margin-bottom: 16px; }
+    .doc-brand { color: #C1272D; font-weight: 800; font-size: 20px; }
+    .doc-brand sup { font-size: 10px; }
+    .doc-title { font-size: 17px; font-weight: 800; margin: 4px 0 2px; }
+    .doc-sub { color: #666; font-size: 11px; }
+    h2 { font-size: 14px; margin: 18px 0 4px; color: #222; }
+    p.note { font-size: 12px; color: #333; margin: 6px 0 12px; }
+    p.sub { color: #666; font-size: 11px; margin: 0 0 6px; }
+    .callout { border: 1px solid #e5b800; background: #fff8e1; border-radius: 6px; padding: 8px 10px; margin: 6px 0 12px; font-size: 11.5px; }
+    table { width: 100%; border-collapse: collapse; margin: 4px 0 10px; }
+    th, td { border: 1px solid #ccc; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #f3f3f5; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
+    td:first-child, th:first-child { width: 26px; text-align: center; color: #666; }
+    ul { margin: 4px 0; padding-left: 18px; }
+    li { margin: 3px 0; }
+    .doc-foot { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 8px; color: #999; font-size: 10px; }
+    @media print { body { margin: 0; } tr { break-inside: avoid; } h2 { break-after: avoid; } }
+  `;
+  function printDoc(fileTitle, headingHtml, bodyHtml) {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    document.body.appendChild(iframe);
+    const stamp = new Date().toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(fileTitle)}</title><style>${PRINT_CSS}</style></head><body>
+      <div class="doc-head">
+        <div class="doc-brand">Primelaze<sup>®</sup></div>
+        <div class="doc-title">${headingHtml}</div>
+        <div class="doc-sub">Primelaze Unified Dashboard · generated ${esc(stamp)}</div>
+      </div>
+      ${bodyHtml}
+      <div class="doc-foot">Primelaze — internal document. Printed from the Unified Dashboard.</div>
+    </body></html>`);
+    doc.close();
+    const cleanup = () => { try { iframe.remove(); } catch (e) {} };
+    try { iframe.contentWindow.onafterprint = cleanup; } catch (e) {}
+    setTimeout(() => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch (e) { cleanup(); window.alert("Could not open the print dialog. Please try again."); }
+      setTimeout(cleanup, 60000); // safety net
+    }, 300);
+  }
+  // Build the printable body for the induction plan (from live data).
+  function inductionPrintBody() {
+    const phases = (induction.phases || []).map((ph) => {
+      const rows = (ph.items || []).map((it, i) => `<tr><td>${i + 1}</td><td>${esc(it.activity || "")}</td><td>${esc(it.resp || "")}</td><td>${esc(it.spoc || "")}</td><td>${esc(it.when || "")}</td><td>${esc(it.remark || "")}</td></tr>`).join("");
+      return `<h2>${esc(ph.title || "")}</h2>${ph.subtitle ? `<p class="sub">${esc(ph.subtitle)}</p>` : ""}<table><thead><tr><th>#</th><th>Induction activity</th><th>Responsibility</th><th>SPOC</th><th>When</th><th>Remarks</th></tr></thead><tbody>${rows || `<tr><td colspan="6">—</td></tr>`}</tbody></table>`;
+    }).join("");
+    const flowRows = (induction.flow || []).map((f, i) => `<tr><td>${i + 1}</td><td>${esc(f.when || "")}</td><td>${esc(f.from || "")}</td><td>${esc(f.to || "")}</td><td>${esc(f.what || "")}</td></tr>`).join("");
+    const flow = flowRows ? `<h2>Communication &amp; hand-off flow</h2>${induction.flowNote ? `<p class="sub">${esc(induction.flowNote)}</p>` : ""}<table><thead><tr><th>#</th><th>When / trigger</th><th>From (informs)</th><th>To (informed)</th><th>What to share / action</th></tr></thead><tbody>${flowRows}</tbody></table>` : "";
+    return `${induction.note ? `<p class="note">${esc(induction.note)}</p>` : ""}${phases}${flow}`;
+  }
+  // Build the printable body for the attendance & Bigin compliance protocol.
+  function attendancePrintBody() {
+    const rows = (attendance.rows || []).map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.area || "")}</b></td><td>${esc(r.trigger || "")}</td><td>${esc(r.action || "")}</td><td>${esc(r.monitor || "")}</td></tr>`).join("");
+    const legend = (attendance.legend || []).map((g) => `<li><b>${esc(g.term || "")}</b> — ${esc(g.meaning || "")}</li>`).join("");
+    return `${attendance.note ? `<p class="note">${esc(attendance.note)}</p>` : ""}
+      ${attendance.validNote ? `<div class="callout"><b>What is a “valid, acceptable reason”?</b><br>${esc(attendance.validNote)}</div>` : ""}
+      <table><thead><tr><th>#</th><th>Compliance area</th><th>Requirement / trigger</th><th>Action / consequence</th><th>HR / Management monitoring</th></tr></thead><tbody>${rows}</tbody></table>
+      ${legend ? `<h2>Abbreviations</h2>${attendance.legendNote ? `<p class="sub">${esc(attendance.legendNote)}</p>` : ""}<ul>${legend}</ul>` : ""}`;
+  }
+
   // A shared, editable onboarding checklist organised into phases. The live copy
   // is stored in the edits doc (induction); admins/HR can tick items done, edit
   // any field, add/remove rows and phases.
@@ -6425,6 +6495,7 @@
     return `
       <div class="section-head"><h1>New-Joinee Induction &amp; Onboarding</h1>
         <p>${ed ? `<input class="ind-in" data-f="note" value="${esc(induction.note || "")}" style="width:100%">` : esc(induction.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
+      <div class="hq-actions" style="margin:0 0 6px"><button type="button" class="ghost-btn" id="indPdf">⬇ Download PDF</button></div>
       ${phaseBlocks}
       ${flowBlock}
       ${ed ? `<div style="margin-top:18px"><button type="button" class="ghost-btn" id="indAddPhase">＋ Add phase</button> <button type="button" class="ghost-btn" id="indReset" title="Restore the default plan">↺ Restore default plan</button></div>` : ""}`;
@@ -6432,6 +6503,8 @@
 
   function indSave(what) { saveEdits(what || "Induction updated", true); }
   function wireInduction() {
+    const pdf = document.getElementById("indPdf");
+    if (pdf) pdf.onclick = () => printDoc("Primelaze — Induction & Onboarding Plan", "New-Joinee Induction &amp; Onboarding Plan", inductionPrintBody());
     document.querySelectorAll(".ind-fin").forEach((el) => (el.onchange = () => {
       const f = induction.flow && induction.flow[+el.dataset.i]; if (f) { f[el.dataset.f] = el.value.trim(); indSave("Induction hand-off"); }
     }));
@@ -6497,6 +6570,7 @@
     return `
       <div class="section-head"><h1>Attendance &amp; Bigin Reporting — Compliance Protocol</h1>
         <p>${ed ? `<input class="att-in-note" data-f="note" value="${esc(attendance.note || "")}" style="width:100%">` : esc(attendance.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
+      <div class="hq-actions" style="margin:0 0 8px"><button type="button" class="ghost-btn" id="attPdf">⬇ Download PDF</button></div>
       <div class="callout warn" style="margin:0 0 12px"><b>What is a “valid, acceptable reason”?</b><br>${ed ? `<textarea class="att-in-note" data-f="validNote" rows="3" style="width:100%;margin-top:6px">${esc(attendance.validNote || "")}</textarea>` : esc(attendance.validNote || "")}</div>
       ${table(head, rows)}
       ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn" id="attAdd">＋ Add row</button> <button type="button" class="ghost-btn" id="attReset" title="Restore the default protocol">↺ Restore default protocol</button></div>` : ""}
@@ -6508,6 +6582,8 @@
       </div>`;
   }
   function wireAttendance() {
+    const pdf = document.getElementById("attPdf");
+    if (pdf) pdf.onclick = () => printDoc("Primelaze — Attendance & Bigin Compliance Protocol", "Attendance &amp; Bigin Reporting — Compliance Protocol", attendancePrintBody());
     document.querySelectorAll(".att-in-note").forEach((el) => (el.onchange = () => { attendance[el.dataset.f] = el.value; attSave("Attendance protocol note"); }));
     document.querySelectorAll(".att-in").forEach((el) => (el.onchange = () => { const r = attendance.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); attSave("Attendance protocol · " + (r.area || "")); } }));
     document.querySelectorAll(".att-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this row?")) return; attendance.rows.splice(+b.dataset.i, 1); attSave("Attendance row removed"); go(currentTab); }));
