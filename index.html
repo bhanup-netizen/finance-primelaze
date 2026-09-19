@@ -6,7 +6,7 @@
   <meta name="description" content="Primelaze Unified Dashboard — FY 2026-27 sales targets, team roster, incentive plans, price book and Esthemax market pricing." />
   <title>Primelaze Unified Dashboard · FY 2026-27</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23C1272D'/%3E%3Ctext x='50' y='68' font-size='58' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="assets/css/styles.css?v=20260731-79" />
+  <link rel="stylesheet" href="assets/css/styles.css?v=20260731-80" />
 </head>
 <body>
   <!-- Login gate: the dashboard data stays AES-256-GCM encrypted until the
@@ -39,7 +39,7 @@
       <span class="brand-logo">Primelaze<sup>®</sup></span>
       <div class="brand-text">
         <strong>Unified Dashboard</strong>
-        <span>We rise by our service</span>
+        <span>We rise by our service <span class="app-ver" id="appVer" title="App version — check this matches the latest after a refresh"></span></span>
       </div>
     </div>
     <div class="topbar-meta">
@@ -60,6 +60,7 @@
 
   <footer class="footer">
     <span>Primelaze Unified Dashboard</span>
+    <span class="app-ver" id="appVerFoot"></span>
     <span class="dot" id="luDot" hidden>•</span>
     <span id="lastUpdated"></span>
   </footer>
@@ -87,5 +88,20 @@
   <!-- New-joinee induction / onboarding plan (HR › Induction tab). -->
   <script src="assets/js/induction.seed.js?v=20260731-2"></script>
   <script src="assets/js/app.js?v=20260731-241"></script>
+  <!-- Show the loaded app.js version in the header & footer so anyone can
+       confirm they're on the latest build after a refresh (cache check). -->
+  <script>
+    (function () {
+      try {
+        var s = document.querySelector('script[src*="assets/js/app.js"]');
+        var m = s && s.src.match(/[?&]v=([^&"']+)/);
+        var ver = m ? ("v" + m[1].split("-").pop()) : "";
+        ["appVer", "appVerFoot"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.textContent = ver;
+        });
+      } catch (e) {}
+    })();
+  </script>
 </body>
 </html>
