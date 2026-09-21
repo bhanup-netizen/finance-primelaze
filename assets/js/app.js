@@ -6435,13 +6435,17 @@
     const flow = flowRows ? `<h2>Communication &amp; hand-off flow</h2>${induction.flowNote ? `<p class="sub">${esc(induction.flowNote)}</p>` : ""}<table><thead><tr><th>#</th><th>When / trigger</th><th>From (informs)</th><th>To (informed)</th><th>What to share / action</th></tr></thead><tbody>${flowRows}</tbody></table>` : "";
     return `${induction.note ? `<p class="note">${esc(induction.note)}</p>` : ""}${phases}${flow}`;
   }
-  // Build the printable body for the attendance & Bigin compliance protocol.
+  // Build the printable body for the attendance & reporting compliance protocol.
   function attendancePrintBody() {
-    const rows = (attendance.rows || []).map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.area || "")}</b></td><td>${esc(r.trigger || "")}</td><td>${esc(r.action || "")}</td><td>${esc(r.monitor || "")}</td></tr>`).join("");
+    const secHead = `<tr><th>#</th><th>Compliance area</th><th>Requirement / trigger</th><th>Action / consequence</th><th>Owner (single point)</th></tr>`;
+    const sections = (attendance.sections || []).map((sec) => {
+      const rows = (sec.rows || []).map((r, i) => `<tr><td>${i + 1}</td><td><b>${esc(r.area || "")}</b></td><td>${esc(r.trigger || "")}</td><td>${esc(r.action || "")}</td><td><b>${esc(r.owner || "")}</b></td></tr>`).join("");
+      return `<h2>${esc(sec.title || "")}</h2>${sec.subtitle ? `<p class="sub">${esc(sec.subtitle)}</p>` : ""}<table><thead>${secHead}</thead><tbody>${rows || `<tr><td colspan="5">—</td></tr>`}</tbody></table>`;
+    }).join("");
     const legend = (attendance.legend || []).map((g) => `<li><b>${esc(g.term || "")}</b> — ${esc(g.meaning || "")}</li>`).join("");
     return `${attendance.note ? `<p class="note">${esc(attendance.note)}</p>` : ""}
       ${attendance.validNote ? `<div class="callout"><b>What is a “valid, acceptable reason”?</b><br>${esc(attendance.validNote)}</div>` : ""}
-      <table><thead><tr><th>#</th><th>Compliance area</th><th>Requirement / trigger</th><th>Action / consequence</th><th>HR / Management monitoring</th></tr></thead><tbody>${rows}</tbody></table>
+      ${sections}
       ${legend ? `<h2>Abbreviations</h2>${attendance.legendNote ? `<p class="sub">${esc(attendance.legendNote)}</p>` : ""}<ul>${legend}</ul>` : ""}`;
   }
 
@@ -6555,25 +6559,34 @@
   function renderAttendance() {
     const ed = isAdmin();
     setTimeout(wireAttendance, 0);
-    const cell = (i, field, val, ph) => ed
-      ? `<td><textarea class="att-in" rows="2" data-i="${i}" data-f="${field}" placeholder="${esc(ph || "")}">${esc(val || "")}</textarea></td>`
+    const head = ["#", "Compliance area", "Requirement / trigger", "Action / consequence", "Owner (single point)"].map((x) => `<th>${x}</th>`).join("");
+    const cell = (s, i, field, val, ph) => ed
+      ? `<td><textarea class="att-in" rows="2" data-s="${s}" data-i="${i}" data-f="${field}" placeholder="${esc(ph || "")}">${esc(val || "")}</textarea></td>`
       : `<td>${esc(val || "—")}</td>`;
-    const rows = (attendance.rows || []).map((r, i) => `<tr>
-      <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish att-del" data-i="${i}" title="Remove">✕</button>` : ""}</td>
-      ${ed ? `<td><textarea class="att-in att-area" rows="2" data-i="${i}" data-f="area" placeholder="Compliance area">${esc(r.area || "")}</textarea></td>` : `<td><b>${esc(r.area || "—")}</b></td>`}
-      ${cell(i, "trigger", r.trigger, "Requirement / trigger")}
-      ${cell(i, "action", r.action, "Action / consequence")}
-      ${cell(i, "monitor", r.monitor, "HR / Management monitoring")}
-    </tr>`).join("") || `<tr><td colspan="5" class="empty">No rows yet.${ed ? " Click “Add row”." : ""}</td></tr>`;
-    const head = ["#", "Compliance area", "Requirement / trigger", "Action / consequence", "HR / Management monitoring"].map((x) => `<th>${x}</th>`).join("");
+    const sectionBlock = (sec, s) => {
+      const rows = (sec.rows || []).map((r, i) => `<tr>
+        <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish att-del" data-s="${s}" data-i="${i}" title="Remove">✕</button>` : ""}</td>
+        ${ed ? `<td><textarea class="att-in att-area" rows="2" data-s="${s}" data-i="${i}" data-f="area" placeholder="Compliance area">${esc(r.area || "")}</textarea></td>` : `<td><b>${esc(r.area || "—")}</b></td>`}
+        ${cell(s, i, "trigger", r.trigger, "Requirement / trigger")}
+        ${cell(s, i, "action", r.action, "Action / consequence")}
+        ${ed ? `<td><input class="att-in att-owner" data-s="${s}" data-i="${i}" data-f="owner" value="${esc(r.owner || "")}" placeholder="One person" style="min-width:110px"></td>` : `<td><b>${esc(r.owner || "—")}</b></td>`}
+      </tr>`).join("") || `<tr><td colspan="5" class="empty">No rows yet.${ed ? " Click “Add row”." : ""}</td></tr>`;
+      return `<div class="block att-section" style="margin-top:18px">
+        <h2 style="margin:0 0 2px">${ed ? `<input class="att-sec" data-s="${s}" data-f="title" value="${esc(sec.title || "")}" style="width:100%;font-size:16px;font-weight:700">` : esc(sec.title || "")}</h2>
+        <p class="muted-note" style="margin:0 0 8px">${ed ? `<input class="att-sec" data-s="${s}" data-f="subtitle" value="${esc(sec.subtitle || "")}" style="width:100%">` : esc(sec.subtitle || "")}</p>
+        ${table(head, rows)}
+        ${ed ? `<div class="hq-actions" style="margin-top:8px"><button type="button" class="dl-btn att-add" data-s="${s}">＋ Add row</button></div>` : ""}
+      </div>`;
+    };
+    const sections = (attendance.sections || []).map(sectionBlock).join("");
     const legend = (attendance.legend || []).map((g, i) => `<li>${ed ? `<button type="button" class="linkish att-gdel" data-i="${i}" title="Remove">✕</button> ` : ""}<b>${ed ? `<input class="att-gin" data-i="${i}" data-f="term" value="${esc(g.term || "")}" style="width:90px">` : esc(g.term || "")}</b> — ${ed ? `<input class="att-gin" data-i="${i}" data-f="meaning" value="${esc(g.meaning || "")}" style="width:min(520px,70%)">` : esc(g.meaning || "")}</li>`).join("");
     return `
-      <div class="section-head"><h1>Attendance &amp; Bigin Reporting — Compliance Protocol</h1>
+      <div class="section-head"><h1>Attendance &amp; Reporting — Compliance Protocol</h1>
         <p>${ed ? `<input class="att-in-note" data-f="note" value="${esc(attendance.note || "")}" style="width:100%">` : esc(attendance.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
       <div class="hq-actions" style="margin:0 0 8px"><button type="button" class="ghost-btn" id="attPdf">⬇ Download PDF</button></div>
       <div class="callout warn" style="margin:0 0 12px"><b>What is a “valid, acceptable reason”?</b><br>${ed ? `<textarea class="att-in-note" data-f="validNote" rows="3" style="width:100%;margin-top:6px">${esc(attendance.validNote || "")}</textarea>` : esc(attendance.validNote || "")}</div>
-      ${table(head, rows)}
-      ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn" id="attAdd">＋ Add row</button> <button type="button" class="ghost-btn" id="attReset" title="Restore the default protocol">↺ Restore default protocol</button></div>` : ""}
+      ${sections}
+      ${ed ? `<div class="hq-actions" style="margin-top:12px"><button type="button" class="ghost-btn" id="attReset" title="Restore the default protocol">↺ Restore default protocol</button></div>` : ""}
       <div class="block" style="margin-top:20px">
         <h2 style="margin:0 0 6px">Abbreviations</h2>
         <p class="muted-note" style="margin:0 0 8px">${esc(attendance.legendNote || "")}</p>
@@ -6583,12 +6596,12 @@
   }
   function wireAttendance() {
     const pdf = document.getElementById("attPdf");
-    if (pdf) pdf.onclick = () => printDoc("Primelaze — Attendance & Bigin Compliance Protocol", "Attendance &amp; Bigin Reporting — Compliance Protocol", attendancePrintBody());
+    if (pdf) pdf.onclick = () => printDoc("Primelaze — Attendance & Reporting Protocol", "Attendance &amp; Reporting — Compliance Protocol", attendancePrintBody());
     document.querySelectorAll(".att-in-note").forEach((el) => (el.onchange = () => { attendance[el.dataset.f] = el.value; attSave("Attendance protocol note"); }));
-    document.querySelectorAll(".att-in").forEach((el) => (el.onchange = () => { const r = attendance.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); attSave("Attendance protocol · " + (r.area || "")); } }));
-    document.querySelectorAll(".att-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this row?")) return; attendance.rows.splice(+b.dataset.i, 1); attSave("Attendance row removed"); go(currentTab); }));
-    const add = document.getElementById("attAdd");
-    if (add) add.onclick = () => { (attendance.rows = attendance.rows || []).push({ id: "a" + (attSeq++), area: "", trigger: "", action: "", monitor: "" }); attSave("Attendance row added"); go(currentTab); };
+    document.querySelectorAll(".att-sec").forEach((el) => (el.onchange = () => { const sec = (attendance.sections || [])[+el.dataset.s]; if (sec) { sec[el.dataset.f] = el.value.trim(); attSave("Attendance section · " + (sec.title || "")); } }));
+    document.querySelectorAll(".att-in").forEach((el) => (el.onchange = () => { const sec = (attendance.sections || [])[+el.dataset.s]; const r = sec && sec.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); attSave("Attendance · " + (r.area || "")); } }));
+    document.querySelectorAll(".att-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this row?")) return; const sec = (attendance.sections || [])[+b.dataset.s]; if (sec) { sec.rows.splice(+b.dataset.i, 1); attSave("Attendance row removed"); go(currentTab); } }));
+    document.querySelectorAll(".att-add").forEach((b) => (b.onclick = () => { const sec = (attendance.sections || [])[+b.dataset.s]; if (sec) { (sec.rows = sec.rows || []).push({ id: "r" + (attSeq++), area: "", trigger: "", action: "", owner: "" }); attSave("Attendance row added"); go(currentTab); } }));
     document.querySelectorAll(".att-gin").forEach((el) => (el.onchange = () => { const g = attendance.legend[+el.dataset.i]; if (g) { g[el.dataset.f] = el.value.trim(); attSave("Attendance legend"); } }));
     document.querySelectorAll(".att-gdel").forEach((b) => (b.onclick = () => { attendance.legend.splice(+b.dataset.i, 1); attSave("Attendance legend removed"); go(currentTab); }));
     const gadd = document.querySelector(".att-gadd");
@@ -7929,7 +7942,16 @@
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
       if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
-      if (e.attendance && typeof e.attendance === "object" && Array.isArray(e.attendance.rows)) { attendance = e.attendance; const aids = (attendance.rows || []).concat(attendance.legend || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); attSeq = Math.max(attSeq, ...(aids.length ? aids : [0])) + 1; }
+      if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
+        attendance = e.attendance;
+        // Migrate the earlier flat {rows:[…]} shape into a single section.
+        if (!Array.isArray(attendance.sections)) {
+          attendance.sections = [{ id: "field", title: "Field / Sales staff — reporting in BIGIN", subtitle: "", rows: (attendance.rows || []).map((r) => ({ id: r.id, area: r.area, trigger: r.trigger, action: r.action, owner: r.owner || r.monitor || "" })) }];
+        }
+        delete attendance.rows;
+        const aids = (attendance.sections || []).flatMap((s) => (s.rows || [])).concat(attendance.legend || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n));
+        attSeq = Math.max(attSeq, ...(aids.length ? aids : [0])) + 1;
+      }
       if (e.regAdds && typeof e.regAdds === "object") { ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((k) => { if (Array.isArray(e.regAdds[k])) regAdds[k] = e.regAdds[k]; }); }
       if (Array.isArray(e.regMoved)) { regMoved.length = 0; e.regMoved.forEach((x) => regMoved.push(x)); }
       if (typeof e.seedVersion === "number") seedVersion = e.seedVersion;
