@@ -762,6 +762,11 @@ tr.ind-done .ind-check span { color: var(--good); }
 .att-legend { margin: 0; padding-left: 18px; }
 .att-legend li { margin: 4px 0; font-size: 13px; line-height: 1.5; }
 .att-in-note { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 13px; background: var(--surface); color: var(--text); box-sizing: border-box; }
+/* Marketing coverage matrix */
+.cov-in, .cov-note { width: 100%; min-width: 90px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 12px; background: var(--surface); color: var(--text); box-sizing: border-box; }
+.cov-in:focus, .cov-note:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.cov-in.cov-empty { border-color: var(--warn, #d97706); background: color-mix(in srgb, var(--warn, #d97706) 8%, transparent); }
+.cov-need { color: var(--warn, #d97706); font-weight: 700; font-size: 11px; }
 .pl-toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(16px);
   background: var(--good, #1a7f43); color: #fff; padding: 10px 18px; border-radius: 10px;

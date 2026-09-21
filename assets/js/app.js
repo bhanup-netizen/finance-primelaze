@@ -128,6 +128,7 @@
     { id: "attendance", label: "Attendance Protocol", group: "HR", render: renderAttendance },
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
+    { id: "coverage", label: "Coverage Matrix", group: "Marketing", render: renderCoverage },
     { id: "weeklyOnline", label: "Online Duties", group: "Marketing", render: () => renderWeekly("Online Marketing") },
     { id: "offline", label: "Offline Marketing", group: "Marketing", render: renderOffline },
     { id: "weeklyOffline", label: "Offline Duties", group: "Marketing", render: () => renderWeekly("Offline Marketing") },
@@ -6610,6 +6611,47 @@
     if (rs) rs.onclick = () => { if (!window.confirm("Restore the default protocol? This replaces the current one for everyone.")) return; attendance = JSON.parse(JSON.stringify(ATTENDANCE_SEED)); attSave("Attendance · restored default"); go(currentTab); };
   }
 
+  /* ================= MARKETING · COVERAGE MATRIX ================= */
+  // Who owns which channel (social / WhatsApp / phone / email / enquiries) and
+  // who is the BACKUP when the owner is on leave. Stored as `coverage` in the
+  // shared edits doc; editable by admins and Marketing page-editors.
+  const COVERAGE_SEED = window.COVERAGE_SEED || { note: "", rows: [] };
+  let coverage = JSON.parse(JSON.stringify(COVERAGE_SEED));
+  let covSeq = 100;
+  function covSave(what) { saveEdits(what || "Coverage matrix updated", true); }
+  function renderCoverage() {
+    const ed = isAdmin() || canEditPage("coverage");
+    setTimeout(wireCoverage, 0);
+    const head = ["#", "Channel", "Account / number", "Primary owner", "Backup (if on leave)", "Notes"].map((x) => `<th>${x}</th>`).join("");
+    const field = (i, f, val, ph, extra) => ed
+      ? `<td><input class="cov-in ${extra || ""}" data-i="${i}" data-f="${f}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
+      : `<td>${esc(val || "—")}</td>`;
+    const rows = (coverage.rows || []).map((r, i) => `<tr>
+      <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish cov-del" data-i="${i}" title="Remove">✕</button>` : ""}</td>
+      ${ed ? field(i, "channel", r.channel, "Channel") : `<td><b>${esc(r.channel || "—")}</b></td>`}
+      ${field(i, "account", r.account, "Account / number")}
+      ${ed ? field(i, "primary", r.primary, "Primary owner") : `<td><b>${esc(r.primary || "—")}</b></td>`}
+      ${ed ? `<td><input class="cov-in cov-backup${(r.backup || "").trim() ? "" : " cov-empty"}" data-i="${i}" data-f="backup" value="${esc(r.backup || "")}" placeholder="⚠ set backup"></td>` : `<td>${(r.backup || "").trim() ? `<b>${esc(r.backup)}</b>` : `<span class="cov-need">⚠ not set</span>`}</td>`}
+      ${field(i, "notes", r.notes, "Notes")}
+    </tr>`).join("") || `<tr><td colspan="6" class="empty">No rows yet.${ed ? " Click “Add row”." : ""}</td></tr>`;
+    const missing = (coverage.rows || []).filter((r) => !(r.backup || "").trim()).length;
+    return `
+      <div class="section-head"><h1>Marketing — Coverage Matrix</h1>
+        <p>${ed ? `<input class="cov-note" data-f="note" value="${esc(coverage.note || "")}" style="width:100%">` : esc(coverage.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
+      ${missing ? `<div class="callout warn" style="margin:0 0 12px">⚠ <b>${missing}</b> channel${missing === 1 ? "" : "s"} still ha${missing === 1 ? "s" : "ve"} no backup assigned. Fill the <b>Backup</b> column so every channel is covered when the owner is on leave.</div>` : ""}
+      ${table(head, rows)}
+      ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn" id="covAdd">＋ Add row</button> <button type="button" class="ghost-btn" id="covReset" title="Restore the default matrix">↺ Restore default</button></div>` : ""}`;
+  }
+  function wireCoverage() {
+    document.querySelectorAll(".cov-note").forEach((el) => (el.onchange = () => { coverage[el.dataset.f] = el.value; covSave("Coverage note"); }));
+    document.querySelectorAll(".cov-in").forEach((el) => (el.onchange = () => { const r = coverage.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); covSave("Coverage · " + (r.channel || "")); if (el.dataset.f === "backup") go(currentTab); } }));
+    document.querySelectorAll(".cov-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this row?")) return; coverage.rows.splice(+b.dataset.i, 1); covSave("Coverage row removed"); go(currentTab); }));
+    const add = document.getElementById("covAdd");
+    if (add) add.onclick = () => { (coverage.rows = coverage.rows || []).push({ id: "c" + (covSeq++), channel: "", account: "", primary: "", backup: "", notes: "" }); covSave("Coverage row added"); go(currentTab); };
+    const rs = document.getElementById("covReset");
+    if (rs) rs.onclick = () => { if (!window.confirm("Restore the default coverage matrix? This replaces the current one for everyone.")) return; coverage = JSON.parse(JSON.stringify(COVERAGE_SEED)); covSave("Coverage · restored default"); go(currentTab); };
+  }
+
   function renderChallan() {
     setTimeout(initChallanUI, 0);
     return `
@@ -7942,6 +7984,7 @@
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
       if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
+      if (e.coverage && typeof e.coverage === "object" && Array.isArray(e.coverage.rows)) { coverage = e.coverage; const cids = (coverage.rows || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); covSeq = Math.max(covSeq, ...(cids.length ? cids : [0])) + 1; }
       if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.
@@ -8184,7 +8227,7 @@
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
