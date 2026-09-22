@@ -17,6 +17,7 @@
   let perms = { pages: "all", hqs: "all", landing: false, managerInc: false, editPages: [] };
   let sessionUser = null;               // firebase.User
   let auth = null, db = null, storage = null; // firebase handles
+  let authPersistReady = Promise.resolve(); // resolves once auth persistence is applied
 
   // Super Admin can view & edit everything AND manage users (Admin tab).
   // Plain Admin edits every content page but cannot manage users.
@@ -7850,9 +7851,16 @@
     try {
       if (!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
       auth = firebase.auth();
-      // Keep users signed in across refreshes by default. The login form's
-      // "Keep me signed in" box can downgrade this to SESSION (per browser tab).
-      try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) {}
+      // Keep users signed in across refreshes. Persistence is applied from the
+      // saved preference (LOCAL by default; SESSION if they unchecked "keep me
+      // signed in"), and we AWAIT it (authPersistReady) before attaching the
+      // auth-state listener — so the persisted session is restored before we
+      // ever decide the user is signed out. Not awaiting this was racy.
+      let rememberPref = true;
+      try { rememberPref = localStorage.getItem("pl-remember") !== "0"; } catch (e) {}
+      try {
+        authPersistReady = auth.setPersistence(firebase.auth.Auth.Persistence[rememberPref ? "LOCAL" : "SESSION"]).catch((e) => { console.warn("setPersistence failed", e); });
+      } catch (e) { authPersistReady = Promise.resolve(); }
       db = firebase.firestore();
       // Offline persistence: durably queue writes in IndexedDB so a change made
       // just before a refresh still completes after reload (instead of being
@@ -8431,12 +8439,16 @@
         errEl.textContent = authErr(err);
       } finally { forgot.disabled = false; }
     };
+    // Attach the auth-state listener only AFTER persistence is applied, so a
+    // persisted "keep me signed in" session is restored before we can wrongly
+    // conclude the user is signed out.
+    authPersistReady.then(() => {
     auth.onAuthStateChanged(async (user) => {
       if (!user) {
         showLogin();
         // Diagnostic: if the user asked to stay signed in but arrived with no
-        // session, the browser is almost certainly not keeping Firebase's
-        // storage. Tell them precisely, and whether storage is the problem.
+        // session, find out WHY — is the login token missing from this browser
+        // (storage was cleared) or present-but-not-restored (revoked/expired)?
         try {
           if (localStorage.getItem("pl-remember") === "1") {
             let lsOk = true;
@@ -8451,11 +8463,35 @@
                 setTimeout(() => { if (idbWrite === "unknown") { idbWrite = "timeout"; res(); } }, 1500);
               });
             } catch (e) { idbWrite = "error"; }
+            // Read Firebase's OWN auth store to see if a login token is actually saved.
+            let tokenState = "unknown";
+            try {
+              tokenState = await new Promise((res) => {
+                let done = false; const finish = (v) => { if (!done) { done = true; res(v); } };
+                setTimeout(() => finish("timeout"), 1500);
+                const req = window.indexedDB.open("firebaseLocalStorageDb");
+                req.onerror = () => finish("db-error");
+                req.onsuccess = () => {
+                  try {
+                    const dbx = req.result;
+                    if (!dbx.objectStoreNames.contains("firebaseLocalStorage")) { dbx.close(); return finish("no-token"); }
+                    const store = dbx.transaction("firebaseLocalStorage", "readonly").objectStore("firebaseLocalStorage");
+                    const all = store.getAllKeys();
+                    all.onsuccess = () => { const keys = all.result || []; try { dbx.close(); } catch (e) {} finish(keys.some((k) => String(k).indexOf("authUser") >= 0) ? "token-present" : "no-token"); };
+                    all.onerror = () => { try { dbx.close(); } catch (e) {} finish("read-error"); };
+                  } catch (e) { finish("ex"); }
+                };
+              });
+            } catch (e) { tokenState = "ex"; }
             errEl.style.color = "";
             if (!lsOk || !idbOk || idbWrite !== "ok") {
               errEl.innerHTML = "⚠ Your browser is <b>blocking site storage</b>, so it can't keep you signed in. Allow cookies / site data for this site, or turn off strict privacy for it. (storage check: localStorage " + (lsOk ? "ok" : "BLOCKED") + ", IndexedDB " + idbWrite + ")";
+            } else if (tokenState === "no-token" || tokenState === "db-error") {
+              errEl.innerHTML = "⚠ Your browser <b>cleared the saved login</b> after your last visit — that's why it asks you to sign in every time. This site's cookies/site data are being deleted (a browser privacy setting like “clear cookies when you close”, an extension, or “block third-party cookies”). Allow this site to keep its data, then sign in once. (auth token: not found)";
+            } else if (tokenState === "token-present") {
+              errEl.innerHTML = "You were signed out because the saved login <b>expired or was revoked</b> (e.g. password changed, or signed out elsewhere). Please sign in again — it should then stay. (auth token: present)";
             } else {
-              errEl.textContent = "Signed out on reload, but storage looks OK — please sign in again and tell the admin this exact wording so we can dig into the auth token.";
+              errEl.textContent = "Signed out on reload — please sign in again. (storage ok, auth token: " + tokenState + ")";
             }
           }
         } catch (e) {}
@@ -8488,6 +8524,7 @@
         const rb = document.getElementById("retryLoad");
         if (rb) rb.onclick = (ev) => { ev.preventDefault(); location.reload(); };
       }
+    });
     });
   }
 
