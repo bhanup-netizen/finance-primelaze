@@ -6727,11 +6727,15 @@
   function renderCoverage() {
     const ed = isAdmin() || canEditPage("coverage");
     setTimeout(wireCoverage, 0);
+    const COV_PARTS = [
+      { key: "post", label: "Who posts (content)", icon: "📤", sub: "Who creates & publishes content on each channel." },
+      { key: "dm", label: "Who manages DMs & messages", icon: "💬", sub: "Who answers DMs, comments, WhatsApp, calls & emails." },
+    ];
+    const partOf = (r) => r.part === "dm" ? "dm" : r.part === "post" ? "post" : (covCatOf(r.channel) === "social" ? "post" : "dm");
     const list = (coverage.rows || []).map((r, i) => ({ r, i }));
     const total = list.length;
+    const missing = list.filter((x) => (x.r.primary || "").trim() && !(x.r.backup || "").trim()).length;
     const withB = list.filter((x) => (x.r.backup || "").trim()).length;
-    const missing = total - withB;
-    // One card per channel — view (pretty) or edit (inline inputs).
     const card = ({ r, i }) => {
       const find = [r.channel, r.account, r.primary, r.backup, r.notes].join(" ").toLowerCase();
       const icon = covChIcon(r.channel);
@@ -6760,12 +6764,16 @@
         ${r.notes ? `<div class="cov-card-note">${esc(r.notes)}</div>` : ""}
       </div>`;
     };
-    const groups = COV_CATS.map((cat) => {
-      const inCat = list.filter((x) => covCatOf(x.r.channel) === cat.key);
-      if (!inCat.length) return "";
-      return `<section class="cov-group" data-cat="${cat.key}">
-        <h2 class="cov-group-h"><span>${cat.icon}</span> ${esc(cat.label)} <span class="tag">${inCat.length}</span></h2>
-        <div class="cov-grid">${inCat.map(card).join("")}</div>
+    const parts = COV_PARTS.map((p) => {
+      const inPart = list.filter((x) => partOf(x.r) === p.key);
+      const gaps = inPart.filter((x) => (x.r.primary || "").trim() && !(x.r.backup || "").trim()).length;
+      return `<section class="cov-part" data-part="${p.key}">
+        <div class="cov-part-head"><span class="cov-part-icon">${p.icon}</span>
+          <div><div class="cov-part-title">${esc(p.label)} <span class="tag">${inPart.length}</span>${gaps ? ` <span class="cov-gap-tag">${gaps} no backup</span>` : ""}</div>
+          <div class="cov-part-sub">${esc(p.sub)}</div></div>
+          ${ed ? `<button type="button" class="ghost-btn cov-add" data-part="${p.key}" style="margin-left:auto">＋ Add ${p.key === "post" ? "posting" : "message"} channel</button>` : ""}
+        </div>
+        <div class="cov-grid">${inPart.length ? inPart.map(card).join("") : `<p class="empty" style="grid-column:1/-1">No channels yet.</p>`}</div>
       </section>`;
     }).join("");
     const sum = (n, l, cls) => `<div class="cov-sum ${cls || ""}"><div class="cov-sum-n">${n}</div><div class="cov-sum-l">${esc(l)}</div></div>`;
@@ -6773,32 +6781,30 @@
       <div class="section-head"><h1>📇 Marketing — Coverage Matrix</h1>
         <p>${ed ? `<input class="cov-note" data-f="note" value="${esc(coverage.note || "")}" placeholder="Short intro…" style="width:100%">` : esc(coverage.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
       <div class="cov-summary">${sum(total, "Channels")}${sum(withB, "Backup set", "cov-sum-good")}${sum(missing, "No backup", missing ? "cov-sum-bad" : "")}</div>
-      ${missing ? `<div class="callout warn" style="margin:0 0 12px">⚠ <b>${missing}</b> channel${missing === 1 ? "" : "s"} still ha${missing === 1 ? "s" : "ve"} no backup. Add a Backup so every channel is covered when the owner is on leave.</div>` : ""}
+      ${missing ? `<div class="callout warn" style="margin:0 0 12px">⚠ <b>${missing}</b> channel${missing === 1 ? "" : "s"} with an owner still ha${missing === 1 ? "s" : "ve"} no backup. Add a Backup so every channel is covered when the owner is on leave.</div>` : ""}
       <div class="controls">
         <input id="covSearch" class="search" type="search" placeholder="🔍 Search channel, account, person…">
-        ${ed ? `<button type="button" class="dl-btn" id="covAdd">＋ Add channel</button> <button type="button" class="ghost-btn" id="covReset" title="Restore the default matrix">↺ Restore default</button>` : ""}
+        ${ed ? `<button type="button" class="ghost-btn" id="covReset" title="Restore the default matrix" style="margin-left:auto">↺ Restore default</button>` : ""}
       </div>
-      <div id="covGroups">${groups || `<p class="empty">No channels yet.${ed ? " Click “＋ Add channel”." : ""}</p>`}</div>`;
+      <div id="covGroups">${parts}</div>`;
   }
   function wireCoverage() {
     document.querySelectorAll(".cov-note").forEach((el) => (el.onchange = () => { coverage[el.dataset.f] = el.value; covSave("Coverage note"); }));
     document.querySelectorAll(".cov-in").forEach((el) => (el.onchange = () => { const r = coverage.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); covSave("Coverage · " + (r.channel || "")); if (el.dataset.f === "backup" || el.dataset.f === "channel") go(currentTab); } }));
     document.querySelectorAll(".cov-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this channel?")) return; coverage.rows.splice(+b.dataset.i, 1); covSave("Coverage row removed"); go(currentTab); }));
-    const add = document.getElementById("covAdd");
-    if (add) add.onclick = () => { (coverage.rows = coverage.rows || []).push({ id: "c" + (covSeq++), channel: "", account: "", primary: "", backup: "", notes: "" }); covSave("Coverage row added"); go(currentTab); };
+    document.querySelectorAll(".cov-add").forEach((b) => (b.onclick = () => { (coverage.rows = coverage.rows || []).push({ id: "c" + (covSeq++), part: b.dataset.part, channel: "", account: "", primary: "", backup: "", notes: "" }); covSave("Coverage row added"); go(currentTab); }));
     const rs = document.getElementById("covReset");
     if (rs) rs.onclick = () => { if (!window.confirm("Restore the default coverage matrix? This replaces the current one for everyone.")) return; coverage = JSON.parse(JSON.stringify(COVERAGE_SEED)); covSave("Coverage · restored default"); go(currentTab); };
-    // Live search: hide non-matching cards and any group left empty.
     const s = document.getElementById("covSearch");
     if (s) s.oninput = () => {
       const q = (s.value || "").toLowerCase().trim();
-      document.querySelectorAll(".cov-group").forEach((grp) => {
+      document.querySelectorAll(".cov-part").forEach((grp) => {
         let shown = 0;
         grp.querySelectorAll(".cov-card").forEach((c) => {
           const ok = !q || (c.getAttribute("data-find") || "").indexOf(q) >= 0;
           c.style.display = ok ? "" : "none"; if (ok) shown++;
         });
-        grp.style.display = shown ? "" : "none";
+        const grid = grp.querySelector(".cov-grid"); if (grid) grid.style.opacity = shown ? "1" : ".4";
       });
     };
   }
