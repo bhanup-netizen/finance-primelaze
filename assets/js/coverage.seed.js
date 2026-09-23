@@ -8,6 +8,7 @@
    backups start blank for Marketing to assign. Fully editable.
    ============================================================ */
 window.COVERAGE_SEED = {
+  version: 2,
   note: "Two parts: who POSTS content, and who MANAGES DMs & messages. Each row has an owner, a backup (for leave), and the action they must do. Editable by Marketing/Admin — saves for everyone.",
   rows: [
     // ---------- PART 1 · Who posts (content) ----------

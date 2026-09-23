@@ -6677,6 +6677,7 @@
   // shared edits doc; editable by admins and Marketing page-editors.
   const COVERAGE_SEED = window.COVERAGE_SEED || { note: "", rows: [] };
   let coverage = JSON.parse(JSON.stringify(COVERAGE_SEED));
+  let covNeedsReseed = false; // set when old-format stored data was refreshed to the new seed
   let covSeq = 100;
   function covSave(what) { saveEdits(what || "Coverage matrix updated", true); }
   // ---- Coverage matrix presentation helpers (icons, categories, avatars) ----
@@ -6751,6 +6752,8 @@
   function renderCoverage() {
     const ed = isAdmin() || canEditPage("coverage");
     setTimeout(wireCoverage, 0);
+    // If old-format data was refreshed to the new seed on load, persist it once.
+    if (covNeedsReseed && ed) { covNeedsReseed = false; covSave("Coverage · refreshed to new layout"); }
     const COV_PARTS = [
       { key: "post", label: "Who posts (content)", icon: "📤", sub: "Who creates & publishes content on each channel." },
       { key: "dm", label: "Who manages DMs & messages", icon: "💬", sub: "Who answers DMs, comments, WhatsApp, calls & emails — and what to do." },
@@ -8171,7 +8174,20 @@
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
       if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
-      if (e.coverage && typeof e.coverage === "object" && Array.isArray(e.coverage.rows)) { coverage = e.coverage; const cids = (coverage.rows || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); covSeq = Math.max(covSeq, ...(cids.length ? cids : [0])) + 1; }
+      if (e.coverage && typeof e.coverage === "object" && Array.isArray(e.coverage.rows)) {
+        const CUR = COVERAGE_SEED.version || 1;
+        if ((e.coverage.version || 1) >= CUR) {
+          // Stored data is current-format — keep it (preserves everyone's edits).
+          coverage = e.coverage;
+          const cids = (coverage.rows || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); covSeq = Math.max(covSeq, ...(cids.length ? cids : [0])) + 1;
+        } else {
+          // Stored data is from an older seed (e.g. combined emails). Replace it
+          // with the new default so the improved layout shows for everyone, and
+          // persist the refresh once (admins/editors only).
+          coverage = JSON.parse(JSON.stringify(COVERAGE_SEED));
+          covNeedsReseed = true;
+        }
+      }
       if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.
