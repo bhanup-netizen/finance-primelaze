@@ -6679,37 +6679,128 @@
   let coverage = JSON.parse(JSON.stringify(COVERAGE_SEED));
   let covSeq = 100;
   function covSave(what) { saveEdits(what || "Coverage matrix updated", true); }
+  // ---- Coverage matrix presentation helpers (icons, categories, avatars) ----
+  const COV_CATS = [
+    { key: "social", label: "Social media & marketplaces", icon: "📣" },
+    { key: "phone", label: "Messaging & phone", icon: "📞" },
+    { key: "email", label: "Email", icon: "✉️" },
+    { key: "leads", label: "Enquiries & leads", icon: "🎯" },
+    { key: "other", label: "Other", icon: "🔗" },
+  ];
+  function covCatOf(ch) {
+    const c = String(ch || "").toLowerCase();
+    if (/instagram|facebook|youtube|linkedin|pinterest|twitter| x |threads|indiamart|marketplace|website/.test(c)) return "social";
+    if (/whatsapp|phone|call|mobile|sms|telegram/.test(c)) return "phone";
+    if (/email|mail|@/.test(c)) return "email";
+    if (/dm|comment|enquir|inquir|\blead/.test(c)) return "leads";
+    return "other";
+  }
+  function covChIcon(ch) {
+    const c = String(ch || "").toLowerCase();
+    if (c.includes("instagram")) return "📸";
+    if (c.includes("facebook")) return "👍";
+    if (c.includes("youtube")) return "▶️";
+    if (c.includes("linkedin")) return "💼";
+    if (c.includes("pinterest")) return "📌";
+    if (c.includes("indiamart")) return "🛒";
+    if (c.includes("website")) return "🌐";
+    if (c.includes("whatsapp")) return "💬";
+    if (c.includes("phone") || c.includes("call")) return "☎️";
+    if (c.includes("email") || c.includes("mail")) return "✉️";
+    if (c.includes("dm") || c.includes("comment") || c.includes("enquir") || c.includes("lead")) return "🎯";
+    return "🔗";
+  }
+  function covInitials(name) {
+    const s = String(name || "").replace(/\(.*?\)/g, "").trim();
+    if (!s) return "?";
+    const parts = s.split(/[\s+&/,]+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return s.slice(0, 2).toUpperCase();
+  }
+  const COV_AVA_COLORS = ["#2563eb", "#0891b2", "#7c3aed", "#d97706", "#16a34a", "#dc2626", "#db2777", "#0d9488", "#4f46e5", "#ca8a04"];
+  function covColor(name) { let h = 0; const s = String(name || ""); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return COV_AVA_COLORS[h % COV_AVA_COLORS.length]; }
+  function covPerson(name) {
+    if (!String(name || "").trim()) return `<span class="cov-need">⚠ not set</span>`;
+    return `<span class="cov-person"><span class="cov-ava" style="background:${covColor(name)}">${esc(covInitials(name))}</span><span class="cov-pname">${esc(name)}</span></span>`;
+  }
+
   function renderCoverage() {
     const ed = isAdmin() || canEditPage("coverage");
     setTimeout(wireCoverage, 0);
-    const head = ["#", "Channel", "Account / number", "Primary owner", "Backup (if on leave)", "Notes"].map((x) => `<th>${x}</th>`).join("");
-    const field = (i, f, val, ph, extra) => ed
-      ? `<td><input class="cov-in ${extra || ""}" data-i="${i}" data-f="${f}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
-      : `<td>${esc(val || "—")}</td>`;
-    const rows = (coverage.rows || []).map((r, i) => `<tr>
-      <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish cov-del" data-i="${i}" title="Remove">✕</button>` : ""}</td>
-      ${ed ? field(i, "channel", r.channel, "Channel") : `<td><b>${esc(r.channel || "—")}</b></td>`}
-      ${field(i, "account", r.account, "Account / number")}
-      ${ed ? field(i, "primary", r.primary, "Primary owner") : `<td><b>${esc(r.primary || "—")}</b></td>`}
-      ${ed ? `<td><input class="cov-in cov-backup${(r.backup || "").trim() ? "" : " cov-empty"}" data-i="${i}" data-f="backup" value="${esc(r.backup || "")}" placeholder="⚠ set backup"></td>` : `<td>${(r.backup || "").trim() ? `<b>${esc(r.backup)}</b>` : `<span class="cov-need">⚠ not set</span>`}</td>`}
-      ${field(i, "notes", r.notes, "Notes")}
-    </tr>`).join("") || `<tr><td colspan="6" class="empty">No rows yet.${ed ? " Click “Add row”." : ""}</td></tr>`;
-    const missing = (coverage.rows || []).filter((r) => !(r.backup || "").trim()).length;
+    const list = (coverage.rows || []).map((r, i) => ({ r, i }));
+    const total = list.length;
+    const withB = list.filter((x) => (x.r.backup || "").trim()).length;
+    const missing = total - withB;
+    // One card per channel — view (pretty) or edit (inline inputs).
+    const card = ({ r, i }) => {
+      const find = [r.channel, r.account, r.primary, r.backup, r.notes].join(" ").toLowerCase();
+      const icon = covChIcon(r.channel);
+      if (ed) {
+        return `<div class="cov-card cov-card-edit" data-find="${esc(find)}">
+          <div class="cov-edit-top"><span class="cov-ch-icon">${icon}</span>
+            <input class="cov-in cov-in-ch" data-i="${i}" data-f="channel" value="${esc(r.channel || "")}" placeholder="Channel">
+            <button type="button" class="cov-del" data-i="${i}" title="Remove">✕</button></div>
+          <input class="cov-in cov-in-acct" data-i="${i}" data-f="account" value="${esc(r.account || "")}" placeholder="Account / number">
+          <div class="cov-edit-two">
+            <label class="cov-elbl">Primary owner<input class="cov-in" data-i="${i}" data-f="primary" value="${esc(r.primary || "")}" placeholder="Primary owner"></label>
+            <label class="cov-elbl">Backup (on leave)<input class="cov-in cov-backup${(r.backup || "").trim() ? "" : " cov-empty"}" data-i="${i}" data-f="backup" value="${esc(r.backup || "")}" placeholder="⚠ set backup"></label>
+          </div>
+          <input class="cov-in cov-in-note" data-i="${i}" data-f="notes" value="${esc(r.notes || "")}" placeholder="Notes (optional)">
+        </div>`;
+      }
+      return `<div class="cov-card" data-find="${esc(find)}">
+        <div class="cov-card-head">
+          <span class="cov-ch-icon">${icon}</span>
+          <div class="cov-ch-meta"><div class="cov-ch-name">${esc(r.channel || "—")}</div>${r.account ? `<div class="cov-ch-acct">${esc(r.account)}</div>` : ""}</div>
+        </div>
+        <div class="cov-roles">
+          <div class="cov-role"><span class="cov-role-lbl">Primary</span>${covPerson(r.primary)}</div>
+          <div class="cov-role"><span class="cov-role-lbl">Backup</span>${(r.backup || "").trim() ? covPerson(r.backup) : `<span class="cov-need">⚠ add backup</span>`}</div>
+        </div>
+        ${r.notes ? `<div class="cov-card-note">${esc(r.notes)}</div>` : ""}
+      </div>`;
+    };
+    const groups = COV_CATS.map((cat) => {
+      const inCat = list.filter((x) => covCatOf(x.r.channel) === cat.key);
+      if (!inCat.length) return "";
+      return `<section class="cov-group" data-cat="${cat.key}">
+        <h2 class="cov-group-h"><span>${cat.icon}</span> ${esc(cat.label)} <span class="tag">${inCat.length}</span></h2>
+        <div class="cov-grid">${inCat.map(card).join("")}</div>
+      </section>`;
+    }).join("");
+    const sum = (n, l, cls) => `<div class="cov-sum ${cls || ""}"><div class="cov-sum-n">${n}</div><div class="cov-sum-l">${esc(l)}</div></div>`;
     return `
-      <div class="section-head"><h1>Marketing — Coverage Matrix</h1>
-        <p>${ed ? `<input class="cov-note" data-f="note" value="${esc(coverage.note || "")}" style="width:100%">` : esc(coverage.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
-      ${missing ? `<div class="callout warn" style="margin:0 0 12px">⚠ <b>${missing}</b> channel${missing === 1 ? "" : "s"} still ha${missing === 1 ? "s" : "ve"} no backup assigned. Fill the <b>Backup</b> column so every channel is covered when the owner is on leave.</div>` : ""}
-      ${table(head, rows)}
-      ${ed ? `<div class="hq-actions" style="margin-top:10px"><button type="button" class="dl-btn" id="covAdd">＋ Add row</button> <button type="button" class="ghost-btn" id="covReset" title="Restore the default matrix">↺ Restore default</button></div>` : ""}`;
+      <div class="section-head"><h1>📇 Marketing — Coverage Matrix</h1>
+        <p>${ed ? `<input class="cov-note" data-f="note" value="${esc(coverage.note || "")}" placeholder="Short intro…" style="width:100%">` : esc(coverage.note || "")}${ed ? " <span class=\"t-muted\">— Editable, saves for everyone.</span>" : ""}</p></div>
+      <div class="cov-summary">${sum(total, "Channels")}${sum(withB, "Backup set", "cov-sum-good")}${sum(missing, "No backup", missing ? "cov-sum-bad" : "")}</div>
+      ${missing ? `<div class="callout warn" style="margin:0 0 12px">⚠ <b>${missing}</b> channel${missing === 1 ? "" : "s"} still ha${missing === 1 ? "s" : "ve"} no backup. Add a Backup so every channel is covered when the owner is on leave.</div>` : ""}
+      <div class="controls">
+        <input id="covSearch" class="search" type="search" placeholder="🔍 Search channel, account, person…">
+        ${ed ? `<button type="button" class="dl-btn" id="covAdd">＋ Add channel</button> <button type="button" class="ghost-btn" id="covReset" title="Restore the default matrix">↺ Restore default</button>` : ""}
+      </div>
+      <div id="covGroups">${groups || `<p class="empty">No channels yet.${ed ? " Click “＋ Add channel”." : ""}</p>`}</div>`;
   }
   function wireCoverage() {
     document.querySelectorAll(".cov-note").forEach((el) => (el.onchange = () => { coverage[el.dataset.f] = el.value; covSave("Coverage note"); }));
-    document.querySelectorAll(".cov-in").forEach((el) => (el.onchange = () => { const r = coverage.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); covSave("Coverage · " + (r.channel || "")); if (el.dataset.f === "backup") go(currentTab); } }));
-    document.querySelectorAll(".cov-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this row?")) return; coverage.rows.splice(+b.dataset.i, 1); covSave("Coverage row removed"); go(currentTab); }));
+    document.querySelectorAll(".cov-in").forEach((el) => (el.onchange = () => { const r = coverage.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); covSave("Coverage · " + (r.channel || "")); if (el.dataset.f === "backup" || el.dataset.f === "channel") go(currentTab); } }));
+    document.querySelectorAll(".cov-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this channel?")) return; coverage.rows.splice(+b.dataset.i, 1); covSave("Coverage row removed"); go(currentTab); }));
     const add = document.getElementById("covAdd");
     if (add) add.onclick = () => { (coverage.rows = coverage.rows || []).push({ id: "c" + (covSeq++), channel: "", account: "", primary: "", backup: "", notes: "" }); covSave("Coverage row added"); go(currentTab); };
     const rs = document.getElementById("covReset");
     if (rs) rs.onclick = () => { if (!window.confirm("Restore the default coverage matrix? This replaces the current one for everyone.")) return; coverage = JSON.parse(JSON.stringify(COVERAGE_SEED)); covSave("Coverage · restored default"); go(currentTab); };
+    // Live search: hide non-matching cards and any group left empty.
+    const s = document.getElementById("covSearch");
+    if (s) s.oninput = () => {
+      const q = (s.value || "").toLowerCase().trim();
+      document.querySelectorAll(".cov-group").forEach((grp) => {
+        let shown = 0;
+        grp.querySelectorAll(".cov-card").forEach((c) => {
+          const ok = !q || (c.getAttribute("data-find") || "").indexOf(q) >= 0;
+          c.style.display = ok ? "" : "none"; if (ok) shown++;
+        });
+        grp.style.display = shown ? "" : "none";
+      });
+    };
   }
 
   function renderChallan() {
