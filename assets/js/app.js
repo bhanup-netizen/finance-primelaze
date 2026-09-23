@@ -5284,6 +5284,8 @@
   // A machine may hold several CDSCO licences (MD-15 import, MD-17 mfg, etc.).
   const REG_CDSCO_LICENCES = ["MD-15 (CDSCO Import Licence)", "MD-14 (Import Registration)", "MD-16 (Mfg Licence · Class A/B)", "MD-17 (Mfg Licence · Class C/D)", "MD-42 (Test Licence)"];
   const regShortLic = (dt) => (String(dt).match(/MD-\d+/) || [dt])[0];
+  // CDSCO application-type forms (MD-3 … MD-42) — a dropdown on each CDSCO entry.
+  const REG_APP_TYPES = ["MD-3", "MD-4", "MD-5", "MD-6", "MD-7", "MD-8", "MD-9", "MD-10", "MD-12", "MD-13", "MD-14", "MD-15", "MD-16", "MD-17", "MD-18", "MD-19", "MD-20", "MD-21", "MD-22", "MD-23", "MD-24", "MD-25", "MD-26", "MD-27", "MD-28", "MD-29", "MD-39", "MD-40", "MD-41", "MD-42"];
   const REG_DOC_TYPES = {
     devices: REG_CDSCO_LICENCES.concat(["ISO 13485", "CE Certificate", "US FDA", "Free Sale Certificate", "Device Master File", "Plant Master File", "Technical File", "Test Reports", "Biocompatibility Report", "IFU / User Manual", "Label Artwork", "Power of Attorney", "Authorization Letter", "Other"]),
     products: ["Registration Certificate", "COA", "MSDS / SDS", "INCI / Ingredients", "Free Sale Certificate", "Stability Report", "Label Artwork", "Other"],
@@ -5536,8 +5538,11 @@
   }
   function regRows(g) {
     const admin = canEditReg(), grp = regGroup(g);
+    const showApp = g === "cdsco";                       // CDSCO application-type dropdown
+    const showValid = g === "cdsco" || g === "cosmetic"; // Valid from / Valid to dates
+    const colspan = 9 + (showApp ? 1 : 0) + (showValid ? 2 : 0);
     const rows = regFiltered(g);
-    if (!rows.length) return `<tr><td colspan="9" class="empty">No matching items.</td></tr>`;
+    if (!rows.length) return `<tr><td colspan="${colspan}" class="empty">No matching items.</td></tr>`;
     return rows.map((it) => {
       const total = REG_DOC_TYPES[grp.docSet].length, n = regDocCount(g, it);
       const tr = regTrackGet(g, it);
@@ -5546,6 +5551,14 @@
         : regStatusBadge(regEffStatus(g, it));
       const expCell = admin ? `<input type="date" class="reg-exp" data-g="${g}" data-name="${esc(it.name)}" value="${esc(tr.expected || "")}">` : (tr.expected ? esc(fmtDate(tr.expected)) : "—");
       const actCell = admin ? `<input type="date" class="reg-act" data-g="${g}" data-name="${esc(it.name)}" value="${esc(tr.actual || "")}">` : (tr.actual ? esc(fmtDate(tr.actual)) : "—");
+      // CDSCO Application Type (MD-x) — dropdown for admins, plain text otherwise.
+      const appCur = regItemVal(g, it, "appType") || "";
+      const appCell = !showApp ? "" : (admin
+        ? `<td><select class="select reg-apptype" data-g="${g}" data-name="${esc(it.name)}"><option value="">—</option>${REG_APP_TYPES.map((t) => `<option${appCur === t ? " selected" : ""}>${esc(t)}</option>`).join("")}${appCur && REG_APP_TYPES.indexOf(appCur) < 0 ? `<option selected>${esc(appCur)}</option>` : ""}</select></td>`
+        : `<td>${appCur ? esc(appCur) : "—"}</td>`);
+      // Valid from / Valid to — date inputs for admins, formatted dates otherwise.
+      const vFromCell = !showValid ? "" : (admin ? `<td><input type="date" class="reg-vfrom" data-g="${g}" data-name="${esc(it.name)}" value="${esc(tr.validFrom || "")}"></td>` : `<td>${tr.validFrom ? esc(fmtDate(tr.validFrom)) : "—"}</td>`);
+      const vToCell = !showValid ? "" : (admin ? `<td><input type="date" class="reg-vto" data-g="${g}" data-name="${esc(it.name)}" value="${esc(tr.validTo || "")}"></td>` : `<td>${tr.validTo ? esc(fmtDate(tr.validTo)) : "—"}</td>`);
       const rmN = regRemarks(g, it).length;
       const rmBtn = `<button type="button" class="ghost-btn reg-rem-btn" data-g="${g}" data-name="${esc(it.name)}" title="Remarks &amp; history">📝 <b>${rmN}</b></button>`;
       const editBtn = admin ? ` <button type="button" class="ghost-btn reg-edit-btn" data-g="${g}" data-name="${esc(it.name)}" title="Edit item details">✏</button>` : "";
@@ -5561,15 +5574,19 @@
       }
       else if (grp.kind === "cosmetic") nameCols = `<td class="t-name"><b>${esc(it.name)}</b></td><td>${regItemVal(g, it, "type") ? iv("type") : "—"}</td><td>${regItemVal(g, it, "certNo") ? iv("certNo") : "—"}</td>${mfrCell}`;
       else nameCols = `<td class="t-name"><b>${esc(it.name)}</b>${regItemVal(g, it, "group") ? `<div class="t-muted">${iv("group")}</div>` : ""}</td><td>${regItemVal(g, it, "sku") ? iv("sku") : "—"}</td><td>${regItemVal(g, it, "category") ? `<span class="badge b-neutral">${iv("category")}</span>` : "—"}</td>${mfrCell}`;
-      return `<tr>${nameCols}<td>${statusCell}</td><td>${expCell}</td><td>${actCell}</td><td>${rmBtn}</td><td>${docBtn}</td></tr>`;
+      return `<tr>${nameCols}${appCell}<td>${statusCell}</td>${vFromCell}${vToCell}<td>${expCell}</td><td>${actCell}</td><td>${rmBtn}</td><td>${docBtn}</td></tr>`;
     }).join("");
   }
   function regHead(g) {
     const grp = regGroup(g), H = REG_COL_HELP;
+    const showApp = g === "cdsco";
+    const showValid = g === "cdsco" || g === "cosmetic";
     const first = grp.kind === "device" ? `<th>Device</th><th>Models</th><th title="${esc(H.cls)}">Class ⓘ</th>`
       : grp.kind === "cosmetic" ? `<th>Range</th><th>Type</th><th title="${esc(H.cert)}">Cert No ⓘ</th>`
       : `<th>Product</th><th>SKU</th><th>Category</th>`;
-    return first + `<th title="Manufacturer &amp; country of origin">Manufacturer ⓘ</th><th title="${esc(H.regStatus)}">Status ⓘ</th><th title="Expected date to file the documents">Expected filing ⓘ</th><th title="Actual date the documents were filed">Actual filing ⓘ</th><th>Remarks</th><th>Documents</th>`;
+    const appTh = showApp ? `<th title="CDSCO application-type form (MD-3 … MD-42)">Application Type ⓘ</th>` : "";
+    const validTh = showValid ? `<th title="Registration valid from">Valid from ⓘ</th><th title="Registration valid to">Valid to ⓘ</th>` : "";
+    return first + `<th title="Manufacturer &amp; country of origin">Manufacturer ⓘ</th>` + appTh + `<th title="${esc(H.regStatus)}">Status ⓘ</th>` + validTh + `<th title="Expected date to file the documents">Expected filing ⓘ</th><th title="Actual date the documents were filed">Actual filing ⓘ</th><th>Remarks</th><th>Documents</th>`;
   }
   function regRepaint() {
     const b = document.getElementById("regBody"); if (b) b.innerHTML = regRows(regTab);
@@ -5581,6 +5598,9 @@
     document.querySelectorAll(".reg-status-sel").forEach((el) => (el.onchange = () => { const it = find(el); if (it) { regTrackSet(el.dataset.g, it, "status", el.value); regRepaint(); } }));
     document.querySelectorAll(".reg-exp").forEach((el) => (el.onchange = () => { const it = find(el); if (it) regTrackSet(el.dataset.g, it, "expected", el.value); }));
     document.querySelectorAll(".reg-act").forEach((el) => (el.onchange = () => { const it = find(el); if (it) regTrackSet(el.dataset.g, it, "actual", el.value); }));
+    document.querySelectorAll(".reg-apptype").forEach((el) => (el.onchange = () => { const it = find(el); if (it) regItemSet(el.dataset.g, it, "appType", el.value); }));
+    document.querySelectorAll(".reg-vfrom").forEach((el) => (el.onchange = () => { const it = find(el); if (it) regTrackSet(el.dataset.g, it, "validFrom", el.value); }));
+    document.querySelectorAll(".reg-vto").forEach((el) => (el.onchange = () => { const it = find(el); if (it) regTrackSet(el.dataset.g, it, "validTo", el.value); }));
     document.querySelectorAll(".reg-rem-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regRemarksDialog(b.dataset.g, it); }));
     document.querySelectorAll(".reg-docs-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regDocsDialog(b.dataset.g, it); }));
     document.querySelectorAll(".reg-move-btn").forEach((b) => (b.onclick = () => { const it = find(b); if (it) regMoveDialog(b.dataset.g, it); }));
@@ -5591,6 +5611,43 @@
         regDeleteItem(b.dataset.g, it); renderTab("registration");
       }
     }));
+  }
+  // Add a brand-new entry into the current tab. Name is required; the rest of
+  // the fields (and, for CDSCO, the Application Type MD-x) can be set here or
+  // edited later. Stored in regAdds[g] so it shows for everyone.
+  function regAddEntryDialog(g) {
+    const grp = regGroup(g);
+    const fields = REG_ITEM_FIELDS[grp.kind] || REG_ITEM_FIELDS.product;
+    const nameLbl = grp.kind === "device" ? "Device name" : grp.kind === "cosmetic" ? "Range name" : "Product name";
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card" style="width:min(560px,100%)">
+      <h3>Add entry — ${esc(grp.label)}</h3>
+      <p class="lead-tl-sub">Create a new entry in this tab. Name is required; fill what you know — status, dates, remarks and documents can be set on the row afterwards.</p>
+      <div class="lead-form-grid">
+        <label class="lead-form-wide">${esc(nameLbl)} *<input type="text" id="ra_name" placeholder="${esc(nameLbl)}"></label>
+        ${g === "cdsco" ? `<label>Application Type<select id="ra_appType"><option value="">—</option>${REG_APP_TYPES.map((t) => `<option>${esc(t)}</option>`).join("")}</select></label>` : ""}
+        ${fields.map(([f, lbl]) => `<label>${esc(lbl)}<input type="text" id="ra_${f}"></label>`).join("")}
+      </div>
+      <div class="lead-modal-actions">
+        <button type="button" class="ghost-btn" id="raCancel">Cancel</button>
+        <button type="button" class="dl-btn" id="raSave">Add entry</button>
+      </div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("raCancel").onclick = close;
+    document.getElementById("raSave").onclick = () => {
+      const name = (document.getElementById("ra_name").value || "").trim();
+      if (!name) { window.alert("Please enter a name."); return; }
+      if (regItems(g).some((x) => regSlug(x.name) === regSlug(name))) { window.alert("An entry with this name already exists in this tab."); return; }
+      const obj = { name };
+      if (g === "cdsco") { const at = document.getElementById("ra_appType"); if (at && at.value) obj.appType = at.value; }
+      fields.forEach(([f]) => { const el = document.getElementById("ra_" + f); if (el && el.value.trim()) obj[f] = el.value.trim(); });
+      (regAdds[g] = regAdds[g] || []).push(obj);
+      saveEdits("Registration entry added · " + name);
+      close(); renderTab("registration");
+    };
   }
   // Edit an item's own details (manufacturer, class, models, …). The name is
   // the item's key, so it stays fixed; the rest are corrected via an overlay.
@@ -5734,6 +5791,7 @@
       document.querySelectorAll("[data-regtab]").forEach((b) => (b.onclick = () => { regTab = b.dataset.regtab; regStatusF = ""; regQ = ""; renderTab("registration"); }));
       const s = document.getElementById("regSearch"); if (s) s.oninput = (e) => { regQ = e.target.value; regRepaint(); };
       const st = document.getElementById("regStatus"); if (st) st.onchange = (e) => { regStatusF = e.target.value; regRepaint(); };
+      const ab = document.getElementById("regAddBtn"); if (ab) ab.onclick = () => regAddEntryDialog(regTab);
       wireRegRow();
     }, 0);
     const g = regTab;
@@ -5761,6 +5819,7 @@
         <input id="regSearch" class="search" type="search" placeholder="Search name, model, SKU, manufacturer…" value="${esc(regQ)}">
         <label class="ord-field"><span>Status</span><select id="regStatus" class="select"><option value="">All</option>${REG_STATUSES.map((s) => `<option value="${esc(s)}"${regStatusF === s ? " selected" : ""}>${esc(s)}</option>`).join("")}</select></label>
         <span class="tag" id="regCount">${regFiltered(g).length} of ${items.length}</span>
+        ${admin ? `<button id="regAddBtn" class="dl-btn" type="button" style="margin-left:auto">＋ Add entry</button>` : ""}
       </div>
       <div class="table-wrap"><table class="inv-table reg-table">
         <thead><tr>${regHead(g)}</tr></thead>
