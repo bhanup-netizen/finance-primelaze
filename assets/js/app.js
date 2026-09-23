@@ -6724,56 +6724,83 @@
     return `<span class="cov-person"><span class="cov-ava" style="background:${covColor(name)}">${esc(covInitials(name))}</span><span class="cov-pname">${esc(name)}</span></span>`;
   }
 
+  // Monogram icon (colour + short label) — always renders, unlike some emoji.
+  function covMono(ch) {
+    const c = String(ch || "").toLowerCase();
+    const M = (txt, color) => ({ txt, color });
+    if (c.includes("instagram")) return M("IG", "#E1306C");
+    if (c.includes("facebook")) return M("f", "#1877F2");
+    if (c.includes("youtube")) return M("YT", "#FF0000");
+    if (c.includes("linkedin")) return M("in", "#0A66C2");
+    if (c.includes("pinterest")) return M("P", "#E60023");
+    if (c.includes("indiamart")) return M("IM", "#2E3192");
+    if (c.includes("website")) return M("W", "#0891B2");
+    if (c.includes("whatsapp")) return M("WA", "#25D366");
+    if (c.includes("phone") || c.includes("call")) return M("PH", "#16A34A");
+    if (c.includes("email") || c.includes("mail")) return M("@", "#2563EB");
+    if (c.includes("dm") || c.includes("comment")) return M("DM", "#7C3AED");
+    if (c.includes("lead")) return M("LD", "#0891B2");
+    const s = String(ch || "?").trim(); return M((s[0] || "?").toUpperCase(), "#64748B");
+  }
+  const COV_CHANNELS = ["Instagram", "Facebook", "YouTube", "LinkedIn", "Pinterest", "Indiamart", "Website", "WhatsApp", "Phone", "Email", "DMs / comments", "Lead entry", "Other"];
+  function covChannelOptions(cur) {
+    const extra = cur && COV_CHANNELS.indexOf(cur) < 0 ? `<option selected>${esc(cur)}</option>` : "";
+    return extra + COV_CHANNELS.map((c) => `<option${c === cur ? " selected" : ""}>${esc(c)}</option>`).join("");
+  }
+
   function renderCoverage() {
     const ed = isAdmin() || canEditPage("coverage");
     setTimeout(wireCoverage, 0);
     const COV_PARTS = [
       { key: "post", label: "Who posts (content)", icon: "📤", sub: "Who creates & publishes content on each channel." },
-      { key: "dm", label: "Who manages DMs & messages", icon: "💬", sub: "Who answers DMs, comments, WhatsApp, calls & emails." },
+      { key: "dm", label: "Who manages DMs & messages", icon: "💬", sub: "Who answers DMs, comments, WhatsApp, calls & emails — and what to do." },
     ];
     const partOf = (r) => r.part === "dm" ? "dm" : r.part === "post" ? "post" : (covCatOf(r.channel) === "social" ? "post" : "dm");
     const list = (coverage.rows || []).map((r, i) => ({ r, i }));
     const total = list.length;
     const missing = list.filter((x) => (x.r.primary || "").trim() && !(x.r.backup || "").trim()).length;
     const withB = list.filter((x) => (x.r.backup || "").trim()).length;
-    const card = ({ r, i }) => {
+    const chCell = (r, i) => {
+      const m = covMono(r.channel);
+      const ico = `<span class="cov-ico" style="background:${m.color}">${esc(m.txt)}</span>`;
+      return ed
+        ? `<div class="cov-chcell">${ico}<select class="cov-in cov-sel" data-i="${i}" data-f="channel">${covChannelOptions(r.channel)}</select></div>`
+        : `<div class="cov-chcell">${ico}<b>${esc(r.channel || "—")}</b></div>`;
+    };
+    const rowHtml = ({ r, i }) => {
       const find = [r.channel, r.account, r.primary, r.backup, r.notes].join(" ").toLowerCase();
-      const icon = covChIcon(r.channel);
+      const bkEmpty = !(r.backup || "").trim();
       if (ed) {
-        return `<div class="cov-card cov-card-edit" data-find="${esc(find)}">
-          <div class="cov-edit-top"><span class="cov-ch-icon">${icon}</span>
-            <input class="cov-in cov-in-ch" data-i="${i}" data-f="channel" value="${esc(r.channel || "")}" placeholder="Channel">
-            <button type="button" class="cov-del" data-i="${i}" title="Remove">✕</button></div>
-          <input class="cov-in cov-in-acct" data-i="${i}" data-f="account" value="${esc(r.account || "")}" placeholder="Account / number">
-          <div class="cov-edit-two">
-            <label class="cov-elbl">Primary owner<input class="cov-in" data-i="${i}" data-f="primary" value="${esc(r.primary || "")}" placeholder="Primary owner"></label>
-            <label class="cov-elbl">Backup (on leave)<input class="cov-in cov-backup${(r.backup || "").trim() ? "" : " cov-empty"}" data-i="${i}" data-f="backup" value="${esc(r.backup || "")}" placeholder="⚠ set backup"></label>
-          </div>
-          <input class="cov-in cov-in-note" data-i="${i}" data-f="notes" value="${esc(r.notes || "")}" placeholder="Notes (optional)">
-        </div>`;
+        return `<tr data-find="${esc(find)}">
+          <td data-label="Channel">${chCell(r, i)}</td>
+          <td data-label="Account / number"><input class="cov-in" data-i="${i}" data-f="account" value="${esc(r.account || "")}" placeholder="Account / number"></td>
+          <td data-label="Primary owner"><input class="cov-in" data-i="${i}" data-f="primary" value="${esc(r.primary || "")}" placeholder="Primary owner"></td>
+          <td data-label="Backup (on leave)"><input class="cov-in cov-backup${bkEmpty ? " cov-empty" : ""}" data-i="${i}" data-f="backup" value="${esc(r.backup || "")}" placeholder="⚠ set backup"></td>
+          <td data-label="Action / what to do"><input class="cov-in" data-i="${i}" data-f="notes" value="${esc(r.notes || "")}" placeholder="What this person must do"></td>
+          <td class="cov-actcol"><button type="button" class="cov-del" data-i="${i}" title="Remove">✕</button></td>
+        </tr>`;
       }
-      return `<div class="cov-card" data-find="${esc(find)}">
-        <div class="cov-card-head">
-          <span class="cov-ch-icon">${icon}</span>
-          <div class="cov-ch-meta"><div class="cov-ch-name">${esc(r.channel || "—")}</div>${r.account ? `<div class="cov-ch-acct">${esc(r.account)}</div>` : ""}</div>
-        </div>
-        <div class="cov-roles">
-          <div class="cov-role"><span class="cov-role-lbl">Primary</span>${covPerson(r.primary)}</div>
-          <div class="cov-role"><span class="cov-role-lbl">Backup</span>${(r.backup || "").trim() ? covPerson(r.backup) : `<span class="cov-need">⚠ add backup</span>`}</div>
-        </div>
-        ${r.notes ? `<div class="cov-card-note">${esc(r.notes)}</div>` : ""}
-      </div>`;
+      return `<tr data-find="${esc(find)}">
+        <td data-label="Channel">${chCell(r, i)}</td>
+        <td data-label="Account / number">${esc(r.account || "—")}</td>
+        <td data-label="Primary owner">${covPerson(r.primary)}</td>
+        <td data-label="Backup (on leave)">${bkEmpty ? `<span class="cov-need">⚠ add backup</span>` : covPerson(r.backup)}</td>
+        <td data-label="Action / what to do" class="cov-action">${esc(r.notes || "—")}</td>
+      </tr>`;
     };
     const parts = COV_PARTS.map((p) => {
       const inPart = list.filter((x) => partOf(x.r) === p.key);
       const gaps = inPart.filter((x) => (x.r.primary || "").trim() && !(x.r.backup || "").trim()).length;
+      const cols = ed ? 6 : 5;
+      const head = `<tr><th>Channel</th><th>Account / number</th><th>Primary owner</th><th>Backup (on leave)</th><th>Action / what to do</th>${ed ? "<th></th>" : ""}</tr>`;
+      const body = inPart.length ? inPart.map(rowHtml).join("") : `<tr><td colspan="${cols}" class="empty">No channels yet.</td></tr>`;
       return `<section class="cov-part" data-part="${p.key}">
         <div class="cov-part-head"><span class="cov-part-icon">${p.icon}</span>
           <div><div class="cov-part-title">${esc(p.label)} <span class="tag">${inPart.length}</span>${gaps ? ` <span class="cov-gap-tag">${gaps} no backup</span>` : ""}</div>
           <div class="cov-part-sub">${esc(p.sub)}</div></div>
           ${ed ? `<button type="button" class="ghost-btn cov-add" data-part="${p.key}" style="margin-left:auto">＋ Add ${p.key === "post" ? "posting" : "message"} channel</button>` : ""}
         </div>
-        <div class="cov-grid">${inPart.length ? inPart.map(card).join("") : `<p class="empty" style="grid-column:1/-1">No channels yet.</p>`}</div>
+        <div class="table-wrap"><table class="cov-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>
       </section>`;
     }).join("");
     const sum = (n, l, cls) => `<div class="cov-sum ${cls || ""}"><div class="cov-sum-n">${n}</div><div class="cov-sum-l">${esc(l)}</div></div>`;
@@ -6783,28 +6810,24 @@
       <div class="cov-summary">${sum(total, "Channels")}${sum(withB, "Backup set", "cov-sum-good")}${sum(missing, "No backup", missing ? "cov-sum-bad" : "")}</div>
       ${missing ? `<div class="callout warn" style="margin:0 0 12px">⚠ <b>${missing}</b> channel${missing === 1 ? "" : "s"} with an owner still ha${missing === 1 ? "s" : "ve"} no backup. Add a Backup so every channel is covered when the owner is on leave.</div>` : ""}
       <div class="controls">
-        <input id="covSearch" class="search" type="search" placeholder="🔍 Search channel, account, person…">
+        <input id="covSearch" class="search" type="search" placeholder="🔍 Search channel, account, person, action…">
         ${ed ? `<button type="button" class="ghost-btn" id="covReset" title="Restore the default matrix" style="margin-left:auto">↺ Restore default</button>` : ""}
       </div>
       <div id="covGroups">${parts}</div>`;
   }
   function wireCoverage() {
     document.querySelectorAll(".cov-note").forEach((el) => (el.onchange = () => { coverage[el.dataset.f] = el.value; covSave("Coverage note"); }));
-    document.querySelectorAll(".cov-in").forEach((el) => (el.onchange = () => { const r = coverage.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim(); covSave("Coverage · " + (r.channel || "")); if (el.dataset.f === "backup" || el.dataset.f === "channel") go(currentTab); } }));
+    document.querySelectorAll(".cov-in").forEach((el) => (el.onchange = () => { const r = coverage.rows[+el.dataset.i]; if (r) { r[el.dataset.f] = el.value.trim ? el.value.trim() : el.value; covSave("Coverage · " + (r.channel || "")); if (el.dataset.f === "backup" || el.dataset.f === "channel") go(currentTab); } }));
     document.querySelectorAll(".cov-del").forEach((b) => (b.onclick = () => { if (!window.confirm("Remove this channel?")) return; coverage.rows.splice(+b.dataset.i, 1); covSave("Coverage row removed"); go(currentTab); }));
-    document.querySelectorAll(".cov-add").forEach((b) => (b.onclick = () => { (coverage.rows = coverage.rows || []).push({ id: "c" + (covSeq++), part: b.dataset.part, channel: "", account: "", primary: "", backup: "", notes: "" }); covSave("Coverage row added"); go(currentTab); }));
+    document.querySelectorAll(".cov-add").forEach((b) => (b.onclick = () => { (coverage.rows = coverage.rows || []).push({ id: "c" + (covSeq++), part: b.dataset.part, channel: b.dataset.part === "post" ? "Instagram" : "Email", account: "", primary: "", backup: "", notes: "" }); covSave("Coverage row added"); go(currentTab); }));
     const rs = document.getElementById("covReset");
     if (rs) rs.onclick = () => { if (!window.confirm("Restore the default coverage matrix? This replaces the current one for everyone.")) return; coverage = JSON.parse(JSON.stringify(COVERAGE_SEED)); covSave("Coverage · restored default"); go(currentTab); };
     const s = document.getElementById("covSearch");
     if (s) s.oninput = () => {
       const q = (s.value || "").toLowerCase().trim();
-      document.querySelectorAll(".cov-part").forEach((grp) => {
-        let shown = 0;
-        grp.querySelectorAll(".cov-card").forEach((c) => {
-          const ok = !q || (c.getAttribute("data-find") || "").indexOf(q) >= 0;
-          c.style.display = ok ? "" : "none"; if (ok) shown++;
-        });
-        const grid = grp.querySelector(".cov-grid"); if (grid) grid.style.opacity = shown ? "1" : ".4";
+      document.querySelectorAll(".cov-table tbody tr").forEach((tr) => {
+        if (!tr.getAttribute("data-find")) return;
+        tr.style.display = (!q || (tr.getAttribute("data-find") || "").indexOf(q) >= 0) ? "" : "none";
       });
     };
   }
