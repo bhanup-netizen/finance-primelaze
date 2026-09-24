@@ -2559,13 +2559,23 @@
   // One consolidated, confidential cost & price sheet: machines and Esthemax
   // with factory (EXW), customs, landing and every selling price. Read-only view
   // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
-  let cprTab = "esthemax"; // Company Price sub-tab: esthemax | machines | celluma
+  let cprTab = "esthemax"; // Company Price sub-tab: esthemax | machines | celluma | costing
+  // Costing assumptions (editable, saved to the shared doc; super admin only).
+  const costing = { empExp6m: 0, allocMC: 70, marginPct: 30 };
   function renderCompanyPrice() {
     if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
     if (typeof orderInit === "function") orderInit();
     const usd = (orderState && orderState.usdInr) || "—";
     const custPct = orderState && orderState.customs != null ? Math.round(orderState.customs * 100) + "%" : "—";
-    setTimeout(() => { document.querySelectorAll("[data-cprtab]").forEach((b) => (b.onclick = () => { cprTab = b.dataset.cprtab; renderTab("companyprice"); })); }, 0);
+    setTimeout(() => {
+      document.querySelectorAll("[data-cprtab]").forEach((b) => (b.onclick = () => { cprTab = b.dataset.cprtab; renderTab("companyprice"); }));
+      document.querySelectorAll(".cost-in[data-f]").forEach((el) => (el.onchange = () => {
+        let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
+        if (el.dataset.f === "allocMC") v = Math.max(0, Math.min(100, v));
+        costing[el.dataset.f] = v;
+        saveEdits("Costing assumptions"); renderTab("companyprice");
+      }));
+    }, 0);
     // ---- Machines / devices (₹ Lakhs) ----
     const machinesBlock = () => {
       const devs = (typeof deviceList === "function" ? deviceList() : []) || [];
@@ -2614,23 +2624,62 @@
       }
       return out;
     };
-    // ---- Celluma (no price list loaded yet) ----
+    // ---- Celluma (prices from the cost book) ----
     const cellumaBlock = () => {
-      const CP = window.CELLUMA_PRICE_SEED;
-      if (CP && Array.isArray(CP.rows) && CP.rows.length) {
-        const head = (CP.cols || ["Product", "Landing", "Quotation", "Standard", "Minimum", "MRP"]).map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
-        const body = CP.rows.map((r) => `<tr><td class="t-name">${esc(r[0])}</td>${r.slice(1).map((v) => `<td class="num">${v == null || v === "" ? "—" : (typeof v === "number" ? inr(v) : esc(v))}</td>`).join("")}</tr>`).join("");
-        return `<div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">💡 Celluma</h2>${table(head, body)}</div>`;
+      const cl = (D.costs && D.costs.celluma) || [];
+      if (cl.length) {
+        const head = ["Model", "Quotation (₹)", "Selling (₹)"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+        const body = cl.map((r) => `<tr><td class="t-name">${esc(r.model)}</td><td class="num">${inr(r.quotation)}</td><td class="num">${inr(r.selling)}</td></tr>`).join("");
+        return `<div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">💡 Celluma (Series 2) <span class="t-muted" style="font-size:13px">(₹)</span></h2>${table(head, body)}<div class="callout" style="margin-top:10px">Celluma is bought as a finished device — only quotation &amp; selling prices are tracked (no factory/landing breakdown yet).</div></div>`;
       }
-      return `<div class="callout" style="margin-top:14px">💡 <b>No Celluma price list loaded yet.</b> Share the Celluma prices (a sheet or PDF, like the Esthemax one) and they'll appear here with landing, customs and selling prices.</div>`;
+      return `<div class="callout" style="margin-top:14px">💡 <b>No Celluma price list loaded yet.</b></div>`;
+    };
+    // ---- Costing / margin model (assumptions on top) ----
+    const costingBlock = () => {
+      const usd = (orderState && orderState.usdInr) || 0, cust = (orderState && orderState.customs) || 0;
+      const allocEsth = 100 - (+costing.allocMC || 0);
+      const items = (D.esthemaxOrder && D.esthemaxOrder.items) || [];
+      const u6 = (it) => (it.monthly || []).slice(-6).reduce((s, x) => s + (+x || 0), 0);
+      const rows = items.map((it) => ({ name: it.name, u: u6(it), landing: (it.unitUSD * usd * (1 + cust)) + (+it.transport || 0) })).filter((r) => r.u > 0).sort((a, b) => b.u - a.u);
+      const totalU = rows.reduce((s, r) => s + r.u, 0);
+      const esthBucket = (+costing.empExp6m || 0) * allocEsth / 100;
+      const mcBucket = (+costing.empExp6m || 0) * (+costing.allocMC || 0) / 100;
+      const opexU = totalU ? esthBucket / totalU : 0;
+      const mult = 1 + (+costing.marginPct || 0) / 100;
+      const rup = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+      const aInput = (f, label, suffix) => `<label class="cost-a"><span>${esc(label)}</span><span class="cost-in-wrap"><input class="cost-in" type="number" min="0" data-f="${f}" value="${esc(String(costing[f] ?? 0))}">${suffix ? `<i>${suffix}</i>` : ""}</span></label>`;
+      const assume = `<div class="cost-assume">
+        <div class="cost-assume-h">⚙ Assumptions <span class="t-muted">— edit these; they save for super admins</span></div>
+        <div class="cost-a-grid">
+          ${aInput("empExp6m", "Total employee expense (6 months)", "₹")}
+          ${aInput("allocMC", "Machines + Celluma share", "%")}
+          <label class="cost-a"><span>Esthemax share (auto)</span><span class="cost-in-wrap"><input class="cost-in" type="number" value="${allocEsth}" disabled><i>%</i></span></label>
+          ${aInput("marginPct", "Target margin on cost", "%")}
+        </div>
+        <div class="muted-note" style="margin-top:10px"><b>How it's split:</b> ${costing.allocMC}% of employee expense → Machines &amp; Celluma (<b>${rup(mcBucket)}</b>) · ${allocEsth}% → Esthemax (<b>${rup(esthBucket)}</b>). Esthemax units sold in the last 6 months (from Inventory): <b>${totalU.toLocaleString("en-IN")}</b> → employee cost <b>${rup(opexU)}/unit</b>. FX ${usd} · customs ${Math.round(cust * 100)}% · margin +${costing.marginPct}% on total cost.</div>
+      </div>`;
+      const head = ["Product", "6-mo units", "Landing ₹", "Employee ₹/unit", "Total cost ₹", "Price @ " + costing.marginPct + "% ₹"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+      const body = rows.map((r) => { const cost = r.landing + opexU; return `<tr>
+        <td class="t-name">${esc(r.name)}</td>
+        <td class="num">${r.u}</td>
+        <td class="num">${rup(r.landing)}</td>
+        <td class="num">${rup(opexU)}</td>
+        <td class="num">${rup(cost)}</td>
+        <td class="num t-name">${rup(cost * mult)}</td></tr>`; }).join("");
+      return `${assume}
+        <div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🧴 Esthemax — cost &amp; price per unit</h2>
+        <div class="callout"><b>Total cost/unit</b> = Landing (EXW×FX×(1+customs)+transport) + Employee cost/unit (Esthemax expense ÷ 6-month units sold). <b>Selling price</b> = total cost × (1 + margin). Enter the employee expense above to populate the employee & price columns.</div>
+        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="6" class="empty">No 6-month sales data.</td></tr>`}</tbody></table></div></div>
+        <div class="callout" style="margin-top:14px">🔧 <b>Machines &amp; Celluma</b> carry ${rup(mcBucket)} of the employee expense (${costing.allocMC}%). To load this per machine I need the number of machines/Celluma sold over 6 months — share that and I'll add per-unit machine costing here too. (Celluma currently has selling prices only, no factory/landing cost.)</div>`;
     };
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="esthemax" class="${cprTab === "esthemax" ? "active" : ""}">🧴 Esthemax</button>
       <button data-cprtab="machines" class="${cprTab === "machines" ? "active" : ""}">🔧 Machines</button>
       <button data-cprtab="celluma" class="${cprTab === "celluma" ? "active" : ""}">💡 Celluma</button>
+      <button data-cprtab="costing" class="${cprTab === "costing" ? "active" : ""}">📊 Costing</button>
     </div>`;
-    const body = cprTab === "machines" ? machinesBlock() : cprTab === "celluma" ? cellumaBlock() : esthemaxBlock();
-    const showFx = cprTab !== "celluma";
+    const body = cprTab === "machines" ? machinesBlock() : cprTab === "celluma" ? cellumaBlock() : cprTab === "costing" ? costingBlock() : esthemaxBlock();
+    const showFx = cprTab === "esthemax" || cprTab === "machines";
     return `
       <div class="section-head"><h1>💰 Company Price</h1>
         <p><b>Super admin only — confidential.</b> Full cost &amp; price sheet: factory (EXW), customs, landing and all selling prices — split by Esthemax, Machines and Celluma.</p></div>
@@ -8274,6 +8323,7 @@
           covNeedsReseed = true;
         }
       }
+      if (e.costingAssump && typeof e.costingAssump === "object") { ["empExp6m", "allocMC", "marginPct"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
       if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.
@@ -8516,7 +8566,7 @@
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");

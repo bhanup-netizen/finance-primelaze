@@ -100,6 +100,16 @@ a { color: var(--accent); text-decoration: none; }
 .cprice-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .cprice-table td.num, .cprice-table th.num { text-align: right; }
 .cprice-table tbody tr:hover { background: var(--bg); }
+/* Costing assumptions panel */
+.cost-assume { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
+.cost-assume-h { font-weight: 800; font-size: 14px; margin-bottom: 10px; }
+.cost-a-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.cost-a { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--text-2); }
+.cost-in-wrap { display: flex; align-items: center; gap: 4px; }
+.cost-in { flex: 1; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 14px; font-weight: 700; background: var(--surface); color: var(--text); box-sizing: border-box; min-width: 0; }
+.cost-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.cost-in:disabled { opacity: .6; }
+.cost-in-wrap i { font-style: normal; font-weight: 700; color: var(--text-2); }
 /* Primelaze wordmark (recreated brand logo). */
 .brand-logo {
   background: #C1272D; color: #fff; font-weight: 800; font-size: 19px;
