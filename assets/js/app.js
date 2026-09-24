@@ -2559,25 +2559,30 @@
   // One consolidated, confidential cost & price sheet: machines and Esthemax
   // with factory (EXW), customs, landing and every selling price. Read-only view
   // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
+  let cprTab = "esthemax"; // Company Price sub-tab: esthemax | machines | celluma
   function renderCompanyPrice() {
     if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
     if (typeof orderInit === "function") orderInit();
     const usd = (orderState && orderState.usdInr) || "—";
     const custPct = orderState && orderState.customs != null ? Math.round(orderState.customs * 100) + "%" : "—";
-    // Machines / devices (₹ Lakhs)
-    const devs = (typeof deviceList === "function" ? deviceList() : []) || [];
-    const devHead = ["Machine / Device", "Landing cost", "Quotation (incl. GST)", "Standard", "Minimum"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
-    const devBody = devs.map((r) => `<tr>
-      <td class="t-name">${esc(r.device)}</td>
-      <td class="num">${r.landingCost ?? "—"}</td>
-      <td class="num">${gstInc(r.quotation) ?? "—"}</td>
-      <td class="num">${r.standard ?? "—"}</td>
-      <td class="num">${r.minimum ?? "—"}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No device prices.</td></tr>`;
-    // Esthemax full price structure (from ESTHEMAX_PRICE_SEED) + accessories.
-    const EP = window.ESTHEMAX_PRICE_SEED;
-    let esthBlocks = "";
-    if (EP && Array.isArray(EP.groups)) {
-      const numCols = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10]); // right-align numeric cols
+    setTimeout(() => { document.querySelectorAll("[data-cprtab]").forEach((b) => (b.onclick = () => { cprTab = b.dataset.cprtab; renderTab("companyprice"); })); }, 0);
+    // ---- Machines / devices (₹ Lakhs) ----
+    const machinesBlock = () => {
+      const devs = (typeof deviceList === "function" ? deviceList() : []) || [];
+      const devHead = ["Machine / Device", "Landing cost", "Quotation (incl. GST)", "Standard", "Minimum"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+      const devBody = devs.map((r) => `<tr>
+        <td class="t-name">${esc(r.device)}</td>
+        <td class="num">${r.landingCost ?? "—"}</td>
+        <td class="num">${gstInc(r.quotation) ?? "—"}</td>
+        <td class="num">${r.standard ?? "—"}</td>
+        <td class="num">${r.minimum ?? "—"}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No device prices.</td></tr>`;
+      return `<div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🔧 Machines / Devices <span class="t-muted" style="font-size:13px">(₹ Lakhs)</span></h2>${table(devHead, devBody)}</div>`;
+    };
+    // ---- Esthemax full price structure + accessories ----
+    const esthemaxBlock = () => {
+      const EP = window.ESTHEMAX_PRICE_SEED;
+      if (!EP || !Array.isArray(EP.groups)) return `<p class="empty">No Esthemax price data loaded.</p>`;
+      const numCols = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10]);
       const head = EP.cols.map((c, i) => `<th class="${numCols.has(i) ? "num" : ""}">${esc(c)}</th>`).join("");
       const fmt = (v, i) => v == null || v === "" ? "—" : (i === 2 ? "$" + v : inr(Math.round(v)));
       const grp = (g) => {
@@ -2586,21 +2591,38 @@
           <td class="t-name">${esc(r[1])}</td>
           ${[2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => `<td class="num">${fmt(r[i], i)}</td>`).join("")}
         </tr>`).join("");
-        return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table">${`<thead><tr>${head}</tr></thead>`}<tbody>${body}</tbody></table></div></div>`;
+        return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
-      esthBlocks = EP.groups.map(grp).join("");
+      let out = `<div style="margin-top:6px"><h2 style="margin:0">🧴 Esthemax — full price structure <span class="t-muted" style="font-size:13px">(₹ per box, excl. GST · distribution price in $)</span></h2></div>` + EP.groups.map(grp).join("");
       if (Array.isArray(EP.accessories) && EP.accessories.length) {
         const accBody = EP.accessories.map((a, i) => `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${inr(a[1])}</td></tr>`).join("");
-        esthBlocks += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(MRP, ₹)</span></h3>${table(["Sr", "Product", "MRP"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join(""), accBody)}</div>`;
+        out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(MRP, ₹)</span></h3>${table(["Sr", "Product", "MRP"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join(""), accBody)}</div>`;
       }
-    }
+      return out;
+    };
+    // ---- Celluma (no price list loaded yet) ----
+    const cellumaBlock = () => {
+      const CP = window.CELLUMA_PRICE_SEED;
+      if (CP && Array.isArray(CP.rows) && CP.rows.length) {
+        const head = (CP.cols || ["Product", "Landing", "Quotation", "Standard", "Minimum", "MRP"]).map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
+        const body = CP.rows.map((r) => `<tr><td class="t-name">${esc(r[0])}</td>${r.slice(1).map((v) => `<td class="num">${v == null || v === "" ? "—" : (typeof v === "number" ? inr(v) : esc(v))}</td>`).join("")}</tr>`).join("");
+        return `<div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">💡 Celluma</h2>${table(head, body)}</div>`;
+      }
+      return `<div class="callout" style="margin-top:14px">💡 <b>No Celluma price list loaded yet.</b> Share the Celluma prices (a sheet or PDF, like the Esthemax one) and they'll appear here with landing, customs and selling prices.</div>`;
+    };
+    const seg = `<div class="seg" style="margin:14px 0 2px">
+      <button data-cprtab="esthemax" class="${cprTab === "esthemax" ? "active" : ""}">🧴 Esthemax</button>
+      <button data-cprtab="machines" class="${cprTab === "machines" ? "active" : ""}">🔧 Machines</button>
+      <button data-cprtab="celluma" class="${cprTab === "celluma" ? "active" : ""}">💡 Celluma</button>
+    </div>`;
+    const body = cprTab === "machines" ? machinesBlock() : cprTab === "celluma" ? cellumaBlock() : esthemaxBlock();
+    const showFx = cprTab !== "celluma";
     return `
       <div class="section-head"><h1>💰 Company Price</h1>
-        <p><b>Super admin only — confidential.</b> Full cost &amp; price sheet: factory (EXW), customs, landing and all selling prices for machines and Esthemax. This page is a read-only summary.</p></div>
-      <div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines are in <b>₹ Lakhs</b> (Quotation incl. 5% GST; Standard &amp; Minimum GST-inclusive); Esthemax is <b>₹ per box, excl. GST</b>.</div>
-      <div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">🔧 Machines / Devices <span class="t-muted" style="font-size:13px">(₹ Lakhs)</span></h2>${table(devHead, devBody)}</div>
-      <div style="margin-top:24px"><h2 style="margin:0">🧴 Esthemax — full price structure <span class="t-muted" style="font-size:13px">(₹ per box, excl. GST · distribution price in $)</span></h2></div>
-      ${esthBlocks || `<p class="empty">No Esthemax price data loaded.</p>`}`;
+        <p><b>Super admin only — confidential.</b> Full cost &amp; price sheet: factory (EXW), customs, landing and all selling prices — split by Esthemax, Machines and Celluma.</p></div>
+      ${seg}
+      ${showFx ? `<div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines in <b>₹ Lakhs</b> (Quotation incl. 5% GST); Esthemax <b>₹ per box, excl. GST</b>.</div>` : ""}
+      ${body}`;
   }
 
   /* ================= DEMO MACHINES ================= */
