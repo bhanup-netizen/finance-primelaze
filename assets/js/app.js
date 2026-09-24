@@ -2573,31 +2573,34 @@
       <td class="num">${gstInc(r.quotation) ?? "—"}</td>
       <td class="num">${r.standard ?? "—"}</td>
       <td class="num">${r.minimum ?? "—"}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No device prices.</td></tr>`;
-    // Esthemax cost breakdown (₹ per box, excl. GST)
-    const e = (D.costs && D.costs.esthemax) || {};
-    const esthSec = (title, list) => {
-      if (!list || !list.length) return "";
-      const head = ["Variant", "Pack", "Factory (EXW)", "Landing", "Standard (Total)", "MRP", "New MRP"].map((x, i) => `<th class="${i >= 2 ? "num" : ""}">${x}</th>`).join("");
-      const body = list.map((r) => `<tr>
-        <td class="t-name">${esc(r.variant)}</td>
-        <td class="t-muted">${esc(r.pack)}</td>
-        <td class="num">${rupee(r.minEXW)}</td>
-        <td class="num">${rupee(r.landingCost)}</td>
-        <td class="num">${rupee(r.standardTotal)}</td>
-        <td class="num">${rupee(r.mrp)}</td>
-        <td class="num">${rupee(r.newMrp)}</td></tr>`).join("");
-      return `<div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">${esc(title)}</h2>${table(head, body)}</div>`;
-    };
+    // Esthemax full price structure (from ESTHEMAX_PRICE_SEED) + accessories.
+    const EP = window.ESTHEMAX_PRICE_SEED;
+    let esthBlocks = "";
+    if (EP && Array.isArray(EP.groups)) {
+      const numCols = new Set([2, 3, 4, 5, 6, 7, 8, 9, 10]); // right-align numeric cols
+      const head = EP.cols.map((c, i) => `<th class="${numCols.has(i) ? "num" : ""}">${esc(c)}</th>`).join("");
+      const fmt = (v, i) => v == null || v === "" ? "—" : (i === 2 ? "$" + v : inr(Math.round(v)));
+      const grp = (g) => {
+        const body = g.rows.map((r) => `<tr>
+          <td class="num">${r[0]}</td>
+          <td class="t-name">${esc(r[1])}</td>
+          ${[2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => `<td class="num">${fmt(r[i], i)}</td>`).join("")}
+        </tr>`).join("");
+        return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table">${`<thead><tr>${head}</tr></thead>`}<tbody>${body}</tbody></table></div></div>`;
+      };
+      esthBlocks = EP.groups.map(grp).join("");
+      if (Array.isArray(EP.accessories) && EP.accessories.length) {
+        const accBody = EP.accessories.map((a, i) => `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${inr(a[1])}</td></tr>`).join("");
+        esthBlocks += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(MRP, ₹)</span></h3>${table(["Sr", "Product", "MRP"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join(""), accBody)}</div>`;
+      }
+    }
     return `
       <div class="section-head"><h1>💰 Company Price</h1>
-        <p><b>Super admin only — confidential.</b> Full cost &amp; price sheet: factory (EXW), customs, landing and all selling prices for machines and Esthemax. Edit the figures on the <b>Pricing</b> and <b>Inventory</b> tabs; this page is a read-only summary.</p></div>
+        <p><b>Super admin only — confidential.</b> Full cost &amp; price sheet: factory (EXW), customs, landing and all selling prices for machines and Esthemax. This page is a read-only summary.</p></div>
       <div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines are in <b>₹ Lakhs</b> (Quotation incl. 5% GST; Standard &amp; Minimum GST-inclusive); Esthemax is <b>₹ per box, excl. GST</b>.</div>
       <div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">🔧 Machines / Devices <span class="t-muted" style="font-size:13px">(₹ Lakhs)</span></h2>${table(devHead, devBody)}</div>
-      <div style="margin-top:22px"><h2 style="margin:0">🧴 Esthemax products <span class="t-muted" style="font-size:13px">(₹ per box, excl. GST)</span></h2></div>
-      ${esthSec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
-      ${esthSec("Retail Hydrojelly (2 masks / box)", e.retail)}
-      ${esthSec("Collagen Foot Mask", e.footMask)}
-      ${(!e.hydrojelly && !e.retail && !e.footMask) ? `<p class="empty">No Esthemax cost data loaded.</p>` : ""}`;
+      <div style="margin-top:24px"><h2 style="margin:0">🧴 Esthemax — full price structure <span class="t-muted" style="font-size:13px">(₹ per box, excl. GST · distribution price in $)</span></h2></div>
+      ${esthBlocks || `<p class="empty">No Esthemax price data loaded.</p>`}`;
   }
 
   /* ================= DEMO MACHINES ================= */
