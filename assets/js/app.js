@@ -46,6 +46,7 @@
   const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
   const canSeePage = (id) => {
     if (id === "passwords") return isSuperAdmin(); // account passwords: super admin only
+    if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
     if (id === "admin") {
       if (isSuperAdmin() && appMode === "admin") return true; // full user management
       if (isPageAdmin()) return true;                          // scoped page-admin manager
@@ -116,6 +117,7 @@
     { id: "targets", label: "HQ Targets", group: "Finance", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Finance", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Finance", render: renderPricing },
+    { id: "companyprice", label: "💰 Company Price", group: "Finance", render: renderCompanyPrice },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
     { id: "weeklyFin", label: "Weekly Duties", group: "Finance", render: () => renderWeekly("Finance") },
     // Sale
@@ -2551,6 +2553,51 @@
       ${table(head, body)}
       <div class="stat-row" style="margin-top:12px"><div class="stat k-warn"><b>${total ? rupeeShort(total) : "—"}</b><span>Total money required</span></div></div>
     </div>`;
+  }
+
+  /* ================= COMPANY PRICE (super-admin only) ================= */
+  // One consolidated, confidential cost & price sheet: machines and Esthemax
+  // with factory (EXW), customs, landing and every selling price. Read-only view
+  // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
+  function renderCompanyPrice() {
+    if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
+    if (typeof orderInit === "function") orderInit();
+    const usd = (orderState && orderState.usdInr) || "—";
+    const custPct = orderState && orderState.customs != null ? Math.round(orderState.customs * 100) + "%" : "—";
+    // Machines / devices (₹ Lakhs)
+    const devs = (typeof deviceList === "function" ? deviceList() : []) || [];
+    const devHead = ["Machine / Device", "Landing cost", "Quotation (incl. GST)", "Standard", "Minimum"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+    const devBody = devs.map((r) => `<tr>
+      <td class="t-name">${esc(r.device)}</td>
+      <td class="num">${r.landingCost ?? "—"}</td>
+      <td class="num">${gstInc(r.quotation) ?? "—"}</td>
+      <td class="num">${r.standard ?? "—"}</td>
+      <td class="num">${r.minimum ?? "—"}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No device prices.</td></tr>`;
+    // Esthemax cost breakdown (₹ per box, excl. GST)
+    const e = (D.costs && D.costs.esthemax) || {};
+    const esthSec = (title, list) => {
+      if (!list || !list.length) return "";
+      const head = ["Variant", "Pack", "Factory (EXW)", "Landing", "Standard (Total)", "MRP", "New MRP"].map((x, i) => `<th class="${i >= 2 ? "num" : ""}">${x}</th>`).join("");
+      const body = list.map((r) => `<tr>
+        <td class="t-name">${esc(r.variant)}</td>
+        <td class="t-muted">${esc(r.pack)}</td>
+        <td class="num">${rupee(r.minEXW)}</td>
+        <td class="num">${rupee(r.landingCost)}</td>
+        <td class="num">${rupee(r.standardTotal)}</td>
+        <td class="num">${rupee(r.mrp)}</td>
+        <td class="num">${rupee(r.newMrp)}</td></tr>`).join("");
+      return `<div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">${esc(title)}</h2>${table(head, body)}</div>`;
+    };
+    return `
+      <div class="section-head"><h1>💰 Company Price</h1>
+        <p><b>Super admin only — confidential.</b> Full cost &amp; price sheet: factory (EXW), customs, landing and all selling prices for machines and Esthemax. Edit the figures on the <b>Pricing</b> and <b>Inventory</b> tabs; this page is a read-only summary.</p></div>
+      <div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines are in <b>₹ Lakhs</b> (Quotation incl. 5% GST; Standard &amp; Minimum GST-inclusive); Esthemax is <b>₹ per box, excl. GST</b>.</div>
+      <div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">🔧 Machines / Devices <span class="t-muted" style="font-size:13px">(₹ Lakhs)</span></h2>${table(devHead, devBody)}</div>
+      <div style="margin-top:22px"><h2 style="margin:0">🧴 Esthemax products <span class="t-muted" style="font-size:13px">(₹ per box, excl. GST)</span></h2></div>
+      ${esthSec("Hydrojelly Mask (850 ml)", e.hydrojelly)}
+      ${esthSec("Retail Hydrojelly (2 masks / box)", e.retail)}
+      ${esthSec("Collagen Foot Mask", e.footMask)}
+      ${(!e.hydrojelly && !e.retail && !e.footMask) ? `<p class="empty">No Esthemax cost data loaded.</p>` : ""}`;
   }
 
   /* ================= DEMO MACHINES ================= */
