@@ -2598,6 +2598,20 @@
         const accBody = EP.accessories.map((a, i) => `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${inr(a[1])}</td></tr>`).join("");
         out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(MRP, ₹)</span></h3>${table(["Sr", "Product", "MRP"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join(""), accBody)}</div>`;
       }
+      // Factory purchase orders (USD) — what Primelaze pays the esthemax factory.
+      if (Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
+        const usdFmt = (v) => v == null || v === "" ? "—" : "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const poHead = ["Code", "Description", "Volume", "Qty", "Unit $", "Line $"].map((x, i) => `<th class="${i >= 3 ? "num" : ""}">${x}</th>`).join("");
+        out += EP.purchaseOrders.map((po) => {
+          const body = po.lines.map((l) => `<tr>
+            <td class="t-muted">${esc(l[0])}</td><td class="t-name">${esc(l[1])}</td><td class="t-muted">${esc(l[2] || "—")}</td>
+            <td class="num">${l[3]}</td><td class="num">${usdFmt(l[4])}</td><td class="num">${usdFmt(l[5])}</td></tr>`).join("");
+        return `<div class="block" style="margin-top:20px"><h3 style="margin:0 0 2px">🏭 Factory purchase order — ${esc(po.no)} <span class="t-muted" style="font-size:12px">(${esc(po.date)})</span></h3>
+          <p class="muted-note" style="margin:0 0 8px">Supplier: ${esc(po.supplier)} · Ship by ${esc(po.shipBy)} · Payment ${esc(po.payment)}. Factory (EXW) prices in <b>USD</b>.</p>
+          <div class="table-wrap"><table class="cprice-table"><thead><tr>${poHead}</tr></thead><tbody>${body}</tbody></table></div>
+          <div class="stat-row" style="margin-top:10px"><div class="stat"><b>${po.totalQty}</b><span>Total units</span></div><div class="stat k-teal"><b>${usdFmt(po.totalUsd)}</b><span>Order value (USD)</span></div></div></div>`;
+        }).join("");
+      }
       return out;
     };
     // ---- Celluma (no price list loaded yet) ----

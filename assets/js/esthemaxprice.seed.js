@@ -76,4 +76,29 @@ window.ESTHEMAX_PRICE_SEED = {
     ["5g Scoop", 115],
     ["Rose Quartz Eye Mask — Hydrojelly Mask", 11500],
   ],
+  // Factory purchase orders (what Primelaze pays the esthemax factory, in USD).
+  purchaseOrders: [
+    {
+      no: "202607-IND", date: "20 Jul 2026", shipBy: "Air", payment: "TT",
+      supplier: "K Beauty Group INC (DBA esthemax) — 1740 Crenshaw Blvd, Torrance, CA 90501",
+      authorised: "Dhinesh R",
+      totalQty: 1422, totalUsd: 8153.20,
+      lines: [
+        // [code, description, volume, qty, unitUSD, lineUSD]
+        ["792", "Youthful Elixir Hydrojelly Mask 850gm", "30 fl oz", 48, 24.00, 1152.00],
+        ["773", "Brightening Complex Hydrojelly Mask 850gm", "30 fl oz", 48, 13.80, 662.40],
+        ["774", "Belgium Cacao Hydrojelly Mask 850gm", "30 fl oz", 48, 13.80, 662.40],
+        ["781", "Intensive Aftercare Hydrojelly Mask 850gm", "30 fl oz", 48, 13.80, 662.40],
+        ["775", "Egyptian Rose Hydrojelly Mask 850gm", "30 fl oz", 120, 13.80, 1656.00],
+        ["785", "Illuminating Orange Hydrojelly Mask 850gm", "30 fl oz", 144, 13.80, 1987.20],
+        ["R781", "Retail — Intensive Aftercare Hydrojelly Mask", "2 masks/box", 50, 11.10, 555.00],
+        ["1102-4", "Spa Utensil — Mixing Bowl (Neon Green)", "", 50, 4.40, 220.00],
+        ["1102-5", "Spa Utensil — Mixing Bowl (Hot Pink)", "", 50, 4.40, 220.00],
+        ["1111-4", "Spa Utensil — Spatula (Neon Green)", "", 50, 1.25, 62.50],
+        ["1111-2", "Spa Utensil — Spatula (Hot Pink)", "", 50, 1.25, 62.50],
+        ["1121", "Spa Utensil — Measuring Cup", "", 150, 0.66, 99.00],
+        ["775", "Sample — Egyptian Rose Hydrojelly Mask", "30 fl oz", 11, 13.80, 151.80],
+      ],
+    },
+  ],
 };
