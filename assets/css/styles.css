@@ -103,6 +103,8 @@ a { color: var(--accent); text-decoration: none; }
 .cprice-table tr.cprice-total td { border-top: 2px solid var(--border-strong, var(--text-3)); background: var(--accent-soft); font-size: 12.5px; }
 .cprice-table td.cprice-prod { white-space: normal; word-break: break-word; max-width: 170px; min-width: 120px; }
 .cprice-table td.cprice-lossnum { color: var(--lst-lost, #dc2626); font-weight: 700; }
+.cprice-mg { font-size: 10px; font-weight: 700; color: var(--good, #16a34a); }
+.cprice-mg.cprice-lossnum { color: var(--lst-lost, #dc2626); }
 /* Costing assumptions panel */
 .cost-assume { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
 .cost-assume-h { font-weight: 800; font-size: 14px; margin-bottom: 10px; }

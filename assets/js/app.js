@@ -2666,6 +2666,7 @@
       const machBucket = emp * machPc / 100, cellBucket = emp * cellPc / 100, esthBucket = emp * esthPc / 100;
       const opexU = boxes ? esthBucket / boxes : 0;                  // operation cost per unit / month
       const rup = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+      const offCell = (price, cost) => { if (price == null) return `<td class="num">—</td>`; const m = price ? (price - cost) / price * 100 : 0; return `<td class="num">${rup(price)} <span class="cprice-mg${m < 0 ? " cprice-lossnum" : ""}">${Math.round(m)}%</span></td>`; };
       const shortNm = (s) => String(s || "").replace(/hydrojelly\s*mask/ig, "").replace(/850\s*gm/ig, "").replace(/2\s*masks?\s*\/?\s*box/ig, "").replace(/\s{2,}/g, " ").trim();
       const aInput = (f, label, suffix) => `<label class="cost-a"><span>${esc(label)}</span><span class="cost-in-wrap"><input class="cost-in" type="number" min="0" data-f="${f}" value="${esc(String(f === "unitsMonth" ? Math.round(boxes) : (costing[f] ?? 0)))}">${suffix ? `<i>${suffix}</i>` : ""}</span></label>`;
       const o1lbl = `${o1p}+${o1f}`, o2lbl = `${o2p}+${o2f}`;
@@ -2704,9 +2705,9 @@
         <td class="num">${rup(cost)}</td>
         <td class="num t-name">${cur != null ? rup(cur) : "—"}</td>
         <td class="num ${margin != null && margin < 0 ? "cprice-lossnum" : ""}">${margin != null ? Math.round(margin) + "%" : "—"}</td>
-        <td class="num">${off10 != null ? rup(off10) : "—"}</td>
-        <td class="num">${o1v != null ? rup(o1v) : "—"}</td>
-        <td class="num">${o2v != null ? rup(o2v) : "—"}</td></tr>`;
+        ${offCell(off10, cost)}
+        ${offCell(o1v, cost)}
+        ${offCell(o2v, cost)}</tr>`;
       }).join("");
       const marginT = tCur ? (tCur - tCost) / tCur * 100 : null;
       const totalRow = `<tr class="cprice-total">
@@ -2717,12 +2718,12 @@
         <td class="num"><b>${rup(tCost)}</b></td>
         <td class="num"><b>${rup(tCur)}</b></td>
         <td class="num"><b>${marginT != null ? Math.round(marginT) + "%" : "—"}</b></td>
-        <td class="num"><b>${rup(t10)}</b></td>
-        <td class="num"><b>${rup(t1)}</b></td>
-        <td class="num"><b>${rup(t2)}</b></td></tr>`;
+        ${offCell(t10, tCost)}
+        ${offCell(t1, tCost)}
+        ${offCell(t2, tCost)}</tr>`;
       return `${assume}
         <div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🧴 Esthemax — cost vs current MRP</h2>
-        <div class="callout"><b>Total cost</b> = Landing + Operation. <b>Current MRP</b> = latest price list (incl. 18% GST). <b>Margin %</b> = (Current MRP − Total cost) ÷ Current MRP (red = loss). <b>10% off</b> = Current MRP − 10%. <b>${o1lbl}</b> / <b>${o2lbl}</b> = effective ₹/unit under each buy+free offer, on the Current MRP. TOTAL row = per-month value.</div>
+        <div class="callout"><b>Total cost</b> = Landing + Operation. <b>Current MRP</b> = latest price list (incl. 18% GST). <b>Margin %</b> = (Current MRP − Total cost) ÷ Current MRP (red = loss). <b>10% off</b> = Current MRP − 10%. <b>${o1lbl}</b> / <b>${o2lbl}</b> = effective ₹/unit under each buy+free offer, on the Current MRP. Each offer also shows its <b>margin %</b> at that price (red = loss). TOTAL row = per-month value.</div>
         <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="10" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>
         <div class="callout" style="margin-top:14px">🔧 <b>Machines</b> carry ${rup(machBucket)}/month and <b>Celluma</b> ${rup(cellBucket)}/month of the employee expense. Share their monthly units sold and I'll build the same table for them.</div>`;
     };
