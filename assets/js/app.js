@@ -2561,8 +2561,7 @@
   // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
   let cprTab = "esthemax"; // Company Price sub-tab: esthemax | machines | celluma | costing
   // Costing assumptions (editable, saved to the shared doc; super admin only).
-  // Employee expense per month, split machine/celluma/esthemax, plus profit %.
-  const costing = { empExpMonth: 2000000, allocMachine: 60, allocCelluma: 10, profitPct: 30 };
+  const costing = { empExpMonth: 3000000, allocMachine: 60, allocCelluma: 10, allocEsth: 30, profitPct: 30, unitsMonth: 0, o1p: 10, o1f: 4, o2p: 10, o2f: 2 };
   function renderCompanyPrice() {
     if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
     if (typeof orderInit === "function") orderInit();
@@ -2572,7 +2571,9 @@
       document.querySelectorAll("[data-cprtab]").forEach((b) => (b.onclick = () => { cprTab = b.dataset.cprtab; renderTab("companyprice"); }));
       document.querySelectorAll(".cost-in[data-f]").forEach((el) => (el.onchange = () => {
         let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
-        if (/^(allocMachine|allocCelluma|profitPct)$/.test(el.dataset.f)) v = Math.max(0, Math.min(100, v));
+        if (/^(allocMachine|allocCelluma|allocEsth|profitPct)$/.test(el.dataset.f)) v = Math.max(0, Math.min(100, v));
+        if (/^(o1p|o2p)$/.test(el.dataset.f)) v = Math.max(1, Math.round(v));
+        if (/^(o1f|o2f)$/.test(el.dataset.f)) v = Math.round(v);
         costing[el.dataset.f] = v;
         saveEdits("Costing assumptions"); renderTab("companyprice");
       }));
@@ -2646,46 +2647,62 @@
     const costingBlock = () => {
       const usd = (orderState && orderState.usdInr) || 0, cust = (orderState && orderState.customs) || 0;
       const machPc = +costing.allocMachine || 0, cellPc = +costing.allocCelluma || 0;
-      const esthPc = Math.max(0, 100 - machPc - cellPc);
+      const esthPc = +costing.allocEsth || 0;                        // now directly configurable
       const emp = +costing.empExpMonth || 0;
       const profit = +costing.profitPct || 0;
+      const o1p = Math.max(1, +costing.o1p || 1), o1f = +costing.o1f || 0;
+      const o2p = Math.max(1, +costing.o2p || 1), o2f = +costing.o2f || 0;
       const items = (D.esthemaxOrder && D.esthemaxOrder.items) || [];
-      // 6-month AVERAGE monthly units sold = average of the last 6 months.
       const avg6 = (it) => { const m = (it.monthly || []).slice(-6); return m.length ? m.reduce((s, x) => s + (+x || 0), 0) / 6 : 0; };
-      // Only real Esthemax products (a USD factory cost) — excludes spa utensils
-      // / samples in the order sheet that have no unit cost (they showed ₹0 landing).
-      const rows = items.filter((it) => (+it.unitUSD > 0)).map((it) => ({ name: it.name, u: avg6(it), landing: (it.unitUSD * usd * (1 + cust)) + (+it.transport || 0) })).filter((r) => r.u > 0).sort((a, b) => b.u - a.u);
-      const totalU = rows.reduce((s, r) => s + r.u, 0);            // avg units sold per month (all esthemax)
+      // Current MRP lookup from the price list (by group + normalised variant).
+      const EP = window.ESTHEMAX_PRICE_SEED || {};
+      const nz = (s) => String(s || "").toLowerCase().replace(/hydrojelly|retail|mask|850\s*gm|850\s*ml|2\s*masks?\s*\/?\s*box|\bbox\b|5\s*pairs?\s*\/?\s*pack|pairs?|pack/g, "").replace(/[^a-z]/g, "");
+      const mrpMap = {};
+      (EP.groups || []).forEach((g) => (g.rows || []).forEach((r) => { mrpMap[g.id + ":" + nz(r[1])] = r[10]; }));
+      const curMrp = (name) => { const grp = /retail|2\s*mask/i.test(name) ? "retail" : /foot/i.test(name) ? "foot" : "hydro"; return mrpMap[grp + ":" + nz(name)]; };
+      const rows = items.filter((it) => (+it.unitUSD > 0)).map((it) => ({ name: it.name, u: avg6(it), landing: (it.unitUSD * usd * (1 + cust)) + (+it.transport || 0), cur: curMrp(it.name) })).filter((r) => r.u > 0).sort((a, b) => b.u - a.u);
+      const autoU = rows.reduce((s, r) => s + r.u, 0);               // computed 6-month avg units/month
+      const boxes = (+costing.unitsMonth > 0) ? +costing.unitsMonth : autoU; // configurable denominator
       const machBucket = emp * machPc / 100, cellBucket = emp * cellPc / 100, esthBucket = emp * esthPc / 100;
-      const opexU = totalU ? esthBucket / totalU : 0;              // operation cost per unit / month
+      const opexU = boxes ? esthBucket / boxes : 0;                  // operation cost per unit / month
       const mult = 1 + profit / 100;
       const rup = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
-      const aInput = (f, label, suffix, dis) => `<label class="cost-a"><span>${esc(label)}</span><span class="cost-in-wrap"><input class="cost-in" type="number" min="0" ${dis ? "disabled" : `data-f="${f}"`} value="${esc(String(dis ? esthPc : (costing[f] ?? 0)))}">${suffix ? `<i>${suffix}</i>` : ""}</span></label>`;
+      const aInput = (f, label, suffix) => `<label class="cost-a"><span>${esc(label)}</span><span class="cost-in-wrap"><input class="cost-in" type="number" min="0" data-f="${f}" value="${esc(String(f === "unitsMonth" ? Math.round(boxes) : (costing[f] ?? 0)))}">${suffix ? `<i>${suffix}</i>` : ""}</span></label>`;
+      const o1lbl = `${o1p}+${o1f}`, o2lbl = `${o2p}+${o2f}`;
+      const sumPc = machPc + cellPc + esthPc;
       const assume = `<div class="cost-assume">
         <div class="cost-assume-h">⚙ Assumptions <span class="t-muted">— edit these; they save for super admins</span></div>
         <div class="cost-a-grid">
           ${aInput("empExpMonth", "Employee expense (per month)", "₹")}
           ${aInput("allocMachine", "Machine share", "%")}
           ${aInput("allocCelluma", "Celluma share", "%")}
-          ${aInput("_esth", "Esthemax share (auto)", "%", true)}
+          ${aInput("allocEsth", "Esthemax share", "%")}
           ${aInput("profitPct", "Profit", "%")}
+          ${aInput("unitsMonth", "Boxes sold / month", "boxes")}
+          ${aInput("o1p", "Offer 1 — buy", "")}
+          ${aInput("o1f", "Offer 1 — free", "")}
+          ${aInput("o2p", "Offer 2 — buy", "")}
+          ${aInput("o2f", "Offer 2 — free", "")}
         </div>
-        <div class="muted-note" style="margin-top:10px"><b>Split of ${rup(emp)}/month:</b> Machine ${machPc}% = ${rup(machBucket)} · Celluma ${cellPc}% = ${rup(cellBucket)} · Esthemax ${esthPc}% = <b>${rup(esthBucket)}</b>. Esthemax units sold (6-month average): <b>${Math.round(totalU).toLocaleString("en-IN")}/month</b> → operation cost <b>${rup(opexU)}/unit</b>. &nbsp;<b>MRP = (Landing + Operation) × (1 + ${profit}% profit).</b> &nbsp;FX ${usd} · customs ${Math.round(cust * 100)}%.</div>
+        <div class="muted-note" style="margin-top:10px"><b>Split of ${rup(emp)}/month:</b> Machine ${machPc}% = ${rup(machBucket)} · Celluma ${cellPc}% = ${rup(cellBucket)} · Esthemax ${esthPc}% = <b>${rup(esthBucket)}</b>${sumPc !== 100 ? ` <span class="cov-need">⚠ shares add to ${sumPc}%, not 100%</span>` : ""}. Boxes/month: <b>${Math.round(boxes).toLocaleString("en-IN")}</b>${(+costing.unitsMonth > 0) ? ` <span class="t-muted">(manual; auto avg is ${Math.round(autoU)})</span>` : " <span class=\"t-muted\">(auto 6-month avg — editable)</span>"} → operation cost <b>${rup(opexU)}/unit</b>. &nbsp;<b>MRP = (Landing + Operation) × (1 + ${profit}% profit).</b> Offers: <b>${o1lbl}</b> & <b>${o2lbl}</b> (buy + free). FX ${usd} · customs ${Math.round(cust * 100)}%.</div>
       </div>`;
-      const head = ["Product", "Avg units/mo", "Landing ₹", "Operation ₹/unit", "Total cost ₹", "MRP (+" + profit + "%) ₹", "10+4 ₹/unit", "5+2 ₹/unit"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
-      let tU = 0, tLand = 0, tCost = 0, tMrp = 0, t104 = 0, t52 = 0;
+      const head = ["Product", "Boxes/mo", "Landing ₹", "Operation ₹/unit", "Total cost ₹", "MRP (+" + profit + "%) ₹", "Current MRP ₹", o1lbl + " ₹/unit", o2lbl + " ₹/unit"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+      let tU = 0, tLand = 0, tCost = 0, tMrp = 0, t1 = 0, t2 = 0;
       const body = rows.map((r) => {
-        const cost = r.landing + opexU, mrp = cost * mult, o104 = mrp * 10 / 14, o52 = mrp * 5 / 7;
-        tU += r.u; tLand += r.u * r.landing; tCost += r.u * cost; tMrp += r.u * mrp; t104 += r.u * o104; t52 += r.u * o52;
+        const cost = r.landing + opexU, mrp = cost * mult;
+        const off1 = mrp * o1p / (o1p + o1f), off2 = mrp * o2p / (o2p + o2f);
+        tU += r.u; tLand += r.u * r.landing; tCost += r.u * cost; tMrp += r.u * mrp; t1 += r.u * off1; t2 += r.u * off2;
+        const loss = (r.cur != null && r.cur < cost);
         return `<tr>
-        <td class="t-name">${esc(r.name)}</td>
+        <td class="t-name">${esc(r.name)}${loss ? ` <span class="cov-need">loss</span>` : ""}</td>
         <td class="num">${r.u >= 0.5 ? Math.round(r.u) : "<1"}</td>
         <td class="num">${rup(r.landing)}</td>
         <td class="num">${rup(opexU)}</td>
         <td class="num">${rup(cost)}</td>
         <td class="num t-name">${rup(mrp)}</td>
-        <td class="num">${rup(o104)}</td>
-        <td class="num">${rup(o52)}</td></tr>`;
+        <td class="num">${r.cur != null ? rup(r.cur) : "—"}</td>
+        <td class="num">${rup(off1)}</td>
+        <td class="num">${rup(off2)}</td></tr>`;
       }).join("");
       const totalRow = `<tr class="cprice-total">
         <td class="t-name"><b>TOTAL / month</b></td>
@@ -2694,13 +2711,14 @@
         <td class="num"><b>${rup(esthBucket)}</b></td>
         <td class="num"><b>${rup(tCost)}</b></td>
         <td class="num"><b>${rup(tMrp)}</b></td>
-        <td class="num"><b>${rup(t104)}</b></td>
-        <td class="num"><b>${rup(t52)}</b></td></tr>`;
+        <td class="num">—</td>
+        <td class="num"><b>${rup(t1)}</b></td>
+        <td class="num"><b>${rup(t2)}</b></td></tr>`;
       return `${assume}
         <div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🧴 Esthemax — final MRP build-up</h2>
-        <div class="callout"><b>Landing</b> = final purchase (EXW×FX×(1+customs)+transport). <b>Operation ₹/unit</b> = Esthemax employee bucket ÷ average monthly units sold. <b>Total cost</b> = Landing + Operation. <b>MRP</b> = Total cost + ${profit}% profit. <b>10+4</b> = 10 paid + 4 free (14 total) · <b>5+2</b> = 5 paid + 2 free (7 total) — the effective realised price per unit under each offer. TOTAL row = per-month value (units × amount).</div>
-        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="8" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>
-        <div class="callout" style="margin-top:14px">🔧 <b>Machines</b> carry ${rup(machBucket)}/month and <b>Celluma</b> ${rup(cellBucket)}/month of the employee expense. To turn that into a per-unit operation cost + MRP for each machine/Celluma model, I need the <b>number of machines &amp; Celluma units sold per month (6-month average)</b> — share that and I'll build the same table for them.</div>`;
+        <div class="callout"><b>Landing</b> = final purchase. <b>Operation ₹/unit</b> = Esthemax bucket ÷ boxes sold/month. <b>Total cost</b> = Landing + Operation. <b>MRP</b> = Total cost + ${profit}% profit. <b>Current MRP</b> = latest price list (incl. 18% GST) — a red <b>loss</b> tag means the current MRP is below our total cost. <b>${o1lbl}</b> / <b>${o2lbl}</b> = effective ₹/unit under each buy+free offer. TOTAL row = per-month value.</div>
+        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="9" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>
+        <div class="callout" style="margin-top:14px">🔧 <b>Machines</b> carry ${rup(machBucket)}/month and <b>Celluma</b> ${rup(cellBucket)}/month of the employee expense. Share their monthly units sold and I'll build the same MRP table for them.</div>`;
     };
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="esthemax" class="${cprTab === "esthemax" ? "active" : ""}">🧴 Esthemax</button>
@@ -8352,7 +8370,7 @@
           covNeedsReseed = true;
         }
       }
-      if (e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "profitPct"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
+      if (e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "allocEsth", "profitPct", "unitsMonth", "o1p", "o1f", "o2p", "o2f"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
       if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.
