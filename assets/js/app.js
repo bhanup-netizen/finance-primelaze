@@ -2665,8 +2665,8 @@
       const boxes = (+costing.unitsMonth > 0) ? +costing.unitsMonth : autoU; // configurable denominator
       const machBucket = emp * machPc / 100, cellBucket = emp * cellPc / 100, esthBucket = emp * esthPc / 100;
       const opexU = boxes ? esthBucket / boxes : 0;                  // operation cost per unit / month
-      const mult = 1 + profit / 100;
       const rup = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+      const shortNm = (s) => String(s || "").replace(/hydrojelly\s*mask/ig, "").replace(/850\s*gm/ig, "").replace(/2\s*masks?\s*\/?\s*box/ig, "").replace(/\s{2,}/g, " ").trim();
       const aInput = (f, label, suffix) => `<label class="cost-a"><span>${esc(label)}</span><span class="cost-in-wrap"><input class="cost-in" type="number" min="0" data-f="${f}" value="${esc(String(f === "unitsMonth" ? Math.round(boxes) : (costing[f] ?? 0)))}">${suffix ? `<i>${suffix}</i>` : ""}</span></label>`;
       const o1lbl = `${o1p}+${o1f}`, o2lbl = `${o2p}+${o2f}`;
       const sumPc = machPc + cellPc + esthPc;
@@ -2677,48 +2677,54 @@
           ${aInput("allocMachine", "Machine share", "%")}
           ${aInput("allocCelluma", "Celluma share", "%")}
           ${aInput("allocEsth", "Esthemax share", "%")}
-          ${aInput("profitPct", "Profit", "%")}
           ${aInput("unitsMonth", "Boxes sold / month", "boxes")}
           ${aInput("o1p", "Offer 1 — buy", "")}
           ${aInput("o1f", "Offer 1 — free", "")}
           ${aInput("o2p", "Offer 2 — buy", "")}
           ${aInput("o2f", "Offer 2 — free", "")}
         </div>
-        <div class="muted-note" style="margin-top:10px"><b>Split of ${rup(emp)}/month:</b> Machine ${machPc}% = ${rup(machBucket)} · Celluma ${cellPc}% = ${rup(cellBucket)} · Esthemax ${esthPc}% = <b>${rup(esthBucket)}</b>${sumPc !== 100 ? ` <span class="cov-need">⚠ shares add to ${sumPc}%, not 100%</span>` : ""}. Boxes/month: <b>${Math.round(boxes).toLocaleString("en-IN")}</b>${(+costing.unitsMonth > 0) ? ` <span class="t-muted">(manual; auto avg is ${Math.round(autoU)})</span>` : " <span class=\"t-muted\">(auto 6-month avg — editable)</span>"} → operation cost <b>${rup(opexU)}/unit</b>. &nbsp;<b>MRP = (Landing + Operation) × (1 + ${profit}% profit).</b> Offers: <b>${o1lbl}</b> & <b>${o2lbl}</b> (buy + free). FX ${usd} · customs ${Math.round(cust * 100)}%.</div>
+        <div class="muted-note" style="margin-top:10px"><b>Split of ${rup(emp)}/month:</b> Machine ${machPc}% = ${rup(machBucket)} · Celluma ${cellPc}% = ${rup(cellBucket)} · Esthemax ${esthPc}% = <b>${rup(esthBucket)}</b>${sumPc !== 100 ? ` <span class="cov-need">⚠ shares add to ${sumPc}%, not 100%</span>` : ""}. Boxes/month: <b>${Math.round(boxes).toLocaleString("en-IN")}</b>${(+costing.unitsMonth > 0) ? ` <span class="t-muted">(manual; auto avg is ${Math.round(autoU)})</span>` : " <span class=\"t-muted\">(auto 6-month avg — editable)</span>"} → operation cost <b>${rup(opexU)}/unit</b>. &nbsp;<b>Total cost = Landing + Operation.</b> Offers & 10%-off are calculated on the <b>Current MRP</b>. FX ${usd} · customs ${Math.round(cust * 100)}%.</div>
       </div>`;
-      const head = ["Product", "Boxes/mo", "Landing ₹", "Operation ₹/unit", "Total cost ₹", "MRP (+" + profit + "%) ₹", "Current MRP ₹", o1lbl + " ₹/unit", o2lbl + " ₹/unit"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
-      let tU = 0, tLand = 0, tCost = 0, tMrp = 0, t1 = 0, t2 = 0;
+      const head = ["Product", "Boxes/mo", "Landing ₹", "Operation ₹/unit", "Total cost ₹", "Current MRP ₹", "Margin %", "10% off ₹", o1lbl + " ₹", o2lbl + " ₹"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+      let tU = 0, tLand = 0, tCost = 0, tCur = 0, t10 = 0, t1 = 0, t2 = 0;
       const body = rows.map((r) => {
-        const cost = r.landing + opexU, mrp = cost * mult;
-        const off1 = mrp * o1p / (o1p + o1f), off2 = mrp * o2p / (o2p + o2f);
-        tU += r.u; tLand += r.u * r.landing; tCost += r.u * cost; tMrp += r.u * mrp; t1 += r.u * off1; t2 += r.u * off2;
-        const loss = (r.cur != null && r.cur < cost);
+        const cost = r.landing + opexU, cur = r.cur;
+        const margin = cur ? (cur - cost) / cur * 100 : null;
+        const off10 = cur != null ? cur * 0.9 : null;
+        const o1v = cur != null ? cur * o1p / (o1p + o1f) : null;
+        const o2v = cur != null ? cur * o2p / (o2p + o2f) : null;
+        tU += r.u; tLand += r.u * r.landing; tCost += r.u * cost;
+        if (cur != null) { tCur += r.u * cur; t10 += r.u * off10; t1 += r.u * o1v; t2 += r.u * o2v; }
+        const loss = cur != null && cur < cost;
         return `<tr>
-        <td class="t-name">${esc(r.name)}${loss ? ` <span class="cov-need">loss</span>` : ""}</td>
+        <td class="t-name cprice-prod">${esc(shortNm(r.name))}${loss ? ` <span class="cov-need">loss</span>` : ""}</td>
         <td class="num">${r.u >= 0.5 ? Math.round(r.u) : "<1"}</td>
         <td class="num">${rup(r.landing)}</td>
         <td class="num">${rup(opexU)}</td>
         <td class="num">${rup(cost)}</td>
-        <td class="num t-name">${rup(mrp)}</td>
-        <td class="num">${r.cur != null ? rup(r.cur) : "—"}</td>
-        <td class="num">${rup(off1)}</td>
-        <td class="num">${rup(off2)}</td></tr>`;
+        <td class="num t-name">${cur != null ? rup(cur) : "—"}</td>
+        <td class="num ${margin != null && margin < 0 ? "cprice-lossnum" : ""}">${margin != null ? Math.round(margin) + "%" : "—"}</td>
+        <td class="num">${off10 != null ? rup(off10) : "—"}</td>
+        <td class="num">${o1v != null ? rup(o1v) : "—"}</td>
+        <td class="num">${o2v != null ? rup(o2v) : "—"}</td></tr>`;
       }).join("");
+      const marginT = tCur ? (tCur - tCost) / tCur * 100 : null;
       const totalRow = `<tr class="cprice-total">
         <td class="t-name"><b>TOTAL / month</b></td>
         <td class="num"><b>${Math.round(tU)}</b></td>
         <td class="num"><b>${rup(tLand)}</b></td>
         <td class="num"><b>${rup(esthBucket)}</b></td>
         <td class="num"><b>${rup(tCost)}</b></td>
-        <td class="num"><b>${rup(tMrp)}</b></td>
-        <td class="num">—</td>
+        <td class="num"><b>${rup(tCur)}</b></td>
+        <td class="num"><b>${marginT != null ? Math.round(marginT) + "%" : "—"}</b></td>
+        <td class="num"><b>${rup(t10)}</b></td>
         <td class="num"><b>${rup(t1)}</b></td>
         <td class="num"><b>${rup(t2)}</b></td></tr>`;
       return `${assume}
-        <div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🧴 Esthemax — final MRP build-up</h2>
-        <div class="callout"><b>Landing</b> = final purchase. <b>Operation ₹/unit</b> = Esthemax bucket ÷ boxes sold/month. <b>Total cost</b> = Landing + Operation. <b>MRP</b> = Total cost + ${profit}% profit. <b>Current MRP</b> = latest price list (incl. 18% GST) — a red <b>loss</b> tag means the current MRP is below our total cost. <b>${o1lbl}</b> / <b>${o2lbl}</b> = effective ₹/unit under each buy+free offer. TOTAL row = per-month value.</div>
-        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="9" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>
-        <div class="callout" style="margin-top:14px">🔧 <b>Machines</b> carry ${rup(machBucket)}/month and <b>Celluma</b> ${rup(cellBucket)}/month of the employee expense. Share their monthly units sold and I'll build the same MRP table for them.</div>`;
+        <div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🧴 Esthemax — cost vs current MRP</h2>
+        <div class="callout"><b>Total cost</b> = Landing + Operation. <b>Current MRP</b> = latest price list (incl. 18% GST). <b>Margin %</b> = (Current MRP − Total cost) ÷ Current MRP (red = loss). <b>10% off</b> = Current MRP − 10%. <b>${o1lbl}</b> / <b>${o2lbl}</b> = effective ₹/unit under each buy+free offer, on the Current MRP. TOTAL row = per-month value.</div>
+        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="10" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>
+        <div class="callout" style="margin-top:14px">🔧 <b>Machines</b> carry ${rup(machBucket)}/month and <b>Celluma</b> ${rup(cellBucket)}/month of the employee expense. Share their monthly units sold and I'll build the same table for them.</div>`;
     };
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="esthemax" class="${cprTab === "esthemax" ? "active" : ""}">🧴 Esthemax</button>
