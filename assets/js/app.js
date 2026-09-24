@@ -2616,7 +2616,7 @@
     };
     // ---- Esthemax cost structure (factory → landing) + accessories + PO ----
     // Market-independent — the selling MRP/offers live in the Saloon/Derma tabs.
-    const costStructureBlock = () => {
+    const costStructureBlock = (opts = {}) => {
       const EP = window.ESTHEMAX_PRICE_SEED;
       if (!EP || !Array.isArray(EP.groups)) return `<p class="empty">No Esthemax price data loaded.</p>`;
       // Show landing as the final purchase cost — Marketing/Profit/Total dropped.
@@ -2631,8 +2631,9 @@
         </tr>`).join("");
         return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
-      let out = `<div style="margin-top:6px"><h2 style="margin:0">🧴 Esthemax — cost structure <span class="t-muted" style="font-size:13px">(factory → landing · ₹ per box · distribution price in $)</span></h2></div>` + EP.groups.map(grp).join("");
-      if (Array.isArray(EP.accessories) && EP.accessories.length) {
+      let out = `<div style="margin-top:6px"><h2 style="margin:0">🧴 Esthemax — cost structure <span class="t-muted" style="font-size:13px">(factory → landing · ₹ per box · distribution price in $)</span></h2>
+        <div class="callout" style="margin-top:6px"><b>Landing = final purchase cost</b> = EXW (factory) × USD→INR × (1 + customs @44%) + transport. This is the buy-in cost the Calculation below builds on.</div></div>` + EP.groups.map(grp).join("");
+      if (opts.full && Array.isArray(EP.accessories) && EP.accessories.length) {
         const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
         const accHead = ["Sr", "Product", "Factory (₹)", "Landing (₹)", "MRP (₹)"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
         const accBody = EP.accessories.map((a, i) => {
@@ -2642,7 +2643,7 @@
         out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory ₹ per unit · Landing ₹ · MRP ₹)</span></h3>${table(accHead, accBody)}</div>`;
       }
       // Factory purchase orders (USD) — what Primelaze pays the esthemax factory.
-      if (Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
+      if (opts.full && Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
         const usdFmt = (v) => v == null || v === "" ? "—" : "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const poHead = ["Code", "Description", "Volume", "Qty", "Unit $", "Line $"].map((x, i) => `<th class="${i >= 3 ? "num" : ""}">${x}</th>`).join("");
         out += EP.purchaseOrders.map((po) => {
@@ -2755,8 +2756,9 @@
       };
       return `${assume}${mktTable("salon")}${mktTable("doctor")}`;
     };
-    // Calculation tab = only the cost-vs-MRP tables (Saloon + Derma).
-    const calcBlock = () => costingBlock();
+    // Calculation tab = cost-structure breakup (EXW → customs → landing) + the
+    // cost-vs-MRP tables (Saloon + Derma). Accessories/PO stay out (full:false).
+    const calcBlock = () => costStructureBlock({ full: false }) + costingBlock();
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
       <button data-cprtab="derma" class="${cprTab === "derma" ? "active" : ""}">💉 Derma</button>
