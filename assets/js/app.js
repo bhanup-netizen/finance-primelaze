@@ -2607,8 +2607,13 @@
       };
       let out = `<div style="margin-top:6px"><h2 style="margin:0">🧴 Esthemax — full price structure <span class="t-muted" style="font-size:13px">(₹ per box, excl. GST · distribution price in $)</span></h2></div>` + EP.groups.map(grp).join("");
       if (Array.isArray(EP.accessories) && EP.accessories.length) {
-        const accBody = EP.accessories.map((a, i) => `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${inr(a[1])}</td></tr>`).join("");
-        out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(MRP, ₹)</span></h3>${table(["Sr", "Product", "MRP"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join(""), accBody)}</div>`;
+        const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
+        const accHead = ["Sr", "Product", "Factory ($)", "Landing (₹)", "MRP (₹)"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
+        const accBody = EP.accessories.map((a, i) => {
+          const fu = a[2]; const land = fu ? fu * usdN * (1 + custN) : null;
+          return `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${fu ? "$" + Number(fu).toFixed(2) : "—"}</td><td class="num">${land ? inr(Math.round(land)) : "—"}</td><td class="num">${inr(a[1])}</td></tr>`;
+        }).join("");
+        out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory $ per unit · Landing ₹ · MRP ₹)</span></h3>${table(accHead, accBody)}</div>`;
       }
       // Factory purchase orders (USD) — what Primelaze pays the esthemax factory.
       if (Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
