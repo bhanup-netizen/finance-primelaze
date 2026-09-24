@@ -2624,7 +2624,8 @@
           <div class="stat-row" style="margin-top:10px"><div class="stat"><b>${po.totalQty}</b><span>Total units</span></div><div class="stat k-teal"><b>${usdFmt(po.totalUsd)}</b><span>Order value (USD)</span></div></div></div>`;
         }).join("");
       }
-      return out;
+      // Costing / MRP build-up lives inside the Esthemax tab.
+      return out + costingBlock();
     };
     // ---- Celluma (prices from the cost book) ----
     const cellumaBlock = () => {
@@ -2646,7 +2647,9 @@
       const items = (D.esthemaxOrder && D.esthemaxOrder.items) || [];
       // 6-month AVERAGE monthly units sold = average of the last 6 months.
       const avg6 = (it) => { const m = (it.monthly || []).slice(-6); return m.length ? m.reduce((s, x) => s + (+x || 0), 0) / 6 : 0; };
-      const rows = items.map((it) => ({ name: it.name, u: avg6(it), landing: (it.unitUSD * usd * (1 + cust)) + (+it.transport || 0) })).filter((r) => r.u > 0).sort((a, b) => b.u - a.u);
+      // Only real Esthemax products (a USD factory cost) — excludes spa utensils
+      // / samples in the order sheet that have no unit cost (they showed ₹0 landing).
+      const rows = items.filter((it) => (+it.unitUSD > 0)).map((it) => ({ name: it.name, u: avg6(it), landing: (it.unitUSD * usd * (1 + cust)) + (+it.transport || 0) })).filter((r) => r.u > 0).sort((a, b) => b.u - a.u);
       const totalU = rows.reduce((s, r) => s + r.u, 0);            // avg units sold per month (all esthemax)
       const machBucket = emp * machPc / 100, cellBucket = emp * cellPc / 100, esthBucket = emp * esthPc / 100;
       const opexU = totalU ? esthBucket / totalU : 0;              // operation cost per unit / month
@@ -2682,10 +2685,9 @@
       <button data-cprtab="esthemax" class="${cprTab === "esthemax" ? "active" : ""}">🧴 Esthemax</button>
       <button data-cprtab="machines" class="${cprTab === "machines" ? "active" : ""}">🔧 Machines</button>
       <button data-cprtab="celluma" class="${cprTab === "celluma" ? "active" : ""}">💡 Celluma</button>
-      <button data-cprtab="costing" class="${cprTab === "costing" ? "active" : ""}">📊 Costing</button>
     </div>`;
-    const body = cprTab === "machines" ? machinesBlock() : cprTab === "celluma" ? cellumaBlock() : cprTab === "costing" ? costingBlock() : esthemaxBlock();
-    const showFx = cprTab === "esthemax" || cprTab === "machines";
+    const body = cprTab === "machines" ? machinesBlock() : cprTab === "celluma" ? cellumaBlock() : esthemaxBlock();
+    const showFx = cprTab === "machines";
     return `
       <div class="section-head"><h1>💰 Company Price</h1>
         <p><b>Super admin only — confidential.</b> Full cost &amp; price sheet: factory (EXW), customs, landing and all selling prices — split by Esthemax, Machines and Celluma.</p></div>
