@@ -2560,7 +2560,6 @@
   // with factory (EXW), customs, landing and every selling price. Read-only view
   // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
   let cprTab = "saloon"; // Company Price sub-tab: saloon | derma | calc | machines | celluma
-  let calcMarket = "doctor"; // which market's MRP the Calculation tab compares against
   // Costing assumptions (editable, saved to the shared doc; super admin only).
   const costing = { empExpMonth: 3000000, allocMachine: 60, allocCelluma: 10, allocEsth: 30, profitPct: 30, unitsMonth: 0, o1p: 10, o1f: 4, o2p: 10, o2f: 2 };
   function renderCompanyPrice() {
@@ -2570,7 +2569,6 @@
     const custPct = orderState && orderState.customs != null ? Math.round(orderState.customs * 100) + "%" : "—";
     setTimeout(() => {
       document.querySelectorAll("[data-cprtab]").forEach((b) => (b.onclick = () => { cprTab = b.dataset.cprtab; renderTab("companyprice"); }));
-      document.querySelectorAll("[data-calcmkt]").forEach((b) => (b.onclick = () => { calcMarket = b.dataset.calcmkt; renderTab("companyprice"); }));
       document.querySelectorAll(".cost-in[data-f]").forEach((el) => (el.onchange = () => {
         let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
         if (/^(allocMachine|allocCelluma|allocEsth|profitPct)$/.test(el.dataset.f)) v = Math.max(0, Math.min(100, v));
@@ -2680,17 +2678,11 @@
       const o2p = Math.max(1, +costing.o2p || 1), o2f = +costing.o2f || 0;
       const items = (D.esthemaxOrder && D.esthemaxOrder.items) || [];
       const avg6 = (it) => { const m = (it.monthly || []).slice(-6); return m.length ? m.reduce((s, x) => s + (+x || 0), 0) / 6 : 0; };
-      // Current MRP lookup from the price list (by group + normalised variant).
       const EP = window.ESTHEMAX_PRICE_SEED || {};
       const nz = (s) => String(s || "").toLowerCase().replace(/hydrojelly|retail|mask|850\s*gm|850\s*ml|2\s*masks?\s*\/?\s*box|\bbox\b|5\s*pairs?\s*\/?\s*pack|pairs?|pack/g, "").replace(/[^a-z]/g, "");
-      // Current MRP comes from the SELECTED market (Saloon / Derma) — row [sr,name,mrp].
-      const MKT = (EP.markets && EP.markets[calcMarket]) || (EP.markets && EP.markets.doctor) || {};
-      const mktLabel = MKT.label || "Derma";
-      const mrpMap = {};
-      (MKT.groups || []).forEach((g) => (g.rows || []).forEach((r) => { mrpMap[g.id + ":" + nz(r[1])] = r[2]; }));
-      const curMrp = (name) => { const grp = /retail|2\s*mask/i.test(name) ? "retail" : /foot/i.test(name) ? "foot" : "hydro"; return mrpMap[grp + ":" + nz(name)]; };
-      const rows = items.filter((it) => (+it.unitUSD > 0)).map((it) => ({ name: it.name, u: avg6(it), landing: (it.unitUSD * usd * (1 + cust)) + (+it.transport || 0), cur: curMrp(it.name) })).filter((r) => r.u > 0).sort((a, b) => b.u - a.u);
-      const autoU = rows.reduce((s, r) => s + r.u, 0);               // computed 6-month avg units/month
+      // Base rows (market-independent): name, units/mo, landing.
+      const base = items.filter((it) => (+it.unitUSD > 0)).map((it) => ({ name: it.name, u: avg6(it), landing: (it.unitUSD * usd * (1 + cust)) + (+it.transport || 0) })).filter((r) => r.u > 0).sort((a, b) => b.u - a.u);
+      const autoU = base.reduce((s, r) => s + r.u, 0);               // computed 6-month avg units/month
       const boxes = (+costing.unitsMonth > 0) ? +costing.unitsMonth : autoU; // configurable denominator
       const machBucket = emp * machPc / 100, cellBucket = emp * cellPc / 100, esthBucket = emp * esthPc / 100;
       const opexU = boxes ? esthBucket / boxes : 0;                  // operation cost per unit / month
@@ -2713,57 +2705,58 @@
           ${aInput("o2p", "Offer 2 — buy", "")}
           ${aInput("o2f", "Offer 2 — free", "")}
         </div>
-        <div class="muted-note" style="margin-top:10px"><b>Split of ${rup(emp)}/month:</b> Machine ${machPc}% = ${rup(machBucket)} · Celluma ${cellPc}% = ${rup(cellBucket)} · Esthemax ${esthPc}% = <b>${rup(esthBucket)}</b>${sumPc !== 100 ? ` <span class="cov-need">⚠ shares add to ${sumPc}%, not 100%</span>` : ""}. Boxes/month: <b>${Math.round(boxes).toLocaleString("en-IN")}</b>${(+costing.unitsMonth > 0) ? ` <span class="t-muted">(manual; auto avg is ${Math.round(autoU)})</span>` : " <span class=\"t-muted\">(auto 6-month avg — editable)</span>"} → operation cost <b>${rup(opexU)}/unit</b>. &nbsp;<b>Total cost = Landing + Operation.</b> Offers & 10%-off are calculated on the <b>Current MRP</b>. FX ${usd} · customs ${Math.round(cust * 100)}%.</div>
+        <div class="muted-note" style="margin-top:10px"><b>Split of ${rup(emp)}/month:</b> Machine ${machPc}% = ${rup(machBucket)} · Celluma ${cellPc}% = ${rup(cellBucket)} · Esthemax ${esthPc}% = <b>${rup(esthBucket)}</b>${sumPc !== 100 ? ` <span class="cov-need">⚠ shares add to ${sumPc}%, not 100%</span>` : ""}. Boxes/month: <b>${Math.round(boxes).toLocaleString("en-IN")}</b>${(+costing.unitsMonth > 0) ? ` <span class="t-muted">(manual; auto avg is ${Math.round(autoU)})</span>` : " <span class=\"t-muted\">(auto 6-month avg — editable)</span>"} → operation cost <b>${rup(opexU)}/unit</b>. &nbsp;<b>Total cost = Landing + Operation.</b> Offers & 10%-off are calculated on the market's <b>MRP</b>. FX ${usd} · customs ${Math.round(cust * 100)}%.</div>
       </div>`;
-      const head = ["Product", "Boxes/mo", "Landing ₹", "Operation ₹/unit", "Total cost ₹", mktLabel + " MRP ₹", "Margin %", "10% off ₹", o1lbl + " ₹", o2lbl + " ₹"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
-      let tU = 0, tLand = 0, tCost = 0, tCur = 0, t10 = 0, t1 = 0, t2 = 0;
-      const body = rows.map((r) => {
-        const cost = r.landing + opexU, cur = r.cur;
-        const margin = cur ? (cur - cost) / cur * 100 : null;
-        const off10 = cur != null ? cur * 0.9 : null;
-        const o1v = cur != null ? cur * o1p / (o1p + o1f) : null;
-        const o2v = cur != null ? cur * o2p / (o2p + o2f) : null;
-        tU += r.u; tLand += r.u * r.landing; tCost += r.u * cost;
-        if (cur != null) { tCur += r.u * cur; t10 += r.u * off10; t1 += r.u * o1v; t2 += r.u * o2v; }
-        const loss = cur != null && cur < cost;
-        return `<tr>
-        <td class="t-name cprice-prod">${esc(shortNm(r.name))}${loss ? ` <span class="cov-need">loss</span>` : ""}</td>
-        <td class="num">${r.u >= 0.5 ? Math.round(r.u) : "<1"}</td>
-        <td class="num">${rup(r.landing)}</td>
-        <td class="num">${rup(opexU)}</td>
-        <td class="num">${rup(cost)}</td>
-        <td class="num t-name">${cur != null ? rup(cur) : "—"}</td>
-        <td class="num ${margin != null && margin < 0 ? "cprice-lossnum" : ""}">${margin != null ? Math.round(margin) + "%" : "—"}</td>
-        ${offCell(off10, cost)}
-        ${offCell(o1v, cost)}
-        ${offCell(o2v, cost)}</tr>`;
-      }).join("");
-      const marginT = tCur ? (tCur - tCost) / tCur * 100 : null;
-      const totalRow = `<tr class="cprice-total">
-        <td class="t-name"><b>TOTAL / month</b></td>
-        <td class="num"><b>${Math.round(tU)}</b></td>
-        <td class="num"><b>${rup(tLand)}</b></td>
-        <td class="num"><b>${rup(esthBucket)}</b></td>
-        <td class="num"><b>${rup(tCost)}</b></td>
-        <td class="num"><b>${rup(tCur)}</b></td>
-        <td class="num"><b>${marginT != null ? Math.round(marginT) + "%" : "—"}</b></td>
-        ${offCell(t10, tCost)}
-        ${offCell(t1, tCost)}
-        ${offCell(t2, tCost)}</tr>`;
-      const mktToggle = `<div class="seg seg-sm" style="margin:0 0 10px">
-        <span class="t-muted" style="font-size:12px;align-self:center;margin-right:4px">Compare against MRP of:</span>
-        <button data-calcmkt="salon" class="${calcMarket === "salon" ? "active" : ""}">🧖 Saloon</button>
-        <button data-calcmkt="doctor" class="${calcMarket === "doctor" ? "active" : ""}">💉 Derma</button>
-      </div>`;
-      return `${assume}
-        <div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🧴 Esthemax — cost vs ${esc(mktLabel)} MRP</h2>
-        ${mktToggle}
-        <div class="callout"><b>Total cost</b> = Landing + Operation. <b>${esc(mktLabel)} MRP</b> = latest price list for the ${esc(mktLabel)} market (incl. 18% GST). <b>Margin %</b> = (MRP − Total cost) ÷ MRP (red = loss). <b>10% off</b> = MRP − 10%. <b>${o1lbl}</b> / <b>${o2lbl}</b> = effective ₹/unit under each buy+free offer, on the MRP. Each offer also shows its <b>margin %</b> at that price (red = loss). TOTAL row = per-month value.</div>
-        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="10" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>
-        <div class="callout" style="margin-top:14px">🔧 <b>Machines</b> carry ${rup(machBucket)}/month and <b>Celluma</b> ${rup(cellBucket)}/month of the employee expense. Share their monthly units sold and I'll build the same table for them.</div>`;
+      // One cost-vs-MRP table for a given market (Saloon / Derma).
+      const mktTable = (mid) => {
+        const MKT = (EP.markets && EP.markets[mid]) || {};
+        const mktLabel = MKT.label || mid;
+        const mrpMap = {};
+        (MKT.groups || []).forEach((g) => (g.rows || []).forEach((r) => { mrpMap[g.id + ":" + nz(r[1])] = r[2]; }));
+        const curMrp = (name) => { const grp = /retail|2\s*mask/i.test(name) ? "retail" : /foot/i.test(name) ? "foot" : "hydro"; return mrpMap[grp + ":" + nz(name)]; };
+        const head = ["Product", "Boxes/mo", "Landing ₹", "Operation ₹/unit", "Total cost ₹", mktLabel + " MRP ₹", "Margin %", "10% off ₹", o1lbl + " ₹", o2lbl + " ₹"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+        let tU = 0, tLand = 0, tCost = 0, tCur = 0, t10 = 0, t1 = 0, t2 = 0;
+        const body = base.map((r) => {
+          const cost = r.landing + opexU, cur = curMrp(r.name);
+          const margin = cur ? (cur - cost) / cur * 100 : null;
+          const off10 = cur != null ? cur * 0.9 : null;
+          const o1v = cur != null ? cur * o1p / (o1p + o1f) : null;
+          const o2v = cur != null ? cur * o2p / (o2p + o2f) : null;
+          tU += r.u; tLand += r.u * r.landing; tCost += r.u * cost;
+          if (cur != null) { tCur += r.u * cur; t10 += r.u * off10; t1 += r.u * o1v; t2 += r.u * o2v; }
+          const loss = cur != null && cur < cost;
+          return `<tr>
+          <td class="t-name cprice-prod">${esc(shortNm(r.name))}${loss ? ` <span class="cov-need">loss</span>` : ""}</td>
+          <td class="num">${r.u >= 0.5 ? Math.round(r.u) : "<1"}</td>
+          <td class="num">${rup(r.landing)}</td>
+          <td class="num">${rup(opexU)}</td>
+          <td class="num">${rup(cost)}</td>
+          <td class="num t-name">${cur != null ? rup(cur) : "—"}</td>
+          <td class="num ${margin != null && margin < 0 ? "cprice-lossnum" : ""}">${margin != null ? Math.round(margin) + "%" : "—"}</td>
+          ${offCell(off10, cost)}
+          ${offCell(o1v, cost)}
+          ${offCell(o2v, cost)}</tr>`;
+        }).join("");
+        const marginT = tCur ? (tCur - tCost) / tCur * 100 : null;
+        const totalRow = `<tr class="cprice-total">
+          <td class="t-name"><b>TOTAL / month</b></td>
+          <td class="num"><b>${Math.round(tU)}</b></td>
+          <td class="num"><b>${rup(tLand)}</b></td>
+          <td class="num"><b>${rup(esthBucket)}</b></td>
+          <td class="num"><b>${rup(tCost)}</b></td>
+          <td class="num"><b>${rup(tCur)}</b></td>
+          <td class="num"><b>${marginT != null ? Math.round(marginT) + "%" : "—"}</b></td>
+          ${offCell(t10, tCost)}
+          ${offCell(t1, tCost)}
+          ${offCell(t2, tCost)}</tr>`;
+        return `<div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">${esc(MKT.icon || "🧴")} ${esc(mktLabel)} — cost vs MRP</h2>
+          <div class="callout"><b>Total cost</b> = Landing + Operation. <b>${esc(mktLabel)} MRP</b> = latest ${esc(mktLabel)}-market price list (incl. 18% GST). <b>Margin %</b> = (MRP − Total cost) ÷ MRP (red = loss). <b>10% off</b> = MRP − 10%. <b>${o1lbl}</b> / <b>${o2lbl}</b> = effective ₹/unit under each buy+free offer, on the MRP (each shows its margin %). TOTAL row = per-month value.</div>
+          <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="10" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>`;
+      };
+      return `${assume}${mktTable("salon")}${mktTable("doctor")}`;
     };
-    // Calculation tab = cost structure (factory → landing) + accessories + PO + costing model.
-    const calcBlock = () => costStructureBlock() + costingBlock();
+    // Calculation tab = only the cost-vs-MRP tables (Saloon + Derma).
+    const calcBlock = () => costingBlock();
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
       <button data-cprtab="derma" class="${cprTab === "derma" ? "active" : ""}">💉 Derma</button>
