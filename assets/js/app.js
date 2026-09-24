@@ -2608,12 +2608,12 @@
       let out = `<div style="margin-top:6px"><h2 style="margin:0">🧴 Esthemax — full price structure <span class="t-muted" style="font-size:13px">(₹ per box, excl. GST · distribution price in $)</span></h2></div>` + EP.groups.map(grp).join("");
       if (Array.isArray(EP.accessories) && EP.accessories.length) {
         const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
-        const accHead = ["Sr", "Product", "Factory ($)", "Landing (₹)", "MRP (₹)"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
+        const accHead = ["Sr", "Product", "Factory (₹)", "Landing (₹)", "MRP (₹)"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
         const accBody = EP.accessories.map((a, i) => {
-          const fu = a[2]; const land = fu ? fu * usdN * (1 + custN) : null;
-          return `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${fu ? "$" + Number(fu).toFixed(2) : "—"}</td><td class="num">${land ? inr(Math.round(land)) : "—"}</td><td class="num">${inr(a[1])}</td></tr>`;
+          const fu = a[2]; const facR = fu ? fu * usdN : null; const land = fu ? fu * usdN * (1 + custN) : null;
+          return `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${facR ? inr(Math.round(facR)) + ` <span class="t-muted">($${Number(fu).toFixed(2)})</span>` : "—"}</td><td class="num">${land ? inr(Math.round(land)) : "—"}</td><td class="num">${inr(a[1])}</td></tr>`;
         }).join("");
-        out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory $ per unit · Landing ₹ · MRP ₹)</span></h3>${table(accHead, accBody)}</div>`;
+        out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory ₹ per unit · Landing ₹ · MRP ₹)</span></h3>${table(accHead, accBody)}</div>`;
       }
       // Factory purchase orders (USD) — what Primelaze pays the esthemax factory.
       if (Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
@@ -2672,18 +2672,34 @@
         </div>
         <div class="muted-note" style="margin-top:10px"><b>Split of ${rup(emp)}/month:</b> Machine ${machPc}% = ${rup(machBucket)} · Celluma ${cellPc}% = ${rup(cellBucket)} · Esthemax ${esthPc}% = <b>${rup(esthBucket)}</b>. Esthemax units sold (6-month average): <b>${Math.round(totalU).toLocaleString("en-IN")}/month</b> → operation cost <b>${rup(opexU)}/unit</b>. &nbsp;<b>MRP = (Landing + Operation) × (1 + ${profit}% profit).</b> &nbsp;FX ${usd} · customs ${Math.round(cust * 100)}%.</div>
       </div>`;
-      const head = ["Product", "Avg units/mo", "Landing (cost) ₹", "Operation ₹/unit", "Total cost ₹", "MRP (+" + profit + "%) ₹"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
-      const body = rows.map((r) => { const cost = r.landing + opexU; return `<tr>
+      const head = ["Product", "Avg units/mo", "Landing ₹", "Operation ₹/unit", "Total cost ₹", "MRP (+" + profit + "%) ₹", "10+4 ₹/unit", "5+2 ₹/unit"].map((x, i) => `<th class="${i ? "num" : ""}">${x}</th>`).join("");
+      let tU = 0, tLand = 0, tCost = 0, tMrp = 0, t104 = 0, t52 = 0;
+      const body = rows.map((r) => {
+        const cost = r.landing + opexU, mrp = cost * mult, o104 = mrp * 10 / 14, o52 = mrp * 5 / 7;
+        tU += r.u; tLand += r.u * r.landing; tCost += r.u * cost; tMrp += r.u * mrp; t104 += r.u * o104; t52 += r.u * o52;
+        return `<tr>
         <td class="t-name">${esc(r.name)}</td>
-        <td class="num">${Math.round(r.u)}</td>
+        <td class="num">${r.u >= 0.5 ? Math.round(r.u) : "<1"}</td>
         <td class="num">${rup(r.landing)}</td>
         <td class="num">${rup(opexU)}</td>
         <td class="num">${rup(cost)}</td>
-        <td class="num t-name">${rup(cost * mult)}</td></tr>`; }).join("");
+        <td class="num t-name">${rup(mrp)}</td>
+        <td class="num">${rup(o104)}</td>
+        <td class="num">${rup(o52)}</td></tr>`;
+      }).join("");
+      const totalRow = `<tr class="cprice-total">
+        <td class="t-name"><b>TOTAL / month</b></td>
+        <td class="num"><b>${Math.round(tU)}</b></td>
+        <td class="num"><b>${rup(tLand)}</b></td>
+        <td class="num"><b>${rup(esthBucket)}</b></td>
+        <td class="num"><b>${rup(tCost)}</b></td>
+        <td class="num"><b>${rup(tMrp)}</b></td>
+        <td class="num"><b>${rup(t104)}</b></td>
+        <td class="num"><b>${rup(t52)}</b></td></tr>`;
       return `${assume}
         <div class="block" style="margin-top:14px"><h2 style="margin:0 0 6px">🧴 Esthemax — final MRP build-up</h2>
-        <div class="callout"><b>Landing</b> = final purchase (EXW×FX×(1+customs)+transport). <b>Operation ₹/unit</b> = Esthemax employee bucket ÷ average monthly units sold. <b>Total cost</b> = Landing + Operation. <b>MRP</b> = Total cost + ${profit}% profit.</div>
-        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="6" class="empty">No 6-month sales data.</td></tr>`}</tbody></table></div></div>
+        <div class="callout"><b>Landing</b> = final purchase (EXW×FX×(1+customs)+transport). <b>Operation ₹/unit</b> = Esthemax employee bucket ÷ average monthly units sold. <b>Total cost</b> = Landing + Operation. <b>MRP</b> = Total cost + ${profit}% profit. <b>10+4</b> = 10 paid + 4 free (14 total) · <b>5+2</b> = 5 paid + 2 free (7 total) — the effective realised price per unit under each offer. TOTAL row = per-month value (units × amount).</div>
+        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="8" class="empty">No 6-month sales data.</td></tr>`}${body ? totalRow : ""}</tbody></table></div></div>
         <div class="callout" style="margin-top:14px">🔧 <b>Machines</b> carry ${rup(machBucket)}/month and <b>Celluma</b> ${rup(cellBucket)}/month of the employee expense. To turn that into a per-unit operation cost + MRP for each machine/Celluma model, I need the <b>number of machines &amp; Celluma units sold per month (6-month average)</b> — share that and I'll build the same table for them.</div>`;
     };
     const seg = `<div class="seg" style="margin:14px 0 2px">
