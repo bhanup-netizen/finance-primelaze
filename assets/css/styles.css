@@ -360,9 +360,9 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
   width: 100%; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border);
   background: var(--surface-2); color: var(--text); font-family: inherit; font-size: 14px; resize: vertical;
 }
-.ch-item { display: grid; grid-template-columns: 1fr 140px 36px; gap: 8px; margin-bottom: 8px; }
+.ch-item { display: grid; grid-template-columns: 1fr 90px 140px 36px; gap: 8px; margin-bottom: 8px; }
 @media (max-width: 680px) {
-  .ch-item { grid-template-columns: 1fr 40px; }
+  .ch-item { grid-template-columns: 1fr 1fr 40px; }
   .ch-item .ch-desc { grid-column: 1 / -1; }
 }
 .ch-item input {

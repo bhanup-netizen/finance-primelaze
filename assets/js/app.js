@@ -6157,8 +6157,15 @@
   // recorded instead.
   const DEFAULT_TRANSPORT = "JD Cargo\nAddress: G-3, Siddhivinayak CHS, Central Road, MIDC, Ganeshwadi, Behind Akruti Star, Andheri (E), Mumbai, India\nwww.jdcargo.co.in · info@jdcargo.co.in · 022-65166111, +91 98708 13466";
   const customAddresses = []; // admin-added challan addresses (appear in From & To)
-  const fromBook = () => (D.challanRefs && D.challanRefs.from || []).concat(customAddresses);
-  const toBook = () => (D.challanRefs && D.challanRefs.to || []).concat(customAddresses);
+  const addrKey = (s) => String(s || "").trim().toLowerCase();
+  // A saved (custom) address overrides a built-in of the same name, so updating
+  // an address replaces it in the picker instead of leaving the stale copy.
+  const mergeBook = (base) => {
+    const overridden = new Set(customAddresses.map((x) => addrKey(x.name)));
+    return (base || []).filter((x) => !overridden.has(addrKey(x.name))).concat(customAddresses);
+  };
+  const fromBook = () => mergeBook(D.challanRefs && D.challanRefs.from || []);
+  const toBook = () => mergeBook(D.challanRefs && D.challanRefs.to || []);
 
   // Fixed company letterhead for the printed challan (issuing entity + GSTIN).
   const COMPANY = {
@@ -7242,7 +7249,8 @@
   function challanItemRow(it, i) {
     it = it || {};
     return `<div class="ch-item" data-i="${i}">
-      <input class="ch-desc" placeholder="Description of item (e.g. Poly Lase Demo Unit)" value="${esc(it.desc || "")}">
+      <input class="ch-desc" placeholder="Description of item (e.g. Antioxidant Goji Hydrojelly Mask)" value="${esc(it.desc || "")}">
+      <input class="ch-qty" type="number" min="0" step="any" placeholder="Qty" value="${esc(it.qty ?? "")}">
       <input class="ch-amt" type="number" placeholder="Amount ₹" value="${esc(it.amount || "")}">
       <button type="button" class="ghost-btn ch-del" title="Remove">✕</button>
     </div>`;
@@ -7251,8 +7259,9 @@
   function readChallanForm() {
     const items = Array.from(document.querySelectorAll("#chItems .ch-item")).map((r) => ({
       desc: r.querySelector(".ch-desc").value.trim(),
+      qty: (r.querySelector(".ch-qty") ? r.querySelector(".ch-qty").value.trim() : ""),
       amount: r.querySelector(".ch-amt").value.trim(),
-    })).filter((x) => x.desc || x.amount);
+    })).filter((x) => x.desc || x.amount || x.qty);
     const purposeSel = $("#chPurpose").value;
     return {
       no: $("#chNo").value.trim(), date: $("#chDate").value, mode: $("#chMode").value.trim(),
@@ -7317,13 +7326,36 @@
       }
     };
     // Save the currently-typed From/To name + address to the address book.
+    // If an address for this name already exists, ask whether to UPDATE it or
+    // ADD a new separate entry — so an updated address replaces the old one
+    // instead of piling a duplicate at the bottom.
     const saveCurrent = (nameSel, addrSel) => {
+      const m = $("#chMsg");
+      const say = (txt, ok) => { if (m) { m.style.color = ok ? "var(--accent-2)" : "var(--bad)"; m.textContent = txt; } };
       const nm = ($(nameSel).value || "").trim();
-      if (!nm) { const m = $("#chMsg"); if (m) { m.style.color = "var(--bad)"; m.textContent = "Enter a name first, then Save current."; } return; }
+      if (!nm) { say("Enter a name first, then Save current.", false); return; }
       const ad = ($(addrSel).value || "").trim();
-      if (!customAddresses.some((x) => x.name === nm && x.addr === ad)) { customAddresses.push({ name: nm, addr: ad }); saveEdits(); }
-      refreshChallanPicks();
-      const m = $("#chMsg"); if (m) { m.style.color = "var(--accent-2)"; m.textContent = `Saved “${nm}” to the address book.`; }
+      const key = addrKey(nm);
+      const ci = customAddresses.findIndex((x) => addrKey(x.name) === key);
+      // Any existing address under this name — a saved one, or a built-in ref.
+      const existing = ci >= 0 ? customAddresses[ci] : fromBook().concat(toBook()).find((x) => addrKey(x.name) === key);
+      if (existing && (existing.addr || "").trim() === ad) { refreshChallanPicks(); say(`“${nm}” is already saved with this address.`, true); return; }
+      if (existing) {
+        const update = window.confirm(
+          `An address for “${nm}” already exists.\n\n` +
+          `CURRENT:\n${existing.addr || "(blank)"}\n\n` +
+          `NEW:\n${ad || "(blank)"}\n\n` +
+          `• OK = UPDATE the existing address (replace it)\n` +
+          `• Cancel = ADD as a NEW separate entry`);
+        if (update) {
+          if (ci >= 0) customAddresses[ci] = { name: nm, addr: ad };
+          else customAddresses.push({ name: nm, addr: ad }); // overrides the built-in of the same name
+          saveEdits(); refreshChallanPicks(); say(`Updated “${nm}” in the address book.`, true); return;
+        }
+        // Cancel → fall through and add a new entry.
+      }
+      customAddresses.push({ name: nm, addr: ad });
+      saveEdits(); refreshChallanPicks(); say(`Saved “${nm}” to the address book.`, true);
     };
     const sf = document.getElementById("chSaveFrom"); if (sf) sf.onclick = () => saveCurrent("#chFromName", "#chFromAddr");
     const st = document.getElementById("chSaveTo"); if (st) st.onclick = () => saveCurrent("#chToName", "#chToAddr");
@@ -7435,8 +7467,9 @@
 
   function buildChallanPrint(c) {
     const itemRows = (c.items || []).map((it, i) =>
-      `<tr><td class="num">${i + 1}</td><td>${esc(it.desc || "")}</td><td class="num">${it.amount ? rupee(+it.amount) : ""}</td></tr>`).join("");
+      `<tr><td class="num">${i + 1}</td><td>${esc(it.desc || "")}</td><td class="num">${it.qty != null && it.qty !== "" ? esc(String(it.qty)) : ""}</td><td class="num">${it.amount ? rupee(+it.amount) : ""}</td></tr>`).join("");
     const total = (c.items || []).reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+    const totalQty = (c.items || []).reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
     const purpose = c.purpose || c.notes || "";
     return `
       <div class="p-section ch-print">
@@ -7465,9 +7498,9 @@
         </table>
 
         <table class="ch-items">
-          <thead><tr><th class="num">S.No</th><th>List / Description of Items</th><th class="num">Amount</th></tr></thead>
-          <tbody>${itemRows || `<tr><td colspan="3">—</td></tr>`}
-            <tr><td></td><td class="num"><b>Total</b></td><td class="num"><b>${rupee(total)}</b></td></tr>
+          <thead><tr><th class="num">S.No</th><th>List / Description of Items</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead>
+          <tbody>${itemRows || `<tr><td colspan="4">—</td></tr>`}
+            <tr><td></td><td class="num"><b>Total</b></td><td class="num"><b>${totalQty ? (Math.round(totalQty * 100) / 100) : ""}</b></td><td class="num"><b>${rupee(total)}</b></td></tr>
           </tbody>
         </table>
 
