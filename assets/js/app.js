@@ -1235,6 +1235,7 @@
 
   /* ================= HQ TARGETS ================= */
   let hqIndex = 0, hqYear = null;
+  let hqSpFilter = ""; // HQ Targets: show only this salesperson's rows ("" = all)
   const hqEdits = {}; // `${sheet}#${planIdx}#${rowIdx}` -> edited FY26-27 value
   const hqAdds = {};  // `${sheet}#${planIdx}` -> [{product, fy2627, deviceValue}]
   const hqQtr = {};   // `${pk}#${rowKey}#${year}` -> { q1, q2, q3, q4 } quarterly target
@@ -1491,7 +1492,8 @@
       ? `<option value="${i}" ${i === hqIndex ? "selected" : ""}>${esc(h.title.split("—")[0].trim())}</option>` : "").join("");
 
     const spPeople = hqTargetPeople();
-    const spOpts = `<option value="">— salesperson —</option>` + spPeople.map((n) => `<option>${esc(n)}</option>`).join("");
+    if (hqSpFilter && !spPeople.includes(hqSpFilter)) hqSpFilter = "";
+    const spOpts = `<option value="">All salespeople</option>` + spPeople.map((n) => `<option${n === hqSpFilter ? " selected" : ""}>${esc(n)}</option>`).join("");
 
     setTimeout(() => {
       const sel = $("#hqSelect");
@@ -1500,6 +1502,8 @@
       if (dl) dl.onclick = () => downloadHqPdf(D.hqTargets[hqIndex]);
       const spSel = document.getElementById("hqSpSelect");
       const spDl = document.getElementById("hqSpDownload");
+      // The salesperson picker both filters the on-screen table and targets the report.
+      if (spSel) spSel.onchange = () => { hqSpFilter = spSel.value; mountHqDetail(D.hqTargets[hqIndex]); };
       if (spDl) spDl.onclick = () => {
         const nm = spSel && spSel.value;
         if (!nm) { toast("Pick a salesperson first.", "warn"); if (spSel) spSel.focus(); return; }
@@ -1516,7 +1520,7 @@
       <div class="controls">
         <select id="hqSelect" class="select">${opts}</select>
         <div class="hq-actions">
-          <select id="hqSpSelect" class="select" title="Pick a salesperson to download only their targets"${spPeople.length ? "" : " disabled"}>${spOpts}</select>
+          <select id="hqSpSelect" class="select" title="Filter the table by salesperson (also targets the report)"${spPeople.length ? "" : " disabled"}>${spOpts}</select>
           <button id="hqSpDownload" class="dl-btn" type="button" title="Download a PDF report for the selected salesperson"${spPeople.length ? "" : " disabled"}>⤓ Salesperson report</button>
           <button id="hqDownload" class="dl-btn" type="button" title="Download the full HQ plan">⤓ HQ report</button>
         </div>
@@ -1575,6 +1579,8 @@
       const rec = { id: "t" + (hqTgtSeq++), person: "", product: "" };
       HQ_QUARTERS.forEach((q) => { rec[q.key] = ""; });
       rows.push(rec);
+      // A new blank row has no salesperson, so drop any active filter to keep it visible.
+      if (hqSpFilter) { hqSpFilter = ""; const spSel = document.getElementById("hqSpSelect"); if (spSel) spSel.value = ""; }
       saveEdits("Added HQ target row");
       mountHqDetail(h);
     };
@@ -1695,8 +1701,14 @@
       ? `<td class="num"><input class="hqt-in" type="number" min="0" data-id="${rec.id}" data-field="${q}" value="${esc(rec[q] ?? "")}" style="max-width:92px"></td>`
       : `<td class="num">${rec[q] == null || rec[q] === "" ? "—" : inr(rec[q])}</td>`;
 
+    // Salesperson filter — show only the selected person's rows (edits still use
+    // the row id, so filtering the display is safe).
+    const shown = hqSpFilter ? rows.filter((r) => (r.person || "").toString().trim() === hqSpFilter) : rows;
     const qTot = {}; HQ_QUARTERS.forEach((q) => { qTot[q.key] = 0; });
-    const body = rows.map((rec) => {
+    const emptyMsg = hqSpFilter
+      ? `No targets for <b>${esc(hqSpFilter)}</b> in this HQ.`
+      : `No targets yet.${admin ? " Click “Add target row”." : ""}`;
+    const body = shown.map((rec) => {
       let tot = 0;
       HQ_QUARTERS.forEach((q) => { const v = parseFloat(rec[q.key]) || 0; qTot[q.key] += v; tot += v; });
       return `<tr>
@@ -1706,17 +1718,20 @@
         ${HQ_QUARTERS.map((q) => qCell(rec, q.key)).join("")}
         <td class="num">${tot ? inr(tot) : "—"}</td>
       </tr>`;
-    }).join("") || `<tr><td colspan="${4 + HQ_QUARTERS.length + (admin ? 1 : 0)}" class="empty">No targets yet.${admin ? " Click “Add target row”." : ""}</td></tr>`;
+    }).join("") || `<tr><td colspan="${4 + HQ_QUARTERS.length + (admin ? 1 : 0)}" class="empty">${emptyMsg}</td></tr>`;
 
     const head = (admin ? [""] : []).concat("Salesperson", "Product", HQ_QUARTERS.map((q) => q.label), "Total")
       .map((x, i) => `<th class="${i >= (admin ? 3 : 2) ? "num" : ""}">${esc(x)}</th>`).join("");
     const grand = HQ_QUARTERS.reduce((s, q) => s + qTot[q.key], 0);
-    const totalRow = `<tr class="total-row"><td colspan="${admin ? 3 : 2}">TOTAL</td>${HQ_QUARTERS.map((q) => `<td class="num">${inr(qTot[q.key])}</td>`).join("")}<td class="num">${inr(grand)}</td></tr>`;
+    const totLbl = hqSpFilter ? `TOTAL — ${esc(hqSpFilter)}` : "TOTAL";
+    const totalRow = shown.length ? `<tr class="total-row"><td colspan="${admin ? 3 : 2}">${totLbl}</td>${HQ_QUARTERS.map((q) => `<td class="num">${inr(qTot[q.key])}</td>`).join("")}<td class="num">${inr(grand)}</td></tr>` : "";
     const addCtrl = admin ? `<div class="hq-add-row" style="margin-top:12px"><button id="hqTgtAdd" class="dl-btn" type="button">＋ Add target row</button></div>` : "";
+    const filterNote = hqSpFilter ? `<div class="muted-note" style="margin-bottom:8px">Filtered to <b>${esc(hqSpFilter)}</b> — showing ${shown.length} row${shown.length === 1 ? "" : "s"}. Choose <b>All salespeople</b> above to see everyone.</div>` : "";
 
     return `
       <div class="callout">${esc(h.title)}</div>
       <div class="muted-note" style="margin-bottom:8px">Set a quarterly target per <b>salesperson × product</b>. Salespeople come from the <b>Team Roster</b>. ${admin ? "Add, edit or delete rows below." : ""}</div>
+      ${filterNote}
       ${table(head, body + totalRow)}
       ${addCtrl}`;
   }
