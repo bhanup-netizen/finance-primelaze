@@ -3163,6 +3163,11 @@
   // Esthemax. Finance uploads an Excel/CSV that APPENDS to the existing data
   // (old data is always kept). Status is derived live against today's date.
   const paymentAdds = [];            // finance-uploaded appended rows
+  // Sticky flag: set true the moment THIS session changes any payment data
+  // (import, add sale, clear, tracking). Until then, a save from another area
+  // writes the SERVER's payment copy back — so a stale session can never clobber
+  // a fresh import (mirrors invDirty / leadDirty). Fixes "import overridden".
+  let payDirty = false;
   let paySeq = 0;
   let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "" };
   // A record is "EMI" when its EMI field has a value that isn't "Non-EMI".
@@ -3187,6 +3192,7 @@
   function payTrackAdd(id, entry) {
     const t = payTrackOf(id);
     t.history = (t.history || []).concat(Object.assign({ at: Date.now(), by: (sessionUser && sessionUser.email) || "" }, entry));
+    payDirty = true;
     saveEdits("Payment · " + (entry.kind || "update"));
   }
   const PAY_STATUS = {
@@ -3740,6 +3746,7 @@
   function payAppend(mapped, replace) {
     // Importing new data should always be visible — clear any "clear data" hide.
     payHideAll = false; payClearBefore = "";
+    payDirty = true; // this session now owns the payment data — protect it on save
     const valid = mapped.filter((r) => r.customer || r.committedAmount || r.outstanding || r.received || r.salesValue);
     if (replace) {
       paymentAdds.length = 0;
@@ -3855,6 +3862,7 @@
       });
       // A manually-added sale should always be visible.
       payHideAll = false; payClearBefore = "";
+      payDirty = true;
       saveEdits("Payment · added sale (" + customer + ")");
       close(); payRepaint();
     };
@@ -3922,21 +3930,23 @@
         if (/^all$/i.test(v)) {
           if (!window.confirm("Clear ALL commitment data (hide every commitment for everyone)? You can restore it later with “Show all again”.")) return;
           payHideAll = true; payClearBefore = "";
+          payDirty = true;
           saveEdits("Cleared ALL payment data");
           renderTab("payments"); return;
         }
         if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) { window.alert("Enter ALL, a date as YYYY-MM-DD (e.g. 2026-04-01), or leave blank."); return; }
         if (v && !window.confirm("Clear all commitments committed before " + v + " (for everyone)? Imported rows before this date are removed; you can restore the view with “Show all”.")) return;
         payHideAll = false; payClearBefore = v;
+        payDirty = true;
         // Drop imported rows before the cutoff too.
         if (v) { for (let i = paymentAdds.length - 1; i >= 0; i--) { const cd = paymentAdds[i].committedDate ? String(paymentAdds[i].committedDate).slice(0, 10) : ""; if (cd && cd < v) paymentAdds.splice(i, 1); } }
         saveEdits(v ? "Cleared payment data before " + v : "Restored all payment data");
         renderTab("payments");
       };
       const showAll = document.getElementById("payShowAll");
-      if (showAll) showAll.onclick = () => { payClearBefore = ""; payHideAll = false; saveEdits("Restored all payment data"); renderTab("payments"); };
+      if (showAll) showAll.onclick = () => { payClearBefore = ""; payHideAll = false; payDirty = true; saveEdits("Restored all payment data"); renderTab("payments"); };
       const showBase = document.getElementById("payShowBase");
-      if (showBase) showBase.onclick = () => { payHideBase = false; saveEdits("Showing built-in data too"); renderTab("payments"); };
+      if (showBase) showBase.onclick = () => { payHideBase = false; payDirty = true; saveEdits("Showing built-in data too"); renderTab("payments"); };
       payRepaint(); // sync KPIs/report/totals to current filters on first paint
     }, 0);
     const opt = (v, cur) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`;
@@ -8736,11 +8746,24 @@
         if (Array.isArray(serverData.customCities)) wCustomCities = serverData.customCities;
         if (Array.isArray(serverData.customLeadOwners)) wCustomLeadOwners = serverData.customLeadOwners;
       }
+      // Payments: same protection. If this session never touched payment data,
+      // write the SERVER's copy back so a save from another area (or a stale tab)
+      // can't overwrite a fresh import with old rows. Fixes "import overridden".
+      let wPaymentAdds = paymentAdds, wPaySnapshots = paySnapshots, wPayTrack = payTrack,
+          wPayClearBefore = payClearBefore, wPayHideAll = payHideAll, wPayHideBase = payHideBase;
+      if (serverData && !payDirty) {
+        if (Array.isArray(serverData.paymentAdds)) wPaymentAdds = serverData.paymentAdds;
+        if (Array.isArray(serverData.paySnapshots)) wPaySnapshots = serverData.paySnapshots;
+        if (serverData.payTrack && typeof serverData.payTrack === "object") wPayTrack = serverData.payTrack;
+        if (typeof serverData.payClearBefore === "string") wPayClearBefore = serverData.payClearBefore;
+        if (typeof serverData.payHideAll === "boolean") wPayHideAll = serverData.payHideAll;
+        if (typeof serverData.payHideBase === "boolean") wPayHideBase = serverData.payHideBase;
+      }
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore, payHideAll, payHideBase, paySnapshots, payTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
