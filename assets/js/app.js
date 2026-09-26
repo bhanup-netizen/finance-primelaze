@@ -6613,8 +6613,55 @@
       optional: [{ id: "hro1", task: "Employee engagement check-in", time: "~20 min", priority: "Low", remark: "" }],
     },
     "Finance": {
-      mandatory: [{ id: "fn1", task: "Update outstanding payments (Primelaze Sale)", time: "~1 hr", priority: "High", remark: "" }],
-      optional: [],
+      // Owner is written into the task ("Sonal · …" / "Viisvesh · …") since the
+      // table has no separate owner column; cadence sits in Remark; hours in Time.
+      mandatory: [
+        { id: "fnw1", task: "Sonal · Update MIS", time: 0.5, priority: "High", remark: "Daily" },
+        { id: "fnw2", task: "Sonal · Check previous-day invoices in Zoho", time: 0.5, priority: "High", remark: "Daily" },
+        { id: "fnw3", task: "Sonal · Make Tally entries", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw4", task: "Sonal · Check Zoho expenses", time: 0.5, priority: "Medium", remark: "Daily" },
+        { id: "fnw5", task: "Sonal · Prepare MOU & quotations", time: 0.5, priority: "High", remark: "As needed" },
+        { id: "fnw6", task: "Sonal · Create ledgers & send sales invoices for payment collection", time: 0.5, priority: "High", remark: "Daily" },
+        { id: "fnw7", task: "Sonal · Follow up with doctors & sales team for pending payments", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw8", task: "Sonal · Create & close tasks in Zoho Projects", time: 0.25, priority: "Medium", remark: "Daily" },
+        { id: "fnw9", task: "Sonal · Update payment info to sales team & send discount details to management", time: 0.5, priority: "Medium", remark: "Daily" },
+        { id: "fnw10", task: "Sonal · Update machine sales data", time: 0.5, priority: "High", remark: "Weekly" },
+        { id: "fnw11", task: "Sonal · Update Outstanding Dashboard", time: 0.5, priority: "High", remark: "Weekly" },
+        { id: "fnw12", task: "Sonal · Update Expenses Dashboard", time: 0.5, priority: "High", remark: "Weekly" },
+        { id: "fnw13", task: "Sonal · Check current-year sales pipeline", time: 0.5, priority: "Medium", remark: "Weekly" },
+        { id: "fnw14", task: "Sonal · Attend sales meeting & weekly management blocker call", time: 1.5, priority: "High", remark: "Weekly" },
+        { id: "fnw15", task: "Sonal · Update Bigin payment tasks", time: 0.5, priority: "Medium", remark: "Weekly" },
+        { id: "fnw16", task: "Viisvesh · Payment processing — update vendor sheet, add advance comments in Zoho Expenses, store invoices, process payments after approval", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw17", task: "Viisvesh · Generate invoices & delivery challans; update invoice in Bigin, tag salesperson, complete pipeline name (invoice name, invoice no., city, product)", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw18", task: "Viisvesh · Download Maruti report from website; chase delivery details if not delivered", time: 0.5, priority: "Medium", remark: "Daily" },
+        { id: "fnw19", task: "Viisvesh · Respond to phone calls, emails & messages", time: 0.5, priority: "Medium", remark: "Daily / ongoing" },
+        { id: "fnw20", task: "Viisvesh · Add docket details in Bigin notes", time: 0.25, priority: "Medium", remark: "Daily" },
+        { id: "fnw21", task: "Viisvesh · Prepare ledgers (as required by Sonal)", time: 0.5, priority: "Medium", remark: "As needed" },
+        { id: "fnw22", task: "Viisvesh · Update & maintain the Inventory Dashboard", time: 1, priority: "High", remark: "Weekly" },
+        { id: "fnw23", task: "Viisvesh · Check Pondy team employee expenses", time: 0.5, priority: "Medium", remark: "Weekly" },
+        { id: "fnw24", task: "Viisvesh · Create tasks in Zoho Projects", time: 0.25, priority: "Medium", remark: "Weekly" },
+        { id: "fnw25", task: "Viisvesh · Attend blocker call (Bhanu, Sonal, Arjun & Dhinesh)", time: 1, priority: "High", remark: "Weekly" },
+      ],
+      monthly: [
+        { id: "fnm1", task: "Sonal · Download sales invoices & credit notes from Zoho for GSTR-1", time: 1, priority: "High", remark: "" },
+        { id: "fnm2", task: "Sonal · Prepare invoice-wise & credit-note-wise GSTR-1 report", time: 1.5, priority: "High", remark: "" },
+        { id: "fnm3", task: "Sonal · Match GSTR-1 data with Tally", time: 1, priority: "High", remark: "" },
+        { id: "fnm4", task: "Sonal · Send required GST data to CA", time: 0.5, priority: "High", remark: "" },
+        { id: "fnm5", task: "Sonal · Check purchase invoices for TDS", time: 1, priority: "High", remark: "" },
+        { id: "fnm6", task: "Sonal · Prepare TDS working", time: 1, priority: "High", remark: "" },
+        { id: "fnm7", task: "Sonal · Reconcile Tally with GSTR-2B", time: 1.5, priority: "High", remark: "" },
+      ],
+      optional: [
+        { id: "fno1", task: "Sonal · Maintain machine pipeline data in Bigin", time: 0.5, priority: "Medium", remark: "" },
+        { id: "fno2", task: "Sonal · BOE reconciliation", time: 1, priority: "Medium", remark: "" },
+        { id: "fno3", task: "Sonal · Additional work assigned by management or CA", time: "", priority: "Low", remark: "As assigned" },
+        { id: "fno4", task: "Viisvesh · Prepare MOU, payment receipts & quotations", time: 0.5, priority: "Medium", remark: "When assigned" },
+        { id: "fno5", task: "Viisvesh · Office / bank visits when required", time: 1, priority: "Low", remark: "When required" },
+        { id: "fno6", task: "Viisvesh · Create remittance forms when instructed", time: 0.5, priority: "Medium", remark: "When instructed" },
+        { id: "fno7", task: "Viisvesh · Prepare PTP letters & allocated tasks (employee expenses, installation-date updates)", time: 0.5, priority: "Medium", remark: "When allocated" },
+        { id: "fno8", task: "Viisvesh · Store the BOE when a shipment is received", time: 0.5, priority: "Medium", remark: "On shipment receipt" },
+        { id: "fno9", task: "Viisvesh · Store installation reports & update the new-machine sheet", time: 0.5, priority: "Medium", remark: "On dispatch / installation" },
+      ],
     },
     "Admin & Logistics": {
       mandatory: [{ id: "al1", task: "Update inventory stock levels", time: "~45 min", priority: "High", remark: "" }],
@@ -6653,6 +6700,11 @@
   // concurrent changes to other departments (single shared edits doc).
   const weeklyDirty = new Set();
   let weeklySeq = 100;
+  // Bump when the built-in Finance duties change so stored data is refreshed
+  // to the new list (Sonal + Viisvesh, with hours). Only Finance is re-seeded.
+  const FINANCE_WEEKLY_VERSION = 2;
+  let financeWeeklyVersion = 0;
+  let finNeedsReseed = false;
   const weeklyList = (dept, kind) => {
     const d = (weeklyTasks[dept] = weeklyTasks[dept] || { mandatory: [], monthly: [], optional: [] });
     return (d[kind] = d[kind] || []);
@@ -6683,6 +6735,13 @@
 
   function renderWeekly(dept) {
     const ed = isAdmin();
+    // Persist the one-time Finance duty refresh so it sticks for everyone.
+    if (finNeedsReseed && (roleIsAdmin() || hasAnyEditGrant())) {
+      finNeedsReseed = false;
+      weeklyDirty.add("Finance");
+      saveWeekly("Finance", "Finance duties · refreshed to new list");
+      saveEdits("Finance duties version " + FINANCE_WEEKLY_VERSION);
+    }
     setTimeout(() => wireWeekly(dept), 0);
     const inCell = (kind, i, field, val, ph) => ed
       ? `<td><input class="wk-in" data-kind="${kind}" data-i="${i}" data-field="${field}" value="${esc(val || "")}" placeholder="${esc(ph || "")}"></td>`
@@ -6707,6 +6766,9 @@
     const head = ["#", "Task", "Time (hrs)", "Priority", "Remark", "Link", "File", "Added by"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
+      // Total estimated hours for this section (numeric time values only).
+      const totHrs = list.reduce((s, t) => { const n = typeof t.time === "number" ? t.time : parseFloat(t.time); return s + (isNaN(n) ? 0 : n); }, 0);
+      const totHrsTxt = totHrs > 0 ? `<span class="t-muted" style="font-weight:400;font-size:13px"> · est. ${Math.round(totHrs * 100) / 100} hr${totHrs === 1 ? "" : "s"} total</span>` : "";
       const rows = list.map((t, i) => `<tr>
         <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish wk-del" data-kind="${kind}" data-i="${i}" title="Remove">✕</button>` : ""}</td>
         ${inCell(kind, i, "task", t.task, "Task")}
@@ -6718,7 +6780,7 @@
         ${byCell(t)}
       </tr>`).join("") || `<tr><td colspan="8" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
       return `<div class="block" style="margin-top:16px">
-        <h2 style="margin:0 0 4px">${esc(title)}</h2>
+        <h2 style="margin:0 0 4px">${esc(title)}${totHrsTxt}</h2>
         <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
         ${table(head, rows)}
         ${ed ? `<div class="wk-addform" data-kind="${kind}">
@@ -8547,6 +8609,14 @@
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
+      // Refresh the Finance duties to the new built-in list (once) when the
+      // stored copy predates the current Finance-weekly version.
+      if (typeof e.financeWeeklyVersion === "number") financeWeeklyVersion = e.financeWeeklyVersion;
+      if (financeWeeklyVersion < FINANCE_WEEKLY_VERSION) {
+        weeklyTasks["Finance"] = JSON.parse(JSON.stringify(WEEKLY_DEFAULTS["Finance"]));
+        financeWeeklyVersion = FINANCE_WEEKLY_VERSION;
+        finNeedsReseed = true;
+      }
       if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
       if (e.coverage && typeof e.coverage === "object" && Array.isArray(e.coverage.rows)) {
         const CUR = COVERAGE_SEED.version || 1;
@@ -8716,6 +8786,9 @@
       const d = s.data() || {};
       const srv = (d.tasks && typeof d.tasks === "object") ? d.tasks : {};
       Object.keys(srv).forEach((dept) => {
+        // Finance was just refreshed to the new built-in list — don't fold the
+        // legacy doc's old Finance rows back in.
+        if (dept === "Finance" && finNeedsReseed) return;
         const sd = srv[dept] || {};
         const cur = (weeklyTasks[dept] = weeklyTasks[dept] || { mandatory: [], monthly: [], optional: [] });
         ["mandatory", "monthly", "optional"].forEach((kind) => {
@@ -8825,7 +8898,7 @@
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, financeWeeklyVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
