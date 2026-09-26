@@ -1345,8 +1345,9 @@
     saveEdits("Imported HQ targets Sep26-Mar27");
   }
 
+  // Q2 (Jul–Sep 2026) is now past — dropped from the view. Any q2 values already
+  // saved on a row stay in the data but are no longer shown or counted.
   const HQ_QUARTERS = [
-    { key: "q2", label: "Q2 · Jul–Sep 2026" },
     { key: "q3", label: "Q3 · Oct–Dec 2026" },
     { key: "q4", label: "Q4 · Jan–Mar 2027" },
   ];
@@ -1520,7 +1521,7 @@
     return `
       <div class="section-head">
         <h1>Regional HQ Targets</h1>
-        <p>Quarterly sales targets by salesperson &amp; product per regional headquarters — <b>Q2 (Jul–Sep 2026)</b>, <b>Q3 (Oct–Dec 2026)</b>, <b>Q4 (Jan–Mar 2027)</b>. Salespeople are linked from the Team Roster.</p>
+        <p>Quarterly sales targets by salesperson &amp; product per regional headquarters — <b>Q3 (Oct–Dec 2026)</b>, <b>Q4 (Jan–Mar 2027)</b>. Salespeople are linked from the Team Roster.</p>
       </div>
       <div class="controls">
         <select id="hqSelect" class="select">${opts}</select>
@@ -1852,7 +1853,7 @@
       <div class="p-section">
         <h1>${esc(D.meta.company)} — ${esc(name)} — FY 2026-27 Sales Targets</h1>
         <div class="p-sub">Quarterly targets by product${regions > 1 ? " · across regions" : ""}</div>
-        <p class="p-meta">Generated ${esc(stamp)} · Q2 (Jul–Sep 2026), Q3 (Oct–Dec 2026), Q4 (Jan–Mar 2027) · units, excl. GST.</p>
+        <p class="p-meta">Generated ${esc(stamp)} · Q3 (Oct–Dec 2026), Q4 (Jan–Mar 2027) · units, excl. GST.</p>
         ${sections}
       </div>`;
   }
@@ -1896,7 +1897,21 @@
       "What counts as a sale: only invoiced and dispatched units count — FOC, demo, sample, replacement and warranty units are excluded; corporate sales are excluded from the slab (a ₹50K onboarding bonus applies instead); the sales month is defined by the invoice date; incentive on reversed sales (returns within 60 days) is clawed back from the next month.",
       "Disbursement: released only after the customer's full payment is received; a payment-timing modifier applies based on the number of days from invoice to full payment.",
     ] },
+    { title: "MOU & incentive release (pipeline close)", items: [
+      "Process: the MOU must be signed by the Doctor. One copy is shared with the Doctor; another copy is updated in Bigin.",
+      "Action required: all sales team members must ensure the respective doctor signs the MOU, hand one copy over to them, and upload the signed copy in Bigin — without exception, going forward.",
+      "Incentive is released only after the MOU is signed AND the Bigin pipeline is moved to “Machine Installed”. Incentive is paid only once the pipeline is properly closed.",
+      "Sales Support and the Finance Department must both give the go-ahead before any incentive is released.",
+    ] },
   ];
+  // Marker title so the MOU/pipeline-close section can be back-filled into an
+  // already-edited T&C override (see loadEdits) — mandatory policy, must show.
+  const MOU_TERMS_SECTION = { title: "MOU & incentive release (pipeline close)", items: [
+    "Process: the MOU must be signed by the Doctor. One copy is shared with the Doctor; another copy is updated in Bigin.",
+    "Action required: all sales team members must ensure the respective doctor signs the MOU, hand one copy over to them, and upload the signed copy in Bigin — without exception, going forward.",
+    "Incentive is released only after the MOU is signed AND the Bigin pipeline is moved to “Machine Installed”. Incentive is paid only once the pipeline is properly closed.",
+    "Sales Support and the Finance Department must both give the go-ahead before any incentive is released.",
+  ] };
   // Admin-editable override for the T&C (null = use the default INCENTIVE_TERMS).
   let termsOverride = null;
   const getTerms = () => (Array.isArray(termsOverride) ? termsOverride : INCENTIVE_TERMS);
@@ -8603,7 +8618,14 @@
       if (e.buyEmail) orderState.buyEmail = e.buyEmail;
       if (e.orgTop && typeof e.orgTop === "object") orgTop = { name: e.orgTop.name || "CTO", title: e.orgTop.title || "", empId: e.orgTop.empId || "" };
       if (e.orgNsm && typeof e.orgNsm === "object") orgNsm = { name: e.orgNsm.name || "Arjun", desig: e.orgNsm.desig || "National Sales Manager", empId: e.orgNsm.empId || "" };
-      if (Array.isArray(e.termsOverride)) termsOverride = e.termsOverride;
+      if (Array.isArray(e.termsOverride)) {
+        termsOverride = e.termsOverride;
+        // Back-fill the mandatory MOU / pipeline-close section into an older
+        // edited copy that predates it, so the policy always shows.
+        if (!termsOverride.some((s) => s && /mou/i.test(String(s.title || "")))) {
+          termsOverride.push(JSON.parse(JSON.stringify(MOU_TERMS_SECTION)));
+        }
+      }
       if (e.ovEdits && typeof e.ovEdits === "object") { Object.keys(ovEdits).forEach((k) => delete ovEdits[k]); Object.assign(ovEdits, e.ovEdits); }
       if (e.leadEdits && typeof e.leadEdits === "object") { Object.keys(leadEdits).forEach((k) => delete leadEdits[k]); Object.assign(leadEdits, e.leadEdits); }
       if (Array.isArray(e.leadAdds)) {
