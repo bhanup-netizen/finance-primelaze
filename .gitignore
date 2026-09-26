@@ -30,3 +30,6 @@ venv/
 # Temp
 *.tmp
 ~$*.xlsx
+
+# Internal email drafts — never publish to the deployed site
+emails/
