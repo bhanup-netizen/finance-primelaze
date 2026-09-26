@@ -6613,54 +6613,55 @@
       optional: [{ id: "hro1", task: "Employee engagement check-in", time: "~20 min", priority: "Low", remark: "" }],
     },
     "Finance": {
-      // Owner is written into the task ("Sonal · …" / "Viisvesh · …") since the
-      // table has no separate owner column; cadence sits in Remark; hours in Time.
+      // Standardised: "<Owner> · <verb-first action>", cadence in Remark, hours
+      // in Time. Owner is written into the task (no separate owner column).
       mandatory: [
-        { id: "fnw1", task: "Sonal · Update MIS", time: 0.5, priority: "High", remark: "Daily" },
-        { id: "fnw2", task: "Sonal · Check previous-day invoices in Zoho", time: 0.5, priority: "High", remark: "Daily" },
-        { id: "fnw3", task: "Sonal · Make Tally entries", time: 1, priority: "High", remark: "Daily" },
-        { id: "fnw4", task: "Sonal · Check Zoho expenses", time: 0.5, priority: "Medium", remark: "Daily" },
-        { id: "fnw5", task: "Sonal · Prepare MOU & quotations", time: 0.5, priority: "High", remark: "As needed" },
-        { id: "fnw6", task: "Sonal · Create ledgers & send sales invoices for payment collection", time: 0.5, priority: "High", remark: "Daily" },
-        { id: "fnw7", task: "Sonal · Follow up with doctors & sales team for pending payments", time: 1, priority: "High", remark: "Daily" },
-        { id: "fnw8", task: "Sonal · Create & close tasks in Zoho Projects", time: 0.25, priority: "Medium", remark: "Daily" },
-        { id: "fnw9", task: "Sonal · Update payment info to sales team & send discount details to management", time: 0.5, priority: "Medium", remark: "Daily" },
+        { id: "fnwzoho", task: "Finance · Zoho Projects rule — log every assigned and recurring duty here: open the task with a clear title and due date, update the status/comments as you progress, and mark it Closed only when the work is 100% complete", time: "", priority: "High", remark: "Team rule — Sonal & Viisvesh" },
+        { id: "fnw1", task: "Sonal · Update the MIS", time: 0.5, priority: "High", remark: "Daily" },
+        { id: "fnw2", task: "Sonal · Check the previous day's invoices in Zoho", time: 0.5, priority: "High", remark: "Daily" },
+        { id: "fnw3", task: "Sonal · Post Tally entries", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw4", task: "Sonal · Review Zoho expenses", time: 0.5, priority: "Medium", remark: "Daily" },
+        { id: "fnw5", task: "Sonal · Prepare MOUs and quotations", time: 0.5, priority: "High", remark: "As needed" },
+        { id: "fnw6", task: "Sonal · Create ledgers and issue sales invoices for collection", time: 0.5, priority: "High", remark: "Daily" },
+        { id: "fnw7", task: "Sonal · Follow up with doctors and the sales team on pending payments", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw8", task: "Sonal · Create, update and close tasks in Zoho Projects (per the rule)", time: 0.25, priority: "Medium", remark: "Daily" },
+        { id: "fnw9", task: "Sonal · Update payment status to the sales team and share discount details with management", time: 0.5, priority: "Medium", remark: "Daily" },
         { id: "fnw10", task: "Sonal · Update machine sales data", time: 0.5, priority: "High", remark: "Weekly" },
-        { id: "fnw11", task: "Sonal · Update Outstanding Dashboard", time: 0.5, priority: "High", remark: "Weekly" },
-        { id: "fnw12", task: "Sonal · Update Expenses Dashboard", time: 0.5, priority: "High", remark: "Weekly" },
-        { id: "fnw13", task: "Sonal · Check current-year sales pipeline", time: 0.5, priority: "Medium", remark: "Weekly" },
-        { id: "fnw14", task: "Sonal · Attend sales meeting & weekly management blocker call", time: 1.5, priority: "High", remark: "Weekly" },
+        { id: "fnw11", task: "Sonal · Update the Outstanding Dashboard", time: 0.5, priority: "High", remark: "Weekly" },
+        { id: "fnw12", task: "Sonal · Update the Expenses Dashboard", time: 0.5, priority: "High", remark: "Weekly" },
+        { id: "fnw13", task: "Sonal · Review the current-year sales pipeline", time: 0.5, priority: "Medium", remark: "Weekly" },
+        { id: "fnw14", task: "Sonal · Attend the sales meeting and the weekly management blocker call", time: 1.5, priority: "High", remark: "Weekly" },
         { id: "fnw15", task: "Sonal · Update Bigin payment tasks", time: 0.5, priority: "Medium", remark: "Weekly" },
-        { id: "fnw16", task: "Viisvesh · Payment processing — update vendor sheet, add advance comments in Zoho Expenses, store invoices, process payments after approval", time: 1, priority: "High", remark: "Daily" },
-        { id: "fnw17", task: "Viisvesh · Generate invoices & delivery challans; update invoice in Bigin, tag salesperson, complete pipeline name (invoice name, invoice no., city, product)", time: 1, priority: "High", remark: "Daily" },
-        { id: "fnw18", task: "Viisvesh · Download Maruti report from website; chase delivery details if not delivered", time: 0.5, priority: "Medium", remark: "Daily" },
-        { id: "fnw19", task: "Viisvesh · Respond to phone calls, emails & messages", time: 0.5, priority: "Medium", remark: "Daily / ongoing" },
-        { id: "fnw20", task: "Viisvesh · Add docket details in Bigin notes", time: 0.25, priority: "Medium", remark: "Daily" },
-        { id: "fnw21", task: "Viisvesh · Prepare ledgers (as required by Sonal)", time: 0.5, priority: "Medium", remark: "As needed" },
-        { id: "fnw22", task: "Viisvesh · Update & maintain the Inventory Dashboard", time: 1, priority: "High", remark: "Weekly" },
-        { id: "fnw23", task: "Viisvesh · Check Pondy team employee expenses", time: 0.5, priority: "Medium", remark: "Weekly" },
-        { id: "fnw24", task: "Viisvesh · Create tasks in Zoho Projects", time: 0.25, priority: "Medium", remark: "Weekly" },
-        { id: "fnw25", task: "Viisvesh · Attend blocker call (Bhanu, Sonal, Arjun & Dhinesh)", time: 1, priority: "High", remark: "Weekly" },
+        { id: "fnw16", task: "Viisvesh · Process payments — update the vendor sheet, add advance comments in Zoho Expenses, store invoices, and process payments after approval", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw17", task: "Viisvesh · Generate invoices and delivery challans, then update the invoice in Bigin — tag the salesperson and complete the pipeline name (invoice name, invoice no., city, product)", time: 1, priority: "High", remark: "Daily" },
+        { id: "fnw18", task: "Viisvesh · Download the Maruti report and chase delivery details if not delivered", time: 0.5, priority: "Medium", remark: "Daily" },
+        { id: "fnw19", task: "Viisvesh · Attend to phone calls, emails and messages", time: 0.5, priority: "Medium", remark: "Daily / ongoing" },
+        { id: "fnw20", task: "Viisvesh · Add docket details to Bigin notes", time: 0.25, priority: "Medium", remark: "Daily" },
+        { id: "fnw21", task: "Viisvesh · Prepare ledgers as required by Sonal", time: 0.5, priority: "Medium", remark: "As needed" },
+        { id: "fnw22", task: "Viisvesh · Update and maintain the Inventory Dashboard", time: 1, priority: "High", remark: "Weekly" },
+        { id: "fnw23", task: "Viisvesh · Review the Pondy team's employee expenses", time: 0.5, priority: "Medium", remark: "Weekly" },
+        { id: "fnw24", task: "Viisvesh · Create and update tasks in Zoho Projects (per the rule)", time: 0.25, priority: "Medium", remark: "Weekly" },
+        { id: "fnw25", task: "Viisvesh · Attend the blocker call (Bhanu, Sonal, Arjun and Dhinesh)", time: 1, priority: "High", remark: "Weekly" },
       ],
       monthly: [
-        { id: "fnm1", task: "Sonal · Download sales invoices & credit notes from Zoho for GSTR-1", time: 1, priority: "High", remark: "" },
-        { id: "fnm2", task: "Sonal · Prepare invoice-wise & credit-note-wise GSTR-1 report", time: 1.5, priority: "High", remark: "" },
-        { id: "fnm3", task: "Sonal · Match GSTR-1 data with Tally", time: 1, priority: "High", remark: "" },
-        { id: "fnm4", task: "Sonal · Send required GST data to CA", time: 0.5, priority: "High", remark: "" },
+        { id: "fnm1", task: "Sonal · Download sales invoices and credit notes from Zoho for GSTR-1", time: 1, priority: "High", remark: "" },
+        { id: "fnm2", task: "Sonal · Prepare the invoice-wise and credit-note-wise GSTR-1 report", time: 1.5, priority: "High", remark: "" },
+        { id: "fnm3", task: "Sonal · Match the GSTR-1 data with Tally", time: 1, priority: "High", remark: "" },
+        { id: "fnm4", task: "Sonal · Send the required GST data to the CA", time: 0.5, priority: "High", remark: "" },
         { id: "fnm5", task: "Sonal · Check purchase invoices for TDS", time: 1, priority: "High", remark: "" },
-        { id: "fnm6", task: "Sonal · Prepare TDS working", time: 1, priority: "High", remark: "" },
+        { id: "fnm6", task: "Sonal · Prepare the TDS working", time: 1, priority: "High", remark: "" },
         { id: "fnm7", task: "Sonal · Reconcile Tally with GSTR-2B", time: 1.5, priority: "High", remark: "" },
       ],
       optional: [
-        { id: "fno1", task: "Sonal · Maintain machine pipeline data in Bigin", time: 0.5, priority: "Medium", remark: "" },
-        { id: "fno2", task: "Sonal · BOE reconciliation", time: 1, priority: "Medium", remark: "" },
-        { id: "fno3", task: "Sonal · Additional work assigned by management or CA", time: "", priority: "Low", remark: "As assigned" },
-        { id: "fno4", task: "Viisvesh · Prepare MOU, payment receipts & quotations", time: 0.5, priority: "Medium", remark: "When assigned" },
-        { id: "fno5", task: "Viisvesh · Office / bank visits when required", time: 1, priority: "Low", remark: "When required" },
-        { id: "fno6", task: "Viisvesh · Create remittance forms when instructed", time: 0.5, priority: "Medium", remark: "When instructed" },
-        { id: "fno7", task: "Viisvesh · Prepare PTP letters & allocated tasks (employee expenses, installation-date updates)", time: 0.5, priority: "Medium", remark: "When allocated" },
+        { id: "fno1", task: "Sonal · Maintain the machine pipeline data in Bigin", time: 0.5, priority: "Medium", remark: "" },
+        { id: "fno2", task: "Sonal · Complete BOE reconciliation", time: 1, priority: "Medium", remark: "" },
+        { id: "fno3", task: "Sonal · Complete additional work assigned by management or the CA", time: "", priority: "Low", remark: "As assigned" },
+        { id: "fno4", task: "Viisvesh · Prepare MOUs, payment receipts and quotations", time: 0.5, priority: "Medium", remark: "When assigned" },
+        { id: "fno5", task: "Viisvesh · Visit the office or bank", time: 1, priority: "Low", remark: "When required" },
+        { id: "fno6", task: "Viisvesh · Create remittance forms", time: 0.5, priority: "Medium", remark: "When instructed" },
+        { id: "fno7", task: "Viisvesh · Prepare PTP letters and allocated tasks (employee expenses, installation-date updates)", time: 0.5, priority: "Medium", remark: "When allocated" },
         { id: "fno8", task: "Viisvesh · Store the BOE when a shipment is received", time: 0.5, priority: "Medium", remark: "On shipment receipt" },
-        { id: "fno9", task: "Viisvesh · Store installation reports & update the new-machine sheet", time: 0.5, priority: "Medium", remark: "On dispatch / installation" },
+        { id: "fno9", task: "Viisvesh · Store installation reports and update the new-machine sheet", time: 0.5, priority: "Medium", remark: "On dispatch / installation" },
       ],
     },
     "Admin & Logistics": {
@@ -6702,7 +6703,7 @@
   let weeklySeq = 100;
   // Bump when the built-in Finance duties change so stored data is refreshed
   // to the new list (Sonal + Viisvesh, with hours). Only Finance is re-seeded.
-  const FINANCE_WEEKLY_VERSION = 2;
+  const FINANCE_WEEKLY_VERSION = 3;
   let financeWeeklyVersion = 0;
   let finNeedsReseed = false;
   const weeklyList = (dept, kind) => {
@@ -6763,7 +6764,7 @@
     const timeCell = (kind, i, val) => ed
       ? `<td><input class="wk-in" type="number" step="0.25" min="0" inputmode="decimal" data-kind="${kind}" data-i="${i}" data-field="time" value="${esc(val == null ? "" : val)}" placeholder="hrs" style="max-width:80px"></td>`
       : `<td>${esc(wkTimeDisplay(val))}</td>`;
-    const head = ["#", "Task", "Time (hrs)", "Priority", "Remark", "Link", "File", "Added by"].map((x) => `<th>${x}</th>`).join("");
+    const head = ["#", "Task", "Time (hrs)", "Priority", "Remark", "Link", "File"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
       // Total estimated hours for this section (numeric time values only).
@@ -6777,8 +6778,7 @@
         ${inCell(kind, i, "remark", t.remark, "Remark / note")}
         ${inCell(kind, i, "link", t.link, "Paste a how-to link")}
         ${fileCell(kind, i, t)}
-        ${byCell(t)}
-      </tr>`).join("") || `<tr><td colspan="8" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
+      </tr>`).join("") || `<tr><td colspan="7" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
       return `<div class="block" style="margin-top:16px">
         <h2 style="margin:0 0 4px">${esc(title)}${totHrsTxt}</h2>
         <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
