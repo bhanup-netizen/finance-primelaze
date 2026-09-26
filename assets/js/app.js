@@ -1491,13 +1491,18 @@
     const opts = D.hqTargets.map((h, i) => hqAllowed(h)
       ? `<option value="${i}" ${i === hqIndex ? "selected" : ""}>${esc(h.title.split("—")[0].trim())}</option>` : "").join("");
 
-    const spPeople = hqTargetPeople();
+    // Salesperson picker lists only the CURRENT HQ's people, and the filter
+    // always starts at "All" on a fresh render (opening the tab / switching HQ),
+    // so the table never silently shows an empty/filtered view.
+    const spPeople = hqTargetPeople(D.hqTargets[hqIndex]);
     if (hqSpFilter && !spPeople.includes(hqSpFilter)) hqSpFilter = "";
     const spOpts = `<option value="">All salespeople</option>` + spPeople.map((n) => `<option${n === hqSpFilter ? " selected" : ""}>${esc(n)}</option>`).join("");
 
     setTimeout(() => {
       const sel = $("#hqSelect");
-      if (sel) sel.onchange = (e) => { hqIndex = +e.target.value; mountHqDetail(D.hqTargets[hqIndex]); };
+      // Switching HQ clears any salesperson filter and re-renders fully so the
+      // picker refreshes to the new HQ's people.
+      if (sel) sel.onchange = (e) => { hqIndex = +e.target.value; hqSpFilter = ""; renderTab("targets"); };
       const dl = document.getElementById("hqDownload");
       if (dl) dl.onclick = () => downloadHqPdf(D.hqTargets[hqIndex]);
       const spSel = document.getElementById("hqSpSelect");
@@ -1806,10 +1811,12 @@
     setTimeout(() => window.print(), 40);
   }
 
-  // Unique salespeople who have at least one target row across accessible HQs.
-  function hqTargetPeople() {
+  // Unique salespeople who have at least one target row. Pass an HQ to scope to
+  // that HQ; omit it to union across all accessible HQs (used by the report).
+  function hqTargetPeople(hq) {
     const s = new Set();
-    D.hqTargets.filter(hqAllowed).forEach((h) => {
+    const hqs = hq ? [hq] : D.hqTargets.filter(hqAllowed);
+    hqs.forEach((h) => {
       (hqSpTargets[h.sheet] || []).forEach((r) => { const n = (r.person || "").toString().trim(); if (n) s.add(n); });
     });
     return Array.from(s).sort((a, b) => a.localeCompare(b));
