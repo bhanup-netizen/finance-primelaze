@@ -1490,11 +1490,21 @@
     const opts = D.hqTargets.map((h, i) => hqAllowed(h)
       ? `<option value="${i}" ${i === hqIndex ? "selected" : ""}>${esc(h.title.split("—")[0].trim())}</option>` : "").join("");
 
+    const spPeople = hqTargetPeople();
+    const spOpts = `<option value="">— salesperson —</option>` + spPeople.map((n) => `<option>${esc(n)}</option>`).join("");
+
     setTimeout(() => {
       const sel = $("#hqSelect");
       if (sel) sel.onchange = (e) => { hqIndex = +e.target.value; mountHqDetail(D.hqTargets[hqIndex]); };
       const dl = document.getElementById("hqDownload");
       if (dl) dl.onclick = () => downloadHqPdf(D.hqTargets[hqIndex]);
+      const spSel = document.getElementById("hqSpSelect");
+      const spDl = document.getElementById("hqSpDownload");
+      if (spDl) spDl.onclick = () => {
+        const nm = spSel && spSel.value;
+        if (!nm) { toast("Pick a salesperson first.", "warn"); if (spSel) spSel.focus(); return; }
+        downloadSalespersonPdf(nm);
+      };
       wireHqDetail();
     }, 0);
 
@@ -1505,7 +1515,11 @@
       </div>
       <div class="controls">
         <select id="hqSelect" class="select">${opts}</select>
-        <div class="hq-actions"><button id="hqDownload" class="dl-btn" type="button">⤓ Download PDF</button></div>
+        <div class="hq-actions">
+          <select id="hqSpSelect" class="select" title="Pick a salesperson to download only their targets"${spPeople.length ? "" : " disabled"}>${spOpts}</select>
+          <button id="hqSpDownload" class="dl-btn" type="button" title="Download a PDF report for the selected salesperson"${spPeople.length ? "" : " disabled"}>⤓ Salesperson report</button>
+          <button id="hqDownload" class="dl-btn" type="button" title="Download the full HQ plan">⤓ HQ report</button>
+        </div>
       </div>
       <div id="hqDetail">${hqDetail(D.hqTargets[hqIndex])}</div>`;
   }
@@ -1763,13 +1777,66 @@
   }
 
   function downloadHqPdf(h) {
+    printHtml(buildHqPrint(h));
+  }
+
+  // Send arbitrary print HTML through the shared #printArea / window.print flow.
+  function printHtml(html) {
     let area = document.getElementById("printArea");
     if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
-    area.innerHTML = buildHqPrint(h);
+    area.innerHTML = html;
     document.body.classList.add("printing");
     const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
     setTimeout(() => window.print(), 40);
+  }
+
+  // Unique salespeople who have at least one target row across accessible HQs.
+  function hqTargetPeople() {
+    const s = new Set();
+    D.hqTargets.filter(hqAllowed).forEach((h) => {
+      (hqSpTargets[h.sheet] || []).forEach((r) => { const n = (r.person || "").toString().trim(); if (n) s.add(n); });
+    });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }
+
+  // Per-salesperson target report — their product × quarter targets, grouped by
+  // HQ region, with a per-region subtotal and an all-regions grand total.
+  function buildSalespersonPrint(name) {
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+    const headers = [{ label: "Product" }].concat(HQ_QUARTERS.map((q) => ({ label: q.label, num: 1 }))).concat([{ label: "Total", num: 1 }]);
+    const gTot = {}; HQ_QUARTERS.forEach((q) => (gTot[q.key] = 0)); let gGrand = 0, regions = 0;
+    let sections = "";
+    D.hqTargets.filter(hqAllowed).forEach((h) => {
+      const rows = (hqSpTargets[h.sheet] || []).filter((r) => (r.person || "").toString().trim() === name && (r.product || "").toString().trim() !== "");
+      if (!rows.length) return;
+      regions++;
+      const qTot = {}; HQ_QUARTERS.forEach((q) => (qTot[q.key] = 0)); let hqGrand = 0;
+      const body = rows.map((r) => {
+        let tot = 0;
+        const cells = HQ_QUARTERS.map((q) => { const v = parseFloat(r[q.key]) || 0; qTot[q.key] += v; tot += v; return `<td class="num">${r[q.key] == null || r[q.key] === "" ? "—" : inr(r[q.key])}</td>`; }).join("");
+        hqGrand += tot;
+        return `<tr><td>${esc(r.product)}</td>${cells}<td class="num">${tot ? inr(tot) : "—"}</td></tr>`;
+      }).join("");
+      HQ_QUARTERS.forEach((q) => (gTot[q.key] += qTot[q.key])); gGrand += hqGrand;
+      const subtotal = `<tr><td><b>Subtotal</b></td>${HQ_QUARTERS.map((q) => `<td class="num"><b>${inr(qTot[q.key])}</b></td>`).join("")}<td class="num"><b>${inr(hqGrand)}</b></td></tr>`;
+      sections += `<h3>${esc(h.title.split("—")[0].trim())}${h.subtitle ? ` — ${esc(h.subtitle)}` : ""}</h3>${pTable(headers, body + subtotal)}`;
+    });
+    if (!sections) sections = `<p class="p-meta">No targets recorded for ${esc(name)} in your accessible HQs.</p>`;
+    else if (regions > 1) {
+      sections += `<h3>All regions — total</h3>${pTable(headers, `<tr><td><b>TOTAL</b></td>${HQ_QUARTERS.map((q) => `<td class="num"><b>${inr(gTot[q.key])}</b></td>`).join("")}<td class="num"><b>${inr(gGrand)}</b></td></tr>`)}`;
+    }
+    return `
+      <div class="p-section">
+        <h1>${esc(D.meta.company)} — ${esc(name)} — FY 2026-27 Sales Targets</h1>
+        <div class="p-sub">Quarterly targets by product${regions > 1 ? " · across regions" : ""}</div>
+        <p class="p-meta">Generated ${esc(stamp)} · Q2 (Jul–Sep 2026), Q3 (Oct–Dec 2026), Q4 (Jan–Mar 2027) · units, excl. GST.</p>
+        ${sections}
+      </div>`;
+  }
+
+  function downloadSalespersonPdf(name) {
+    printHtml(buildSalespersonPrint(name));
   }
 
   /* ================= INCENTIVES ================= */
