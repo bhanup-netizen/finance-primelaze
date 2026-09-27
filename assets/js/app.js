@@ -6831,6 +6831,19 @@
     const p = String(email || "").split("@")[0].replace(/[._]+/g, " ").trim();
     return p ? p.replace(/\b\w/g, (c) => c.toUpperCase()) : String(email || "");
   };
+  // Render a duty for viewing: the part before the em dash is the bold title,
+  // the rest becomes bullet points (split on ";" and sentence boundaries).
+  function wkTaskHtml(task) {
+    const s = String(task == null ? "" : task).trim();
+    if (!s) return "—";
+    const cut = s.split(/\s*—\s*/);
+    const title = cut[0].trim();
+    const desc = cut.slice(1).join(" — ").trim();
+    if (!desc) return `<b>${esc(title)}</b>`;
+    const parts = desc.split(/;\s+|\.\s+(?=[A-Z])/).map((x) => x.trim().replace(/[.;]+$/, "").trim()).filter(Boolean);
+    const list = `<ul class="wk-desc">${parts.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+    return `<b class="wk-title">${esc(title)}</b>${list}`;
+  }
 
   function renderWeekly(dept) {
     const ed = isAdmin();
@@ -6852,6 +6865,11 @@
     const prioCell = (kind, i, val) => ed
       ? `<td><select class="wk-in" data-kind="${kind}" data-i="${i}" data-field="priority">${WEEKLY_PRIOS.map((p) => `<option${(val || "Medium") === p ? " selected" : ""}>${p}</option>`).join("")}</select></td>`
       : `<td>${prioBadge(val)}</td>`;
+    // Task cell — bold title + bulleted description when viewing; a textarea
+    // (title — point; point) when editing.
+    const taskCell = (kind, i, t) => ed
+      ? `<td><textarea class="wk-in wk-task-in" data-kind="${kind}" data-i="${i}" data-field="task" rows="3" placeholder="Title — point; point">${esc(t.task || "")}</textarea></td>`
+      : `<td class="wk-taskcell">${wkTaskHtml(t.task)}</td>`;
     const fileCell = (kind, i, t) => {
       const has = t.fileUrl ? `<a href="${esc(t.fileUrl)}" target="_blank" rel="noopener">📎 ${esc(t.fileName || "file")}</a>${ed ? ` <button type="button" class="linkish wk-fdel" data-kind="${kind}" data-i="${i}" title="Remove file">✕</button>` : ""}` : (ed ? "" : "—");
       const up = ed ? `<label class="wk-up">⬆ Upload<input type="file" class="wk-file" data-kind="${kind}" data-i="${i}" hidden></label>` : "";
@@ -6866,7 +6884,7 @@
     const timeCell = (kind, i, val) => ed
       ? `<td><input class="wk-in" type="number" step="0.25" min="0" inputmode="decimal" data-kind="${kind}" data-i="${i}" data-field="time" value="${esc(val == null ? "" : val)}" placeholder="hrs" style="max-width:80px"></td>`
       : `<td>${esc(wkTimeDisplay(val))}</td>`;
-    const head = ["#", "Task", "Priority", "Remark", "Link"].map((x) => `<th>${x}</th>`).join("");
+    const head = ["#", "Task", "Priority", "Link"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
       // Hide an empty section from view-only users (nothing to show); editors
@@ -6874,19 +6892,17 @@
       if (!list.length && !ed) return "";
       const rows = list.map((t, i) => `<tr>
         <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish wk-del" data-kind="${kind}" data-i="${i}" title="Remove">✕</button>` : ""}</td>
-        ${inCell(kind, i, "task", t.task, "Task")}
+        ${taskCell(kind, i, t)}
         ${prioCell(kind, i, t.priority)}
-        ${inCell(kind, i, "remark", t.remark, "Remark / note")}
         ${inCell(kind, i, "link", t.link, "Paste a how-to link")}
-      </tr>`).join("") || `<tr><td colspan="5" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
+      </tr>`).join("") || `<tr><td colspan="4" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
       return `<div class="block" style="margin-top:16px">
         <h2 style="margin:0 0 4px">${esc(title)}</h2>
         <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
         ${table(head, rows)}
         ${ed ? `<div class="wk-addform" data-kind="${kind}">
-          <input type="text" class="wk-nf" data-nf="task" placeholder="Task *">
+          <input type="text" class="wk-nf" data-nf="task" placeholder="Task — title — point; point *">
           <select class="wk-nf wk-nf-sm" data-nf="priority">${WEEKLY_PRIOS.map((p) => `<option${p === "Medium" ? " selected" : ""}>${p}</option>`).join("")}</select>
-          <input type="text" class="wk-nf" data-nf="remark" placeholder="Remark (optional)">
           <input type="text" class="wk-nf" data-nf="link" placeholder="Link (optional)">
           <button type="button" class="dl-btn wk-submit" data-kind="${kind}">＋ Add duty</button>
         </div>` : ""}</div>`;

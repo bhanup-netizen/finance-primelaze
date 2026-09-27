@@ -772,6 +772,12 @@ textarea.mk-in { resize: vertical; line-height: 1.45; }
 /* Weekly-task editor */
 .wk-in { width: 100%; min-width: 90px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 13px; background: var(--surface); color: var(--text); box-sizing: border-box; }
 .wk-in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+textarea.wk-task-in { min-width: 240px; resize: vertical; line-height: 1.4; }
+/* Duty task cell — bold title + bulleted description (view mode). */
+.wk-taskcell { min-width: 260px; }
+.wk-taskcell .wk-title { display: block; font-weight: 700; font-size: 14px; color: var(--text); }
+.wk-desc { margin: 5px 0 0; padding-left: 18px; }
+.wk-desc li { margin: 3px 0; font-size: 13px; color: var(--text-2); line-height: 1.45; }
 .wk-up { display: inline-block; cursor: pointer; font-size: 12px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 .wk-up:hover { background: var(--accent-soft); }
 .wk-by { white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
