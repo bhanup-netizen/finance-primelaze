@@ -6726,6 +6726,7 @@
         { id: "adm3", task: "Marketing-print & Esthemax stock control — keep all marketing print material in stock; ensure print material is printed on time and reordered before it drops below the threshold; track Esthemax inventory; place Esthemax replenishment orders after management approval.", priority: "High", remark: "" },
         { id: "adm4", task: "Vendor sourcing — find the most cost-effective vendors for printing, travel and hotels; handle quotations, negotiation and follow-up.", priority: "High", remark: "" },
         { id: "adm8", task: "Travel & accommodation booking (salespeople, conferences & events) — book all hotels, accommodation and travel for salespeople, conferences and events; the salesperson raises the travel request via Zoho Expense; the Sales Manager or Director approves, then Finance approves, then book; book all tickets within 4 hours of Finance approval during business hours; if the request is raised during non-business hours or on a Sunday, book by 11 am the next morning; upload all tickets properly in Zoho Expense; update the salesperson in a timely manner; strictly follow this flow — no exceptions.", priority: "High", remark: "" },
+        { id: "adm10", task: "Event & conference logistics — on receiving the requirement, arrange the print material, machines and other logistics for events and conferences; get everything to the required place on time; arrange it in the most cost-effective way.", priority: "High", remark: "" },
         { id: "adm5", task: "Company asset management — maintain the full company asset register (laptops, mobiles, headphones, accessories and other devices); track what is in stock and what is issued, and to whom; track working vs non-working status.", priority: "High", remark: "" },
         { id: "adm6", task: "Employee onboarding (admin side) — handle the admin side of new-joiner onboarding; coordinate with HR's onboarding process.", priority: "Medium", remark: "" },
         { id: "adm7", task: "Zoho Bigin training — provide proper Zoho Bigin training to the team; cover pipeline setup and contact management; walk the team through the complete end-to-end flow.", priority: "Medium", remark: "" },
@@ -6805,7 +6806,7 @@
   // Per-department built-in-duty version. Bump a dept's number when its default
   // duties change so the stored copy is refreshed to the new list — that dept
   // only; other departments are never touched.
-  const WEEKLY_DEPT_VERSIONS = { "Finance": 5, "HR": 3, "Online Marketing": 3, "Offline Marketing": 3, "Admin & Logistics": 6 };
+  const WEEKLY_DEPT_VERSIONS = { "Finance": 5, "HR": 3, "Online Marketing": 3, "Offline Marketing": 3, "Admin & Logistics": 7 };
   const weeklyDeptVersion = {};        // applied version per dept, from the edits doc
   const weeklyReseedDepts = new Set();  // depts refreshed to the new built-in list this load
   const weeklyList = (dept, kind) => {
