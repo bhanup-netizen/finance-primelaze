@@ -143,6 +143,7 @@
     { id: "order", label: "Inventory", group: "Admin & Logistics", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
+    { id: "brochures", label: "Brochure Stock", group: "Admin & Logistics", render: renderBrochures },
     { id: "weeklyOps", label: "Duties", group: "Admin & Logistics", render: () => renderWeekly("Admin & Logistics") },
     { id: "admin", label: "⚙ Admin", group: "⚙ Admin", render: renderAdmin },
   ];
@@ -6834,6 +6835,90 @@
     return `<b class="wk-title">${esc(title)}</b>${list}`;
   }
 
+  /* ================= BROCHURE STOCK (Admin & Logistics) ================= */
+  const BROCHURE = window.BROCHURE_SEED || { version: 0, rows: [] };
+  let brochures = JSON.parse(JSON.stringify(BROCHURE.rows || []));
+  let brochureVersion = 0;      // applied seed version (from the edits doc)
+  let brochureDirty = false;    // this session changed brochure data
+  let brochureNeedsReseed = false;
+  let brochureSeq = brochures.reduce((m, r) => Math.max(m, +String(r.id).replace(/\D/g, "") || 0), 0) + 1;
+  const brochTot = (r) => (+r.zk || 0) + (+r.pondy || 0) + (+r.event || 0);
+
+  function renderBrochures() {
+    const ed = isAdmin();
+    // Persist the one-time seed so it sticks for everyone.
+    if (brochureNeedsReseed && (roleIsAdmin() || hasAnyEditGrant())) {
+      brochureNeedsReseed = false; brochureDirty = true; saveEdits("Brochure stock · seeded");
+    }
+    setTimeout(wireBrochures, 0);
+    const numIn = (i, f, v) => ed
+      ? `<td class="num"><input class="broch-in" type="number" min="0" data-i="${i}" data-f="${f}" value="${esc(v == null ? "" : v)}" style="max-width:74px"></td>`
+      : `<td class="num">${v == null || v === "" ? "0" : esc(v)}</td>`;
+    const rows = brochures.map((r, i) => {
+      const total = brochTot(r);
+      const low = total <= (+r.reorder || 0);
+      const nameCell = ed
+        ? `<td class="t-name"><input class="broch-in broch-name" data-i="${i}" data-f="name" value="${esc(r.name || "")}"><input class="broch-in broch-spec" data-i="${i}" data-f="spec" value="${esc(r.spec || "")}" placeholder="specification"></td>`
+        : `<td class="t-name"><b>${esc(r.name || "—")}</b>${r.spec ? `<div class="t-muted" style="font-size:12px">${esc(r.spec)}</div>` : ""}</td>`;
+      return `<tr>
+        <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish broch-del" data-i="${i}" title="Remove">✕</button>` : ""}</td>
+        ${nameCell}
+        ${numIn(i, "zk", r.zk)}
+        ${numIn(i, "pondy", r.pondy)}
+        ${numIn(i, "event", r.event)}
+        <td class="num"><b>${total}</b></td>
+        ${numIn(i, "monthly", r.monthly)}
+        ${numIn(i, "reorder", r.reorder)}
+        <td class="num"><span class="badge ${low ? "b-bad" : "b-good"}">${low ? "Reorder" : "OK"}</span></td>
+      </tr>`;
+    }).join("") || `<tr><td colspan="9" class="empty">No brochures yet.${ed ? " Add one below." : ""}</td></tr>`;
+    const tZk = brochures.reduce((s, r) => s + (+r.zk || 0), 0);
+    const tPondy = brochures.reduce((s, r) => s + (+r.pondy || 0), 0);
+    const tEvent = brochures.reduce((s, r) => s + (+r.event || 0), 0);
+    const tTotal = tZk + tPondy + tEvent;
+    const nReorder = brochures.filter((r) => brochTot(r) <= (+r.reorder || 0)).length;
+    const head = ["#", "Brochure", "Zirakpur", "Pondy", "Event", "Total", "Use / mo", "Reorder at", "Status"]
+      .map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
+    const totalRow = `<tr class="cprice-total"><td></td><td class="t-name"><b>TOTAL</b></td><td class="num"><b>${tZk}</b></td><td class="num"><b>${tPondy}</b></td><td class="num"><b>${tEvent}</b></td><td class="num"><b>${tTotal}</b></td><td></td><td></td><td class="num"><b>${nReorder} to reorder</b></td></tr>`;
+    return `
+      <div class="section-head"><h1>Brochure Stock</h1>
+        <p>Current brochure &amp; print-material stock by location. Total = Zirakpur + Pondy + Event; a brochure is flagged <b>Reorder</b> when the total is at or below its reorder level.${ed ? " Editable — saves for everyone." : " Read-only."}</p></div>
+      <div class="card" style="margin-bottom:14px"><div class="stat-row">
+        <div class="stat"><b>${brochures.length}</b><span>Brochure types</span></div>
+        <div class="stat k-good"><b>${tTotal.toLocaleString("en-IN")}</b><span>Total in stock</span></div>
+        <div class="stat ${nReorder ? "k-bad" : ""}"><b>${nReorder}</b><span>Need reorder</span></div>
+      </div></div>
+      <div class="table-wrap wk-flow"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${rows}${brochures.length ? totalRow : ""}</tbody></table></div>
+      ${ed ? `<div class="hq-add-row" style="margin-top:12px"><button id="brochAdd" class="dl-btn" type="button">＋ Add brochure</button></div>` : ""}`;
+  }
+
+  function wireBrochures() {
+    if (!isAdmin()) return;
+    document.querySelectorAll(".broch-in").forEach((el) => {
+      el.onchange = () => {
+        const r = brochures[+el.dataset.i]; if (!r) return;
+        const f = el.dataset.f;
+        if (/^(zk|pondy|event|monthly|reorder)$/.test(f)) { const v = parseFloat(el.value); r[f] = isNaN(v) || v < 0 ? 0 : v; }
+        else r[f] = el.value.trim();
+        brochureDirty = true; saveEdits("Brochure stock · " + (r.name || ""));
+        if (/^(zk|pondy|event|reorder)$/.test(f)) renderTab("brochures");
+      };
+    });
+    document.querySelectorAll(".broch-del").forEach((b) => {
+      b.onclick = () => {
+        const r = brochures[+b.dataset.i]; if (!r) return;
+        if (!window.confirm("Remove brochure “" + (r.name || "") + "”?")) return;
+        brochures.splice(+b.dataset.i, 1); brochureDirty = true;
+        saveEdits("Brochure removed"); renderTab("brochures");
+      };
+    });
+    const add = document.getElementById("brochAdd");
+    if (add) add.onclick = () => {
+      brochures.push({ id: "br" + (brochureSeq++), name: "", spec: "", monthly: 0, reorder: 150, zk: 0, pondy: 0, event: 0 });
+      brochureDirty = true; saveEdits("Brochure added"); renderTab("brochures");
+    };
+  }
+
   function renderWeekly(dept) {
     const ed = isAdmin();
     // Persist this dept's one-time duty refresh so it sticks for everyone. Only
@@ -8727,6 +8812,16 @@
           weeklyReseedDepts.add(dept);
         }
       });
+      // Brochure stock — keep stored data when it is current-version, else re-seed.
+      if (typeof e.brochureVersion === "number") brochureVersion = e.brochureVersion;
+      if (Array.isArray(e.brochures) && brochureVersion >= (BROCHURE.version || 1)) {
+        brochures = e.brochures;
+      } else {
+        brochures = JSON.parse(JSON.stringify(BROCHURE.rows || []));
+        brochureVersion = BROCHURE.version || 1;
+        brochureNeedsReseed = true;
+      }
+      brochureSeq = brochures.reduce((m, r) => Math.max(m, +String(r.id).replace(/\D/g, "") || 0), 0) + 1;
       if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
       if (e.coverage && typeof e.coverage === "object" && Array.isArray(e.coverage.rows)) {
         const CUR = COVERAGE_SEED.version || 1;
@@ -9004,11 +9099,18 @@
         if (typeof serverData.payHideAll === "boolean") wPayHideAll = serverData.payHideAll;
         if (typeof serverData.payHideBase === "boolean") wPayHideBase = serverData.payHideBase;
       }
+      // Brochure stock: same protection — write the server's copy back unless
+      // this session actually changed the brochure data.
+      let wBrochures = brochures, wBrochureVersion = brochureVersion;
+      if (serverData && !brochureDirty) {
+        if (Array.isArray(serverData.brochures)) wBrochures = serverData.brochures;
+        if (typeof serverData.brochureVersion === "number") wBrochureVersion = serverData.brochureVersion;
+      }
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
