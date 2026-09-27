@@ -9455,7 +9455,10 @@
         // session, find out WHY — is the login token missing from this browser
         // (storage was cleared) or present-but-not-restored (revoked/expired)?
         try {
-          if (localStorage.getItem("pl-remember") === "1") {
+          // Show the diagnostic unless the user explicitly opted OUT of staying
+          // signed in — so even a cleared localStorage (null) still gets a reason.
+          let rememberedPref = "1"; try { rememberedPref = localStorage.getItem("pl-remember"); } catch (e) {}
+          if (rememberedPref !== "0") {
             let lsOk = true;
             try { localStorage.setItem("pl-t", "1"); localStorage.removeItem("pl-t"); } catch (e) { lsOk = false; }
             const idbOk = !!window.indexedDB;
