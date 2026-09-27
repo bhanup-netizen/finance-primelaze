@@ -119,14 +119,14 @@
     { id: "prices", label: "Pricing", group: "Finance", render: renderPricing },
     { id: "companyprice", label: "💰 Company Price", group: "Finance", render: renderCompanyPrice },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
-    { id: "weeklyFin", label: "Weekly Duties", group: "Finance", render: () => renderWeekly("Finance") },
+    { id: "weeklyFin", label: "Duties", group: "Finance", render: () => renderWeekly("Finance") },
     // Sale
     { id: "leads", label: "Casovil Sale", group: "Sale", render: renderLeads },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
-    { id: "weeklySale", label: "Weekly Duties", group: "Sale", render: () => renderWeekly("Sale") },
+    { id: "weeklySale", label: "Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
-    { id: "weeklyHr", label: "Weekly Duties", group: "HR", render: () => renderWeekly("HR") },
+    { id: "weeklyHr", label: "Duties", group: "HR", render: () => renderWeekly("HR") },
     { id: "induction", label: "Induction", group: "HR", render: renderInduction },
     { id: "attendance", label: "Attendance Protocol", group: "HR", render: renderAttendance },
     // Marketing
@@ -143,7 +143,7 @@
     { id: "order", label: "Inventory", group: "Admin & Logistics", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
-    { id: "weeklyOps", label: "Weekly Duties", group: "Admin & Logistics", render: () => renderWeekly("Admin & Logistics") },
+    { id: "weeklyOps", label: "Duties", group: "Admin & Logistics", render: () => renderWeekly("Admin & Logistics") },
     { id: "admin", label: "⚙ Admin", group: "⚙ Admin", render: renderAdmin },
   ];
 
@@ -6705,73 +6705,25 @@
       ],
     },
     "Admin & Logistics": {
-      // Ayush (Admin Manager) + Mayank (Admin Executive). Zoho Projects rule
-      // applies; cadence in Remark, hours in Time.
+      // Ayush (Admin Manager) — refined, de-duplicated. Name & hours removed;
+      // split into Mandatory (core) and Add-on (as-required / projects).
       mandatory: [
-        { id: "alzoho", task: "Admin · " + WK_ZOHO_RULE, time: "", priority: "High", remark: "Team rule — applies to every duty below (Ayush & Mayank)" },
-        { id: "alw1", task: "Ayush · Compliance & regulatory management — review CDSCO, Cosmetics, EPR, Customs, GeM and other registrations, licences, renewals, queries and pending actions", time: 2, priority: "High", remark: "Weekly" },
-        { id: "alw2", task: "Ayush · Manufacturer & supplier coordination — follow up on compliance documents, certificates, product info, address/facility changes and other requirements", time: 1, priority: "High", remark: "Weekly" },
-        { id: "alw3", task: "Ayush · Admin-executive monitoring — review work allocation, completed/pending tasks, reporting and productivity", time: 1, priority: "High", remark: "Weekly" },
-        { id: "alw4", task: "Ayush · Import, customs & logistics — review shipments, customs documentation, courier, transport, demo movement and clearance issues", time: 1.5, priority: "High", remark: "Weekly" },
-        { id: "alw5", task: "Ayush · Product & Esthemax orders — coordinate requirements, orders, availability, dispatch and pending deliveries", time: 1, priority: "High", remark: "Weekly" },
-        { id: "alw6", task: "Ayush · Inventory, demo & assets — review stock, machine/demo movement, inward/outward records and employee/company assets", time: 1, priority: "Medium", remark: "Weekly" },
-        { id: "alw7", task: "Ayush · Asset requests — handle department/employee requests for laptops, mobiles, SIMs, accessories and other assets", time: 0.5, priority: "Medium", remark: "Weekly" },
-        { id: "alw8", task: "Ayush · Travel & event coordination — review travel, hotel, transport, conferences, exhibitions, meetings and related requirements", time: 1, priority: "Medium", remark: "Weekly" },
-        { id: "alw9", task: "Ayush · Marketing & sales support — materials, samples, printing, demos, events and other operational requirements", time: 1, priority: "Medium", remark: "Weekly" },
-        { id: "alw10", task: "Ayush · Vendor & procurement coordination — quotations, purchases, repairs, AMC and vendor follow-ups", time: 1, priority: "Medium", remark: "Weekly" },
-        { id: "alw11", task: "Ayush · Expense management — review admin expenses, bills, advances, supporting documents and pending claims", time: 1, priority: "High", remark: "Weekly" },
-        { id: "alw12", task: "Ayush · Office & employee administration — office maintenance, onboarding, assets, IT, housekeeping, security and employee requirements", time: 1, priority: "Medium", remark: "Weekly" },
-        { id: "alw13", task: "Ayush · CRM & systems — monitor Zoho Bigin, Zoho Projects, Zoho Inventory/Books, HROne and related admin processes", time: 0.5, priority: "High", remark: "Weekly" },
-        { id: "alw14", task: "Ayush · Reporting & coordination — weekly status, pending-action and escalation reports; coordinate with HR, Finance, Sales, Marketing and Operations", time: 1, priority: "High", remark: "Weekly" },
-        { id: "alw15", task: "Mayank · Shipping & logistics — all dispatches and pickups (excluding demo machines); maintain Zirakpur office dispatch details", time: 3, priority: "High", remark: "Daily / ongoing" },
-        { id: "alw16", task: "Mayank · Demo device arrangement — pickup, dispatch, follow-ups, packaging and coordination for the team", time: 2, priority: "High", remark: "Ongoing" },
-        { id: "alw17", task: "Mayank · Zirakpur office inventory — regular counting and updates", time: 1, priority: "High", remark: "Weekly" },
-        { id: "alw18", task: "Mayank · Lead creation — create/update Bigin leads from conferences and other sources; manage Unified Dashboard & Casovil leads", time: 1, priority: "High", remark: "Ongoing" },
-        { id: "alw19", task: "Mayank · Cheque deposits — deposit cheques per the given dates and instructions", time: 0.5, priority: "High", remark: "As scheduled" },
-        { id: "alw20", task: "Mayank · Office management — repairs, housekeeping checks, supplies, pantry and other office requirements", time: 1, priority: "Medium", remark: "Weekly" },
-        { id: "alw21", task: "Mayank · Travel & hotel bookings — via Zoho Expense and other channels; record the related entries", time: 1, priority: "Medium", remark: "As required" },
-        { id: "alw22", task: "Mayank · Unified Portal updates — duties, inventory and registration status", time: 0.5, priority: "Medium", remark: "Weekly" },
-        { id: "alw23", task: "Mayank · Packaging coordination — Celluma boxes (measurements + durable boxes) and Eye Mask / Crystal Face Mask boxes", time: 1, priority: "Medium", remark: "As required" },
-        { id: "alw24", task: "Mayank · Rose Quartz Eye Mask repair — coordinate masks sent for repair, follow-ups and dispatch", time: 0.5, priority: "Medium", remark: "As required" },
-        { id: "alw25", task: "Mayank · Sales-team phone/SIM issues — coordinate SIM/phone issues and SIM KYC updates", time: 0.5, priority: "Medium", remark: "As required" },
-        { id: "alw26", task: "Mayank · Joining kits — arrange kits and required materials for new joiners", time: 0.5, priority: "Medium", remark: "As required" },
-        { id: "alw27", task: "Mayank · Consumables data entry in Bigin — transfer consumables data from Excel (from Finance) into Bigin", time: 0.5, priority: "Medium", remark: "As required" },
-        { id: "alw28", task: "Mayank · Arjun sir's HDFC credit card — related coordination and updates", time: 0.25, priority: "Low", remark: "As required" },
-        { id: "alw29", task: "Ayush · Miscellaneous / management support — urgent, unplanned and cross-functional administrative assignments", time: "", priority: "Medium", remark: "As needed" },
+        { id: "adm1", task: "Import licence & compliance coordination — for CDSCO, GeM, Cosmetics, EPR, Customs and other Govt-of-India licences needed to import laser machines and cosmetic products, act as the link between the overseas manufacturer and the compliance agency: get the required-document list from the agency, arrange and collect the documents, certificates, product information and any address/facility changes from the manufacturer, and hand them to the agency for review and filing; track renewals, queries and pending actions.", time: "", priority: "High", remark: "" },
+        { id: "adm2", task: "Shipping & customs-clearance coordination — after the Owner negotiates the price and places the order, arrange all documents to ship the product to India and to clear customs for both cosmetic products and laser machines; track shipments, courier, transport and clearance issues through to delivery.", time: "", priority: "High", remark: "" },
+        { id: "adm3", task: "Marketing-print & Esthemax stock control — keep all marketing print material in stock (printed on time and reordered before it drops below the threshold); track Esthemax inventory and place replenishment orders after management approval.", time: "", priority: "High", remark: "" },
+        { id: "adm4", task: "Vendor sourcing & travel/hotel booking — find the most cost-effective vendors for printing, travel and hotels; handle quotations, negotiation and follow-up. Book employee travel/hotel/accommodation once the Sales Director approves — within 2 hours during business hours, and by the next morning for weekend requests.", time: "", priority: "High", remark: "" },
+        { id: "adm5", task: "Company asset management — maintain the full company asset register (laptops, mobiles, headphones, accessories and everything else): what is in stock, what is issued and to whom, and working vs non-working status.", time: "", priority: "High", remark: "" },
+        { id: "adm6", task: "Employee onboarding (admin side) — handle the admin side of new-joiner onboarding, coordinated with HR's onboarding.", time: "", priority: "Medium", remark: "" },
+        { id: "adm7", task: "Zoho Bigin training — provide proper Zoho Bigin training: pipeline setup, contact management and the complete end-to-end flow.", time: "", priority: "Medium", remark: "" },
+        { id: "adm8", task: "CRM & systems — maintain Zoho Bigin, Zoho Projects, Zoho Inventory/Books and HROne.", time: "", priority: "Medium", remark: "" },
+        { id: "adm9", task: "Admin-executive oversight — allocate work, and review completed/pending tasks and productivity.", time: "", priority: "Medium", remark: "" },
+        { id: "adm10", task: "Reporting & coordination — prepare weekly status, pending-action and escalation reports; coordinate with HR, Finance, Sales, Marketing and Operations.", time: "", priority: "High", remark: "" },
+        { id: "adm11", task: "Documentation & records — keep regulatory, manufacturer, purchase, expense and administrative records properly maintained and archived.", time: "", priority: "Medium", remark: "" },
       ],
-      monthly: [
-        { id: "alm1", task: "Ayush · Monthly compliance review — licences, registrations, renewals, EPR obligations, government portals and regulatory documentation", time: 2, priority: "High", remark: "" },
-        { id: "alm2", task: "Ayush · Regulatory & manufacturer documentation review — validity/completeness of certificates, technical documents, manufacturer records and pending requirements", time: 1.5, priority: "High", remark: "" },
-        { id: "alm3", task: "Ayush · Product & order review — Esthemax/product orders, stock requirements, availability and upcoming requirements", time: 1, priority: "Medium", remark: "" },
-        { id: "alm4", task: "Ayush · Inventory & asset reconciliation — machines, demo devices, consumables and employee/company assets", time: 1.5, priority: "High", remark: "" },
-        { id: "alm5", task: "Ayush · Admin-executive performance review — monthly work, productivity, reporting, pending activities and support requirements", time: 1, priority: "Medium", remark: "" },
-        { id: "alm6", task: "Ayush · Expense & budget review — admin expenses, advances, bills, budget utilisation and exceptional expenses", time: 1, priority: "High", remark: "" },
-        { id: "alm7", task: "Ayush · Vendor & contract review — vendor performance, AMC, contracts, quotations and upcoming renewals", time: 1, priority: "Medium", remark: "" },
-        { id: "alm8", task: "Ayush · Travel / conference / marketing review — completed and upcoming travel, conferences, exhibitions and marketing support requirements", time: 0.5, priority: "Medium", remark: "" },
-        { id: "alm9", task: "Ayush · Office & employee administration review — onboarding/offboarding, asset allocation, office facilities and employee requirements", time: 0.5, priority: "Medium", remark: "" },
-        { id: "alm10", task: "Ayush · CRM & data review — Zoho Bigin/HROne records, pending tasks, data quality and process gaps", time: 1, priority: "Medium", remark: "" },
-        { id: "alm11", task: "Ayush · Documentation & archive review — regulatory, manufacturer, purchase, expense and administrative records properly maintained", time: 1, priority: "Medium", remark: "" },
-        { id: "alm12", task: "Mayank · Monthly Zoho Expense submission — record and submit the month's expenses in Zoho Expense", time: 1, priority: "High", remark: "" },
-      ],
+      monthly: [],
       optional: [
-        { id: "alo1", task: "Ayush · New registrations & amendments — CDSCO, Cosmetics, EPR, Customs, GeM, LMPC, WPC/BIS/MTCTE and other applicable registrations", time: "", priority: "High", remark: "When required" },
-        { id: "alo2", task: "Ayush · Product regulatory assessment — new-product classification, technical documentation, approvals, additions and amendments", time: "", priority: "High", remark: "When required" },
-        { id: "alo3", task: "Ayush · Regulatory query & audit support — responses/documents for CDSCO, Customs and other authorities; support inspections/audits", time: "", priority: "High", remark: "When required" },
-        { id: "alo4", task: "Ayush · Manufacturer change management — manufacturer/facility/address changes, certificates and product documentation", time: "", priority: "Medium", remark: "When required" },
-        { id: "alo5", task: "Ayush · Compliance consultant coordination — evaluate consultants, compare scope/fees/timelines and coordinate execution", time: "", priority: "Medium", remark: "When required" },
-        { id: "alo6", task: "Ayush · Import issue resolution — handle escalated customs/import matters and supporting applications/documentation", time: "", priority: "High", remark: "When required" },
-        { id: "alo7", task: "Ayush · New product / order projects — special Esthemax and other orders, availability, documentation and shipment", time: "", priority: "Medium", remark: "When active" },
-        { id: "alo8", task: "Ayush · Conference & exhibition projects — team travel, hotel, stall/material, machines, logistics, vendors and event execution", time: "", priority: "Medium", remark: "When active" },
-        { id: "alo9", task: "Ayush · Recruitment & employee setup — support hiring, JD preparation, onboarding and joining-kit arrangements", time: "", priority: "Medium", remark: "When required" },
-        { id: "alo10", task: "Ayush · Website & digital support — website testing, enquiry/demo forms, communication routing and related coordination", time: "", priority: "Medium", remark: "When required" },
-        { id: "alo11", task: "Ayush · CRM / Zoho Projects — CRM setup, training, data cleanup, automation, workflow design and system improvements", time: "", priority: "Medium", remark: "When required" },
-        { id: "alo12", task: "Ayush · Policies & SOPs — travel, expense, inventory, inward/outward, asset, onboarding and other SOPs", time: "", priority: "Medium", remark: "When required" },
-        { id: "alo13", task: "Ayush · Office / branch projects — new office setup, infrastructure, relocation, repair and special projects", time: "", priority: "Medium", remark: "When active" },
-        { id: "alo14", task: "Ayush · Process improvement & automation — identify gaps, develop trackers, automation and administrative improvements", time: "", priority: "Medium", remark: "When required" },
-        { id: "alo15", task: "Ayush · Special management assignments — urgent and miscellaneous tasks from management or other departments", time: "", priority: "Low", remark: "As assigned" },
-        { id: "alo16", task: "Mayank · CUTICON AP event — arrangements, materials, dispatches and coordination", time: "", priority: "Medium", remark: "When active" },
-        { id: "alo17", task: "Mayank · SODC Conference (Dharamshala) — travel, hotel and other required arrangements", time: "", priority: "Medium", remark: "When active" },
-        { id: "alo18", task: "Mayank · Innova Crysta RC update — follow-up and coordination on the vehicle RC update", time: "", priority: "Low", remark: "Until closed" },
+        { id: "ado1", task: "New product / special order projects — coordinate special Esthemax and other orders, documentation and shipment.", time: "", priority: "Medium", remark: "When active" },
+        { id: "ado2", task: "Conference & exhibition projects — travel, hotel, stall/material, machines, logistics, vendors and execution.", time: "", priority: "Medium", remark: "When active" },
       ],
     },
     "Sale": {
@@ -6849,7 +6801,7 @@
   // Per-department built-in-duty version. Bump a dept's number when its default
   // duties change so the stored copy is refreshed to the new list — that dept
   // only; other departments are never touched.
-  const WEEKLY_DEPT_VERSIONS = { "Finance": 4, "HR": 2, "Online Marketing": 2, "Offline Marketing": 2, "Admin & Logistics": 2 };
+  const WEEKLY_DEPT_VERSIONS = { "Finance": 4, "HR": 2, "Online Marketing": 2, "Offline Marketing": 2, "Admin & Logistics": 3 };
   const weeklyDeptVersion = {};        // applied version per dept, from the edits doc
   const weeklyReseedDepts = new Set();  // depts refreshed to the new built-in list this load
   const weeklyList = (dept, kind) => {
@@ -6917,6 +6869,9 @@
     const head = ["#", "Task", "Time (hrs)", "Priority", "Remark", "Link", "File"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
+      // Hide an empty section from view-only users (nothing to show); editors
+      // still see it so they can add rows.
+      if (!list.length && !ed) return "";
       // Total estimated hours for this section (numeric time values only).
       const totHrs = list.reduce((s, t) => { const n = typeof t.time === "number" ? t.time : parseFloat(t.time); return s + (isNaN(n) ? 0 : n); }, 0);
       const totHrsTxt = totHrs > 0 ? `<span class="t-muted" style="font-weight:400;font-size:13px"> · est. ${Math.round(totHrs * 100) / 100} hr${totHrs === 1 ? "" : "s"} total</span>` : "";
@@ -6944,10 +6899,10 @@
     };
     return `
       <div class="section-head"><h1>${esc(dept)} — Duties</h1>
-        <p>What each ${esc(dept)} team member does — our shared rule book, split into weekly, monthly and optional.${ed ? " Editable — saves for everyone." : ""}</p></div>
-      ${section("mandatory", "Weekly duties", "Must be done every week, without fail.")}
-      ${section("monthly", "Monthly duties", "Must be done every month.")}
-      ${section("optional", "Optional duties", "Do these when time allows — good-to-have, not compulsory.")}`;
+        <p>What the ${esc(dept)} team does — our shared rule book, split into mandatory, monthly and add-on work.${ed ? " Editable — saves for everyone." : ""}</p></div>
+      ${section("mandatory", "Mandatory duties", "Core duties — must be done.")}
+      ${section("monthly", "Monthly duties", "Done every month.")}
+      ${section("optional", "Add-on duties", "As-required and project work.")}`;
   }
 
   function wireWeekly(dept) {
