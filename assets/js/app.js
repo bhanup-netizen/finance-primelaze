@@ -6866,31 +6866,25 @@
     const timeCell = (kind, i, val) => ed
       ? `<td><input class="wk-in" type="number" step="0.25" min="0" inputmode="decimal" data-kind="${kind}" data-i="${i}" data-field="time" value="${esc(val == null ? "" : val)}" placeholder="hrs" style="max-width:80px"></td>`
       : `<td>${esc(wkTimeDisplay(val))}</td>`;
-    const head = ["#", "Task", "Time (hrs)", "Priority", "Remark", "Link", "File"].map((x) => `<th>${x}</th>`).join("");
+    const head = ["#", "Task", "Priority", "Remark", "Link"].map((x) => `<th>${x}</th>`).join("");
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
       // Hide an empty section from view-only users (nothing to show); editors
       // still see it so they can add rows.
       if (!list.length && !ed) return "";
-      // Total estimated hours for this section (numeric time values only).
-      const totHrs = list.reduce((s, t) => { const n = typeof t.time === "number" ? t.time : parseFloat(t.time); return s + (isNaN(n) ? 0 : n); }, 0);
-      const totHrsTxt = totHrs > 0 ? `<span class="t-muted" style="font-weight:400;font-size:13px"> · est. ${Math.round(totHrs * 100) / 100} hr${totHrs === 1 ? "" : "s"} total</span>` : "";
       const rows = list.map((t, i) => `<tr>
         <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish wk-del" data-kind="${kind}" data-i="${i}" title="Remove">✕</button>` : ""}</td>
         ${inCell(kind, i, "task", t.task, "Task")}
-        ${timeCell(kind, i, t.time)}
         ${prioCell(kind, i, t.priority)}
         ${inCell(kind, i, "remark", t.remark, "Remark / note")}
         ${inCell(kind, i, "link", t.link, "Paste a how-to link")}
-        ${fileCell(kind, i, t)}
-      </tr>`).join("") || `<tr><td colspan="7" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
+      </tr>`).join("") || `<tr><td colspan="5" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
       return `<div class="block" style="margin-top:16px">
-        <h2 style="margin:0 0 4px">${esc(title)}${totHrsTxt}</h2>
+        <h2 style="margin:0 0 4px">${esc(title)}</h2>
         <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
         ${table(head, rows)}
         ${ed ? `<div class="wk-addform" data-kind="${kind}">
           <input type="text" class="wk-nf" data-nf="task" placeholder="Task *">
-          <input type="number" step="0.25" min="0" inputmode="decimal" class="wk-nf wk-nf-sm" data-nf="time" placeholder="Hours * e.g. 0.5">
           <select class="wk-nf wk-nf-sm" data-nf="priority">${WEEKLY_PRIOS.map((p) => `<option${p === "Medium" ? " selected" : ""}>${p}</option>`).join("")}</select>
           <input type="text" class="wk-nf" data-nf="remark" placeholder="Remark (optional)">
           <input type="text" class="wk-nf" data-nf="link" placeholder="Link (optional)">
@@ -6916,9 +6910,9 @@
       b.onclick = () => {
         const form = b.closest(".wk-addform"); if (!form) return;
         const get = (nf) => { const el = form.querySelector('.wk-nf[data-nf="' + nf + '"]'); return el ? el.value.trim() : ""; };
-        const task = get("task"), time = get("time"), priority = get("priority") || "Medium";
-        if (!task || !time || !priority) { window.alert("Please fill Task, Time (hours) and Priority — these are required."); return; }
-        weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task, time: parseHours(time), priority, remark: get("remark"), link: get("link"), by: (sessionUser && sessionUser.email) || "", at: Date.now() });
+        const task = get("task"), priority = get("priority") || "Medium";
+        if (!task) { window.alert("Please enter the Task."); return; }
+        weeklyList(dept, b.dataset.kind).push({ id: "w" + (weeklySeq++), task, priority, remark: get("remark"), link: get("link"), by: (sessionUser && sessionUser.email) || "", at: Date.now() });
         weeklyDirty.add(dept); saveWeekly(dept, "Weekly duty added · " + dept); go(currentTab);
       };
     });
