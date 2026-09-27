@@ -6893,7 +6893,33 @@
         <div class="stat ${nReorder ? "k-bad" : ""}"><b>${nReorder}</b><span>Need reorder</span></div>
       </div></div>
       <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${rows}${brochures.length ? totalRow : ""}</tbody></table></div>
-      ${ed ? `<div class="hq-add-row" style="margin-top:12px"><button id="brochAdd" class="dl-btn" type="button">＋ Add brochure</button></div>` : ""}`;
+      ${ed ? `<div class="hq-add-row" style="margin-top:12px"><button id="brochAdd" class="dl-btn" type="button">＋ Add brochure</button></div>` : ""}
+      ${brochConsumptionBlock()}`;
+  }
+
+  // How many brochures each person has taken (sum of OUT movements), with a
+  // per-brochure breakdown — so you can see each salesperson's consumption.
+  function brochConsumptionBlock() {
+    const byPerson = {}; // name -> { total, items: {brochure: qty} }
+    brochures.forEach((r) => (r.moves || []).forEach((m) => {
+      if (m.dir !== "out") return;
+      const who = (m.party || "").trim() || "—";
+      const p = byPerson[who] || (byPerson[who] = { total: 0, items: {} });
+      p.total += (+m.qty || 0);
+      p.items[r.name || "?"] = (p.items[r.name || "?"] || 0) + (+m.qty || 0);
+    }));
+    const names = Object.keys(byPerson).sort((a, b) => byPerson[b].total - byPerson[a].total);
+    if (!names.length) return `<div class="callout" style="margin-top:18px">📊 <b>Consumption by person</b> — once you record brochures given out (OUT movements), each salesperson's total and breakdown will appear here.</div>`;
+    const grand = names.reduce((s, n) => s + byPerson[n].total, 0);
+    const body = names.map((n) => {
+      const p = byPerson[n];
+      const chips = Object.keys(p.items).sort((a, b) => p.items[b] - p.items[a]).map((it) => `<span class="badge b-neutral">${esc(it)}: ${p.items[it]}</span>`).join(" ");
+      return `<tr><td class="t-name">${esc(n)}</td><td class="num"><b>${p.total}</b></td><td>${chips}</td></tr>`;
+    }).join("");
+    return `<div class="block" style="margin-top:22px"><h2 style="margin:0 0 6px">📊 Brochures consumed by person</h2>
+      <p class="muted-note" style="margin:0 0 8px">Total brochures given out per employee (from the OUT movements), with a breakdown by brochure.</p>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Employee</th><th class="num">Total taken</th><th>Breakdown</th></tr></thead><tbody>${body}
+        <tr class="cprice-total"><td class="t-name"><b>TOTAL given out</b></td><td class="num"><b>${grand}</b></td><td></td></tr></tbody></table></div></div>`;
   }
 
   function wireBrochures() {
@@ -6932,6 +6958,7 @@
     const r = brochures[idx]; if (!r) return;
     r.priceHist = r.priceHist || []; r.moves = r.moves || [];
     const ed = isAdmin();
+    const people = (typeof salesPeopleList === "function" ? salesPeopleList() : []);
     const fmtDT = (at) => at ? new Date(at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "";
     const wrap = document.createElement("div");
     wrap.className = "lead-modal";
@@ -6961,13 +6988,13 @@
           <label class="ord-field"><span>Direction</span><select id="bdDir" class="select"><option value="out">OUT — given / issued</option><option value="in">IN — received / printed</option></select></label>
           <label class="ord-field"><span>Quantity</span><input id="bdQty" type="number" min="1" placeholder="qty"></label>
           <label class="ord-field"><span>Location</span><select id="bdLoc" class="select"><option>Zirakpur</option><option>Pondy</option><option>Event</option></select></label>
-          <label class="ord-field"><span>Given to / Received from</span><input id="bdParty" type="text" placeholder="Name · doctor · event · rep"></label>
+          <label class="ord-field"><span>Given to / Received from (employee)</span><input id="bdParty" type="text" list="bdPeople" placeholder="Pick or type an employee name"><datalist id="bdPeople">${people.map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist></label>
         </div>
-        <label class="ord-field" style="margin-top:8px"><span>Note / comment</span><input id="bdNote" type="text" placeholder="reason / purpose / details"></label>
+        <label class="ord-field" style="margin-top:8px"><span>Purpose</span><input id="bdNote" type="text" placeholder="e.g. clinic visit · conference · doctor demo · sample"></label>
         <button type="button" class="dl-btn" id="bdMove" style="margin-top:10px">Record movement</button>
       </div>` : ""}
       <h4 style="margin:16px 0 4px">Stock in / out history</h4>
-      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th>Location</th><th>Given to / from</th><th>Note</th><th>By</th></tr></thead><tbody>${moveRows}</tbody></table></div>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th>Location</th><th>Given to / from</th><th>Purpose</th><th>By</th></tr></thead><tbody>${moveRows}</tbody></table></div>
       ${ed ? `<div class="broch-form" style="margin-top:14px">
         <div class="broch-form-h">Update cost</div>
         <div class="ch-grid">
