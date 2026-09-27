@@ -6892,7 +6892,7 @@
       return `<div class="block" style="margin-top:16px">
         <h2 style="margin:0 0 4px">${esc(title)}</h2>
         ${note ? `<p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>` : ""}
-        ${table(head, rows)}
+        <div class="table-wrap wk-flow"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
         ${ed ? `<div class="wk-addform" data-kind="${kind}">
           <input type="text" class="wk-nf" data-nf="task" placeholder="Task — title — point; point *">
           <select class="wk-nf wk-nf-sm" data-nf="priority">${WEEKLY_PRIOS.map((p) => `<option${p === "Medium" ? " selected" : ""}>${p}</option>`).join("")}</select>

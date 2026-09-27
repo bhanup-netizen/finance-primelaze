@@ -571,6 +571,9 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); box-shadow: var(--shadow-sm);
 }
+/* Duties table: show the whole list, no inner scroll — the page scrolls. */
+.table-wrap.wk-flow { overflow: visible; max-height: none; }
+.table-wrap.wk-flow thead th { position: static; }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 thead th {
   position: sticky; top: 0; z-index: 5;
