@@ -6844,6 +6844,7 @@
   let brochureSeq = brochures.reduce((m, r) => Math.max(m, +String(r.id).replace(/\D/g, "") || 0), 0) + 1;
   const brochTot = (r) => (+r.zk || 0) + (+r.pondy || 0) + (+r.event || 0);
 
+  const brochRup = (n) => "₹" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-IN");
   function renderBrochures() {
     const ed = isAdmin();
     // Persist the one-time seed so it sticks for everyone.
@@ -6852,7 +6853,7 @@
     }
     setTimeout(wireBrochures, 0);
     const numIn = (i, f, v) => ed
-      ? `<td class="num"><input class="broch-in" type="number" min="0" data-i="${i}" data-f="${f}" value="${esc(v == null ? "" : v)}" style="max-width:74px"></td>`
+      ? `<td class="num"><input class="broch-in" type="number" min="0" data-i="${i}" data-f="${f}" value="${esc(v == null ? "" : v)}" style="max-width:70px"></td>`
       : `<td class="num">${v == null || v === "" ? "0" : esc(v)}</td>`;
     const rows = brochures.map((r, i) => {
       const total = brochTot(r);
@@ -6863,45 +6864,52 @@
       return `<tr>
         <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish broch-del" data-i="${i}" title="Remove">✕</button>` : ""}</td>
         ${nameCell}
+        ${numIn(i, "cost", r.cost)}
         ${numIn(i, "zk", r.zk)}
         ${numIn(i, "pondy", r.pondy)}
         ${numIn(i, "event", r.event)}
         <td class="num"><b>${total}</b></td>
-        ${numIn(i, "monthly", r.monthly)}
         ${numIn(i, "reorder", r.reorder)}
         <td class="num"><span class="badge ${low ? "b-bad" : "b-good"}">${low ? "Reorder" : "OK"}</span></td>
+        <td class="num"><button type="button" class="ghost-btn broch-log" data-i="${i}" title="Cost history & in/out log">📋 In/Out${(r.moves && r.moves.length) ? ` <span class="badge b-neutral">${r.moves.length}</span>` : ""}</button></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="9" class="empty">No brochures yet.${ed ? " Add one below." : ""}</td></tr>`;
+    }).join("") || `<tr><td colspan="10" class="empty">No brochures yet.${ed ? " Add one below." : ""}</td></tr>`;
     const tZk = brochures.reduce((s, r) => s + (+r.zk || 0), 0);
     const tPondy = brochures.reduce((s, r) => s + (+r.pondy || 0), 0);
     const tEvent = brochures.reduce((s, r) => s + (+r.event || 0), 0);
     const tTotal = tZk + tPondy + tEvent;
+    const tValue = brochures.reduce((s, r) => s + (+r.cost || 0) * brochTot(r), 0);
     const nReorder = brochures.filter((r) => brochTot(r) <= (+r.reorder || 0)).length;
-    const head = ["#", "Brochure", "Zirakpur", "Pondy", "Event", "Total", "Use / mo", "Reorder at", "Status"]
+    const head = ["#", "Brochure", "Cost ₹", "Zirakpur", "Pondy", "Event", "Total", "Reorder at", "Status", ""]
       .map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
-    const totalRow = `<tr class="cprice-total"><td></td><td class="t-name"><b>TOTAL</b></td><td class="num"><b>${tZk}</b></td><td class="num"><b>${tPondy}</b></td><td class="num"><b>${tEvent}</b></td><td class="num"><b>${tTotal}</b></td><td></td><td></td><td class="num"><b>${nReorder} to reorder</b></td></tr>`;
+    const totalRow = `<tr class="cprice-total"><td></td><td class="t-name"><b>TOTAL</b></td><td class="num"><b>${brochRup(tValue)}</b></td><td class="num"><b>${tZk}</b></td><td class="num"><b>${tPondy}</b></td><td class="num"><b>${tEvent}</b></td><td class="num"><b>${tTotal}</b></td><td></td><td class="num"><b>${nReorder} to reorder</b></td><td></td></tr>`;
     return `
       <div class="section-head"><h1>Brochure Stock</h1>
-        <p>Current brochure &amp; print-material stock by location. Total = Zirakpur + Pondy + Event; a brochure is flagged <b>Reorder</b> when the total is at or below its reorder level.${ed ? " Editable — saves for everyone." : " Read-only."}</p></div>
+        <p>Current brochure &amp; print-material stock by location. Total = Zirakpur + Pondy + Event; a brochure is flagged <b>Reorder</b> when the total is at or below its reorder level. Use <b>📋 In/Out</b> on a row to record who received brochures and to keep the cost history.${ed ? " Editable — saves for everyone." : " Read-only."}</p></div>
       <div class="card" style="margin-bottom:14px"><div class="stat-row">
         <div class="stat"><b>${brochures.length}</b><span>Brochure types</span></div>
         <div class="stat k-good"><b>${tTotal.toLocaleString("en-IN")}</b><span>Total in stock</span></div>
+        <div class="stat"><b>${brochRup(tValue)}</b><span>Stock value</span></div>
         <div class="stat ${nReorder ? "k-bad" : ""}"><b>${nReorder}</b><span>Need reorder</span></div>
       </div></div>
-      <div class="table-wrap wk-flow"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${rows}${brochures.length ? totalRow : ""}</tbody></table></div>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${rows}${brochures.length ? totalRow : ""}</tbody></table></div>
       ${ed ? `<div class="hq-add-row" style="margin-top:12px"><button id="brochAdd" class="dl-btn" type="button">＋ Add brochure</button></div>` : ""}`;
   }
 
   function wireBrochures() {
+    document.querySelectorAll(".broch-log").forEach((b) => { b.onclick = () => brochureDialog(+b.dataset.i); });
     if (!isAdmin()) return;
     document.querySelectorAll(".broch-in").forEach((el) => {
       el.onchange = () => {
         const r = brochures[+el.dataset.i]; if (!r) return;
         const f = el.dataset.f;
-        if (/^(zk|pondy|event|monthly|reorder)$/.test(f)) { const v = parseFloat(el.value); r[f] = isNaN(v) || v < 0 ? 0 : v; }
-        else r[f] = el.value.trim();
+        if (/^(zk|pondy|event|cost|reorder)$/.test(f)) {
+          const v = parseFloat(el.value); const nv = isNaN(v) || v < 0 ? 0 : v;
+          if (f === "cost" && nv !== (+r.cost || 0)) { (r.priceHist = r.priceHist || []).push({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", cost: nv }); }
+          r[f] = nv;
+        } else r[f] = el.value.trim();
         brochureDirty = true; saveEdits("Brochure stock · " + (r.name || ""));
-        if (/^(zk|pondy|event|reorder)$/.test(f)) renderTab("brochures");
+        if (/^(zk|pondy|event|reorder|cost)$/.test(f)) renderTab("brochures");
       };
     });
     document.querySelectorAll(".broch-del").forEach((b) => {
@@ -6914,8 +6922,88 @@
     });
     const add = document.getElementById("brochAdd");
     if (add) add.onclick = () => {
-      brochures.push({ id: "br" + (brochureSeq++), name: "", spec: "", monthly: 0, reorder: 150, zk: 0, pondy: 0, event: 0 });
+      brochures.push({ id: "br" + (brochureSeq++), name: "", spec: "", cost: 0, monthly: 0, reorder: 150, zk: 0, pondy: 0, event: 0, priceHist: [], moves: [] });
       brochureDirty = true; saveEdits("Brochure added"); renderTab("brochures");
+    };
+  }
+
+  // Per-brochure detail: cost + price history, and the stock in/out register.
+  function brochureDialog(idx) {
+    const r = brochures[idx]; if (!r) return;
+    r.priceHist = r.priceHist || []; r.moves = r.moves || [];
+    const ed = isAdmin();
+    const fmtDT = (at) => at ? new Date(at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "";
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    const priceRows = r.priceHist.slice().reverse().map((h) => `<tr><td>${fmtDT(h.at)}</td><td class="num">${brochRup(h.cost)}</td><td class="t-muted">${esc(wkShortName(h.by))}</td></tr>`).join("") || `<tr><td colspan="3" class="t-muted">No cost changes logged yet.</td></tr>`;
+    const moveRows = r.moves.slice().reverse().map((m) => `<tr>
+        <td>${fmtDT(m.at)}</td>
+        <td><span class="badge ${m.dir === "in" ? "b-good" : "b-bad"}">${m.dir === "in" ? "IN" : "OUT"}</span></td>
+        <td class="num">${m.qty}</td>
+        <td>${esc(m.loc || "")}</td>
+        <td>${esc(m.party || "")}</td>
+        <td>${esc(m.note || "")}</td>
+        <td class="t-muted">${esc(wkShortName(m.by))}</td>
+      </tr>`).join("") || `<tr><td colspan="7" class="t-muted">No movements logged yet.</td></tr>`;
+    wrap.innerHTML = `<div class="lead-modal-card" style="width:min(800px,100%)">
+      <h3>${esc(r.name || "Brochure")}</h3>
+      <p class="lead-tl-sub">${esc(r.spec || "")}</p>
+      <div class="stat-row" style="margin:8px 0 12px">
+        <div class="stat"><b>${brochTot(r)}</b><span>Total in stock</span></div>
+        <div class="stat"><b>${+r.zk || 0}</b><span>Zirakpur</span></div>
+        <div class="stat"><b>${+r.pondy || 0}</b><span>Pondy</span></div>
+        <div class="stat"><b>${+r.event || 0}</b><span>Event</span></div>
+        <div class="stat k-teal"><b>${brochRup(r.cost)}</b><span>Cost / unit</span></div>
+      </div>
+      ${ed ? `<div class="broch-form">
+        <div class="broch-form-h">Record stock movement (in / out)</div>
+        <div class="ch-grid">
+          <label class="ord-field"><span>Direction</span><select id="bdDir" class="select"><option value="out">OUT — given / issued</option><option value="in">IN — received / printed</option></select></label>
+          <label class="ord-field"><span>Quantity</span><input id="bdQty" type="number" min="1" placeholder="qty"></label>
+          <label class="ord-field"><span>Location</span><select id="bdLoc" class="select"><option>Zirakpur</option><option>Pondy</option><option>Event</option></select></label>
+          <label class="ord-field"><span>Given to / Received from</span><input id="bdParty" type="text" placeholder="Name · doctor · event · rep"></label>
+        </div>
+        <label class="ord-field" style="margin-top:8px"><span>Note / comment</span><input id="bdNote" type="text" placeholder="reason / purpose / details"></label>
+        <button type="button" class="dl-btn" id="bdMove" style="margin-top:10px">Record movement</button>
+      </div>` : ""}
+      <h4 style="margin:16px 0 4px">Stock in / out history</h4>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th>Location</th><th>Given to / from</th><th>Note</th><th>By</th></tr></thead><tbody>${moveRows}</tbody></table></div>
+      ${ed ? `<div class="broch-form" style="margin-top:14px">
+        <div class="broch-form-h">Update cost</div>
+        <div class="ch-grid">
+          <label class="ord-field"><span>Cost per unit (₹)</span><input id="bdCost" type="number" min="0" step="any" value="${esc(r.cost == null ? "" : r.cost)}"></label>
+          <button type="button" class="dl-btn" id="bdCostSave" style="align-self:end">Save cost</button>
+        </div>
+      </div>` : ""}
+      <h4 style="margin:16px 0 4px">Cost / price history</h4>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Date</th><th class="num">Cost / unit</th><th>By</th></tr></thead><tbody>${priceRows}</tbody></table></div>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="bdClose">Close</button></div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("bdClose").onclick = close;
+    const reopen = () => { close(); renderTab("brochures"); brochureDialog(idx); };
+    const cs = document.getElementById("bdCostSave");
+    if (cs) cs.onclick = () => {
+      let v = parseFloat(document.getElementById("bdCost").value); if (isNaN(v) || v < 0) v = 0;
+      if (v !== (+r.cost || 0)) { r.cost = v; r.priceHist.push({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", cost: v }); brochureDirty = true; saveEdits("Brochure cost · " + (r.name || "")); reopen(); }
+      else close();
+    };
+    const mv = document.getElementById("bdMove");
+    if (mv) mv.onclick = () => {
+      const dir = document.getElementById("bdDir").value;
+      const qty = Math.abs(parseInt(document.getElementById("bdQty").value, 10) || 0);
+      const loc = document.getElementById("bdLoc").value;
+      const party = document.getElementById("bdParty").value.trim();
+      const note = document.getElementById("bdNote").value.trim();
+      if (!qty) { window.alert("Enter a quantity."); return; }
+      if (dir === "out" && !party) { window.alert("Enter who received the brochures (Given to)."); return; }
+      const key = loc === "Zirakpur" ? "zk" : loc === "Pondy" ? "pondy" : "event";
+      if (dir === "in") r[key] = (+r[key] || 0) + qty; else r[key] = Math.max(0, (+r[key] || 0) - qty);
+      r.moves.push({ id: "m" + Date.now(), at: Date.now(), by: (sessionUser && sessionUser.email) || "", dir, qty, loc, party, note });
+      brochureDirty = true; saveEdits(`Brochure ${dir === "in" ? "in" : "out"} · ${r.name || ""} (${qty})`);
+      reopen();
     };
   }
 
