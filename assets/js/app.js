@@ -6705,8 +6705,7 @@
       ],
     },
     "Admin & Logistics": {
-      // Ayush (Admin Manager) — refined; name & hours removed. Each duty is a
-      // bold title with the description written as ";"-separated bullet points.
+      // Ayush (Admin Manager) — single duty list. Bold title + ";"-bulleted points.
       mandatory: [
         { id: "adm1", task: "Import licence & compliance coordination — handle CDSCO, GeM, Cosmetics, EPR, Customs and other Govt-of-India licences needed to import laser machines and cosmetic products; act as the link between the overseas manufacturer and the compliance agency; get the required-document list from the agency; arrange and collect the documents, certificates, product information and any address/facility changes from the manufacturer; hand the documents to the agency for review and filing; track licence renewals, queries and pending actions.", priority: "High", remark: "" },
         { id: "adm2", task: "Shipping & customs-clearance coordination — once the Owner has negotiated the price and placed the order, arrange all documents needed to ship the product to India; arrange all documents needed to clear customs for cosmetic products and laser machines; track shipments, courier and transport; follow through on any clearance issues until delivery.", priority: "High", remark: "" },
@@ -6715,16 +6714,9 @@
         { id: "adm5", task: "Company asset management — maintain the full company asset register (laptops, mobiles, headphones, accessories and other devices); track what is in stock and what is issued, and to whom; track working vs non-working status.", priority: "High", remark: "" },
         { id: "adm6", task: "Employee onboarding (admin side) — handle the admin side of new-joiner onboarding; coordinate with HR's onboarding process.", priority: "Medium", remark: "" },
         { id: "adm7", task: "Zoho Bigin training — provide proper Zoho Bigin training to the team; cover pipeline setup and contact management; walk the team through the complete end-to-end flow.", priority: "Medium", remark: "" },
-        { id: "adm8", task: "CRM & systems — maintain Zoho Bigin, Zoho Projects and Zoho Inventory/Books; maintain HROne.", priority: "Medium", remark: "" },
-        { id: "adm9", task: "Admin-executive oversight — allocate work to the admin executive; review completed and pending tasks; review productivity.", priority: "Medium", remark: "" },
-        { id: "adm10", task: "Reporting & coordination — prepare weekly status, pending-action and escalation reports; coordinate with HR, Finance, Sales, Marketing and Operations.", priority: "High", remark: "" },
-        { id: "adm11", task: "Documentation & records — maintain regulatory, manufacturer, purchase and expense records; keep administrative records properly filed and archived.", priority: "Medium", remark: "" },
       ],
       monthly: [],
-      optional: [
-        { id: "ado1", task: "New product / special order projects — coordinate special Esthemax and other product orders; arrange the documentation and shipment.", priority: "Medium", remark: "When active" },
-        { id: "ado2", task: "Conference & exhibition projects — arrange travel, hotel and stall/material requirements; arrange machines, logistics and vendors; support execution on site.", priority: "Medium", remark: "When active" },
-      ],
+      optional: [],
     },
     "Sale": {
       mandatory: [
@@ -6801,7 +6793,7 @@
   // Per-department built-in-duty version. Bump a dept's number when its default
   // duties change so the stored copy is refreshed to the new list — that dept
   // only; other departments are never touched.
-  const WEEKLY_DEPT_VERSIONS = { "Finance": 4, "HR": 2, "Online Marketing": 2, "Offline Marketing": 2, "Admin & Logistics": 4 };
+  const WEEKLY_DEPT_VERSIONS = { "Finance": 4, "HR": 2, "Online Marketing": 2, "Offline Marketing": 2, "Admin & Logistics": 5 };
   const weeklyDeptVersion = {};        // applied version per dept, from the edits doc
   const weeklyReseedDepts = new Set();  // depts refreshed to the new built-in list this load
   const weeklyList = (dept, kind) => {
@@ -6885,11 +6877,15 @@
       ? `<td><input class="wk-in" type="number" step="0.25" min="0" inputmode="decimal" data-kind="${kind}" data-i="${i}" data-field="time" value="${esc(val == null ? "" : val)}" placeholder="hrs" style="max-width:80px"></td>`
       : `<td>${esc(wkTimeDisplay(val))}</td>`;
     const head = ["#", "Task", "Priority", "Link"].map((x) => `<th>${x}</th>`).join("");
+    // A dept with content only in "mandatory" is shown as one single list — the
+    // empty Monthly / Add-on sections are dropped for everyone.
+    const singleList = !weeklyList(dept, "monthly").length && !weeklyList(dept, "optional").length;
     const section = (kind, title, note) => {
       const list = weeklyList(dept, kind);
-      // Hide an empty section from view-only users (nothing to show); editors
-      // still see it so they can add rows.
-      if (!list.length && !ed) return "";
+      // Hide an empty section. View-only users never see an empty one; when the
+      // dept is a single list, hide the empty Monthly/Add-on for editors too.
+      if (!list.length && (!ed || singleList)) return "";
+      if (singleList && kind === "mandatory") { title = "Duties"; note = ""; }
       const rows = list.map((t, i) => `<tr>
         <td class="num">${i + 1}${ed ? ` <button type="button" class="linkish wk-del" data-kind="${kind}" data-i="${i}" title="Remove">✕</button>` : ""}</td>
         ${taskCell(kind, i, t)}
@@ -6898,7 +6894,7 @@
       </tr>`).join("") || `<tr><td colspan="4" class="empty">No ${esc(title.toLowerCase())} yet.${ed ? " Add one using the form below." : ""}</td></tr>`;
       return `<div class="block" style="margin-top:16px">
         <h2 style="margin:0 0 4px">${esc(title)}</h2>
-        <p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>
+        ${note ? `<p class="muted-note" style="margin:0 0 8px">${esc(note)}</p>` : ""}
         ${table(head, rows)}
         ${ed ? `<div class="wk-addform" data-kind="${kind}">
           <input type="text" class="wk-nf" data-nf="task" placeholder="Task — title — point; point *">
@@ -6909,7 +6905,7 @@
     };
     return `
       <div class="section-head"><h1>${esc(dept)} — Duties</h1>
-        <p>What the ${esc(dept)} team does — our shared rule book, split into mandatory, monthly and add-on work.${ed ? " Editable — saves for everyone." : ""}</p></div>
+        <p>What the ${esc(dept)} team does${singleList ? "" : " — split into mandatory, monthly and add-on work"}.${ed ? " Editable — saves for everyone." : ""}</p></div>
       ${section("mandatory", "Mandatory duties", "Core duties — must be done.")}
       ${section("monthly", "Monthly duties", "Done every month.")}
       ${section("optional", "Add-on duties", "As-required and project work.")}`;
