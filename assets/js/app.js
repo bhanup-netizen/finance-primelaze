@@ -6705,25 +6705,25 @@
       ],
     },
     "Admin & Logistics": {
-      // Ayush (Admin Manager) — refined, de-duplicated. Name & hours removed;
-      // split into Mandatory (core) and Add-on (as-required / projects).
+      // Ayush (Admin Manager) — refined; name & hours removed. Each duty is a
+      // bold title with the description written as ";"-separated bullet points.
       mandatory: [
-        { id: "adm1", task: "Import licence & compliance coordination — for CDSCO, GeM, Cosmetics, EPR, Customs and other Govt-of-India licences needed to import laser machines and cosmetic products, act as the link between the overseas manufacturer and the compliance agency: get the required-document list from the agency, arrange and collect the documents, certificates, product information and any address/facility changes from the manufacturer, and hand them to the agency for review and filing; track renewals, queries and pending actions.", time: "", priority: "High", remark: "" },
-        { id: "adm2", task: "Shipping & customs-clearance coordination — after the Owner negotiates the price and places the order, arrange all documents to ship the product to India and to clear customs for both cosmetic products and laser machines; track shipments, courier, transport and clearance issues through to delivery.", time: "", priority: "High", remark: "" },
-        { id: "adm3", task: "Marketing-print & Esthemax stock control — keep all marketing print material in stock (printed on time and reordered before it drops below the threshold); track Esthemax inventory and place replenishment orders after management approval.", time: "", priority: "High", remark: "" },
-        { id: "adm4", task: "Vendor sourcing & travel/hotel booking — find the most cost-effective vendors for printing, travel and hotels; handle quotations, negotiation and follow-up. Book employee travel/hotel/accommodation once the Sales Director approves — within 2 hours during business hours, and by the next morning for weekend requests.", time: "", priority: "High", remark: "" },
-        { id: "adm5", task: "Company asset management — maintain the full company asset register (laptops, mobiles, headphones, accessories and everything else): what is in stock, what is issued and to whom, and working vs non-working status.", time: "", priority: "High", remark: "" },
-        { id: "adm6", task: "Employee onboarding (admin side) — handle the admin side of new-joiner onboarding, coordinated with HR's onboarding.", time: "", priority: "Medium", remark: "" },
-        { id: "adm7", task: "Zoho Bigin training — provide proper Zoho Bigin training: pipeline setup, contact management and the complete end-to-end flow.", time: "", priority: "Medium", remark: "" },
-        { id: "adm8", task: "CRM & systems — maintain Zoho Bigin, Zoho Projects, Zoho Inventory/Books and HROne.", time: "", priority: "Medium", remark: "" },
-        { id: "adm9", task: "Admin-executive oversight — allocate work, and review completed/pending tasks and productivity.", time: "", priority: "Medium", remark: "" },
-        { id: "adm10", task: "Reporting & coordination — prepare weekly status, pending-action and escalation reports; coordinate with HR, Finance, Sales, Marketing and Operations.", time: "", priority: "High", remark: "" },
-        { id: "adm11", task: "Documentation & records — keep regulatory, manufacturer, purchase, expense and administrative records properly maintained and archived.", time: "", priority: "Medium", remark: "" },
+        { id: "adm1", task: "Import licence & compliance coordination — handle CDSCO, GeM, Cosmetics, EPR, Customs and other Govt-of-India licences needed to import laser machines and cosmetic products; act as the link between the overseas manufacturer and the compliance agency; get the required-document list from the agency; arrange and collect the documents, certificates, product information and any address/facility changes from the manufacturer; hand the documents to the agency for review and filing; track licence renewals, queries and pending actions.", priority: "High", remark: "" },
+        { id: "adm2", task: "Shipping & customs-clearance coordination — once the Owner has negotiated the price and placed the order, arrange all documents needed to ship the product to India; arrange all documents needed to clear customs for cosmetic products and laser machines; track shipments, courier and transport; follow through on any clearance issues until delivery.", priority: "High", remark: "" },
+        { id: "adm3", task: "Marketing-print & Esthemax stock control — keep all marketing print material in stock; ensure print material is printed on time and reordered before it drops below the threshold; track Esthemax inventory; place Esthemax replenishment orders after management approval.", priority: "High", remark: "" },
+        { id: "adm4", task: "Vendor sourcing & travel/hotel booking — find the most cost-effective vendors for printing, travel and hotels; handle quotations, negotiation and follow-up; book employee travel, hotel and accommodation after the Sales Director approves; complete bookings within 2 hours during business hours, and by the next morning for weekend requests.", priority: "High", remark: "" },
+        { id: "adm5", task: "Company asset management — maintain the full company asset register (laptops, mobiles, headphones, accessories and other devices); track what is in stock and what is issued, and to whom; track working vs non-working status.", priority: "High", remark: "" },
+        { id: "adm6", task: "Employee onboarding (admin side) — handle the admin side of new-joiner onboarding; coordinate with HR's onboarding process.", priority: "Medium", remark: "" },
+        { id: "adm7", task: "Zoho Bigin training — provide proper Zoho Bigin training to the team; cover pipeline setup and contact management; walk the team through the complete end-to-end flow.", priority: "Medium", remark: "" },
+        { id: "adm8", task: "CRM & systems — maintain Zoho Bigin, Zoho Projects and Zoho Inventory/Books; maintain HROne.", priority: "Medium", remark: "" },
+        { id: "adm9", task: "Admin-executive oversight — allocate work to the admin executive; review completed and pending tasks; review productivity.", priority: "Medium", remark: "" },
+        { id: "adm10", task: "Reporting & coordination — prepare weekly status, pending-action and escalation reports; coordinate with HR, Finance, Sales, Marketing and Operations.", priority: "High", remark: "" },
+        { id: "adm11", task: "Documentation & records — maintain regulatory, manufacturer, purchase and expense records; keep administrative records properly filed and archived.", priority: "Medium", remark: "" },
       ],
       monthly: [],
       optional: [
-        { id: "ado1", task: "New product / special order projects — coordinate special Esthemax and other orders, documentation and shipment.", time: "", priority: "Medium", remark: "When active" },
-        { id: "ado2", task: "Conference & exhibition projects — travel, hotel, stall/material, machines, logistics, vendors and execution.", time: "", priority: "Medium", remark: "When active" },
+        { id: "ado1", task: "New product / special order projects — coordinate special Esthemax and other product orders; arrange the documentation and shipment.", priority: "Medium", remark: "When active" },
+        { id: "ado2", task: "Conference & exhibition projects — arrange travel, hotel and stall/material requirements; arrange machines, logistics and vendors; support execution on site.", priority: "Medium", remark: "When active" },
       ],
     },
     "Sale": {
@@ -6801,7 +6801,7 @@
   // Per-department built-in-duty version. Bump a dept's number when its default
   // duties change so the stored copy is refreshed to the new list — that dept
   // only; other departments are never touched.
-  const WEEKLY_DEPT_VERSIONS = { "Finance": 4, "HR": 2, "Online Marketing": 2, "Offline Marketing": 2, "Admin & Logistics": 3 };
+  const WEEKLY_DEPT_VERSIONS = { "Finance": 4, "HR": 2, "Online Marketing": 2, "Offline Marketing": 2, "Admin & Logistics": 4 };
   const weeklyDeptVersion = {};        // applied version per dept, from the edits doc
   const weeklyReseedDepts = new Set();  // depts refreshed to the new built-in list this load
   const weeklyList = (dept, kind) => {
