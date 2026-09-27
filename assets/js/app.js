@@ -459,6 +459,17 @@
     if (ov) return ov;
     return statusFromNotes({ name: rval(p, "name"), notes: p.notes });
   };
+  // Every current employee across ALL departments, straight from the HR roster
+  // (the Team page). Excludes vacant positions; updates automatically whenever a
+  // new person is added to the roster.
+  const allEmployees = () => {
+    const s = new Set();
+    roster().forEach((p) => {
+      const n = (rval(p, "name") || "").trim();
+      if (n && !/^vacant/i.test(n) && estatus(p) !== "vacant") s.add(n);
+    });
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  };
 
   /* ---- Vacancy planning (priority / remark / target-fill date) ---- */
   const PRIORITY_OPTIONS = [
@@ -6958,7 +6969,7 @@
     const r = brochures[idx]; if (!r) return;
     r.priceHist = r.priceHist || []; r.moves = r.moves || [];
     const ed = isAdmin();
-    const people = (typeof salesPeopleList === "function" ? salesPeopleList() : []);
+    const people = (typeof allEmployees === "function" ? allEmployees() : []);
     const fmtDT = (at) => at ? new Date(at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "";
     const wrap = document.createElement("div");
     wrap.className = "lead-modal";
