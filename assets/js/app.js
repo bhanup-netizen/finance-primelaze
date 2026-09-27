@@ -6160,6 +6160,7 @@
         <h1>Product Registration</h1>
         <p>Registration &amp; regulatory status per portal — set the <b>status</b>, <b>expected</b> &amp; <b>actual filing dates</b>, add dated <b>remarks</b> (kept as history), and attach each required <b>document</b>. ${admin ? "" : "Read-only view. "}${storage ? "" : "<b>(Enable Firebase Storage to upload files — 🔗 links work regardless.)</b>"}</p>
       </div>
+      <div class="callout" style="margin-bottom:14px">📌 <b>Admin responsibility:</b> whenever there is bandwidth, Admin must ask Management which registration to file next, then plan and start it accordingly — so the registration pipeline keeps moving.</div>
       <div class="grid kpi-grid" style="margin-bottom:14px">
         ${kpi("", items.length, "Total items", regGroup(g).label)}
         ${kpi("k-good", approved, "Approved", "completed")}
@@ -6723,10 +6724,12 @@
         { id: "adm1", task: "Import licence & compliance coordination — handle CDSCO, GeM, Cosmetics, EPR, Customs and other Govt-of-India licences needed to import laser machines and cosmetic products; act as the link between the overseas manufacturer and the compliance agency; get the required-document list from the agency; arrange and collect the documents, certificates, product information and any address/facility changes from the manufacturer; hand the documents to the agency for review and filing; track licence renewals, queries and pending actions.", priority: "High", remark: "" },
         { id: "adm2", task: "Shipping & customs-clearance coordination — once the Owner has negotiated the price and placed the order, arrange all documents needed to ship the product to India; arrange all documents needed to clear customs for cosmetic products and laser machines; track shipments, courier and transport; follow through on any clearance issues until delivery.", priority: "High", remark: "" },
         { id: "adm3", task: "Marketing-print & Esthemax stock control — keep all marketing print material in stock; ensure print material is printed on time and reordered before it drops below the threshold; track Esthemax inventory; place Esthemax replenishment orders after management approval.", priority: "High", remark: "" },
-        { id: "adm4", task: "Vendor sourcing & travel/hotel booking — find the most cost-effective vendors for printing, travel and hotels; handle quotations, negotiation and follow-up; book employee travel, hotel and accommodation after the Sales Director approves; complete bookings within 2 hours during business hours, and by the next morning for weekend requests.", priority: "High", remark: "" },
+        { id: "adm4", task: "Vendor sourcing — find the most cost-effective vendors for printing, travel and hotels; handle quotations, negotiation and follow-up.", priority: "High", remark: "" },
+        { id: "adm8", task: "Travel & accommodation booking (salespeople, conferences & events) — book all hotels, accommodation and travel for salespeople, conferences and events; the salesperson raises the travel request via Zoho Expense; the Sales Manager or Director approves, then Finance approves, then book; book all tickets within 4 hours of Finance approval during business hours; if the request is raised during non-business hours or on a Sunday, book by 11 am the next morning; upload all tickets properly in Zoho Expense; update the salesperson in a timely manner; strictly follow this flow — no exceptions.", priority: "High", remark: "" },
         { id: "adm5", task: "Company asset management — maintain the full company asset register (laptops, mobiles, headphones, accessories and other devices); track what is in stock and what is issued, and to whom; track working vs non-working status.", priority: "High", remark: "" },
         { id: "adm6", task: "Employee onboarding (admin side) — handle the admin side of new-joiner onboarding; coordinate with HR's onboarding process.", priority: "Medium", remark: "" },
         { id: "adm7", task: "Zoho Bigin training — provide proper Zoho Bigin training to the team; cover pipeline setup and contact management; walk the team through the complete end-to-end flow.", priority: "Medium", remark: "" },
+        { id: "adm9", task: "Registration pipeline — whenever there is bandwidth, ask Management which registration to file next, and plan and start it accordingly.", priority: "Medium", remark: "" },
       ],
       monthly: [],
       optional: [],
@@ -6802,7 +6805,7 @@
   // Per-department built-in-duty version. Bump a dept's number when its default
   // duties change so the stored copy is refreshed to the new list — that dept
   // only; other departments are never touched.
-  const WEEKLY_DEPT_VERSIONS = { "Finance": 5, "HR": 3, "Online Marketing": 3, "Offline Marketing": 3, "Admin & Logistics": 5 };
+  const WEEKLY_DEPT_VERSIONS = { "Finance": 5, "HR": 3, "Online Marketing": 3, "Offline Marketing": 3, "Admin & Logistics": 6 };
   const weeklyDeptVersion = {};        // applied version per dept, from the edits doc
   const weeklyReseedDepts = new Set();  // depts refreshed to the new built-in list this load
   const weeklyList = (dept, kind) => {
