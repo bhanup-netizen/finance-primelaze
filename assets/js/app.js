@@ -4581,6 +4581,14 @@
   // people added meanwhile. When this stays false, saveEdits writes the SERVER's
   // copy of every lead field back instead of ours (mirrors invDirty).
   let leadDirty = false;
+  // Which lead records THIS session actually changed — so a save MERGES our
+  // changes onto the server's current copy instead of overwriting the whole
+  // blob (which would delete leads/edits other people made meanwhile).
+  const leadEditKeysDirty = new Set();  // leadEdits keys ("<id>#<field>") we set
+  const leadAddIdsDirty = new Set();    // leadAdds ids we added / edited / removed
+  const leadRemovalsDirty = [];         // seed ("L") ids we removed
+  const leadArchiveDirty = new Map();   // id -> true(archived)/false(restored)
+  const leadFilesDirty = new Set();     // leadFiles keys we changed
   let leadSeq = 0;
   let leadViewArchived = false; // board showing the archived leads instead of active
   let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false, follow: false };
@@ -4721,11 +4729,11 @@
   }
   function leadUpdate(id, field, value) {
     if (String(id).charAt(0) === "L") {
-      leadEdits[id + "#" + field] = value;
-      leadEdits[id + "#updatedAt"] = Date.now();
+      leadEdits[id + "#" + field] = value; leadEditKeysDirty.add(id + "#" + field);
+      leadEdits[id + "#updatedAt"] = Date.now(); leadEditKeysDirty.add(id + "#updatedAt");
     } else {
       const a = leadAdds.find((x) => x.id === id);
-      if (a) { a[field] = value; a.updatedAt = Date.now(); }
+      if (a) { a[field] = value; a.updatedAt = Date.now(); leadAddIdsDirty.add(id); }
     }
     leadDirty = true;
     saveEdits("Lead updated (" + field + ")");
@@ -4736,14 +4744,15 @@
     const i = leadArchive.indexOf(id);
     if (on && i < 0) { leadArchive.push(id); leadAddHistory(id, null, "Lead archived", "archive"); }
     else if (!on && i >= 0) { leadArchive.splice(i, 1); leadAddHistory(id, null, "Lead restored from archive", "restore"); }
+    leadArchiveDirty.set(id, !!on);
     leadDirty = true;
     saveEdits(on ? "Archived a lead" : "Restored a lead");
   }
   // Hard delete — super-admin only. Everything else is preserved forever.
   function leadRemove(id) {
     if (!canDeleteLeads()) { window.alert("Only a super-admin can permanently delete a lead. Use Archive instead."); return; }
-    if (String(id).charAt(0) === "L") { if (!leadRemovals.includes(id)) leadRemovals.push(id); }
-    else { const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) leadAdds.splice(i, 1); }
+    if (String(id).charAt(0) === "L") { if (!leadRemovals.includes(id)) leadRemovals.push(id); leadRemovalsDirty.push(id); }
+    else { const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) leadAdds.splice(i, 1); leadAddIdsDirty.add(id); }
     leadDirty = true;
     saveEdits("Deleted a lead (super-admin)");
   }
@@ -4751,6 +4760,7 @@
     const id = "u" + (leadSeq++);
     const now = Date.now();
     leadAdds.push(Object.assign({ id, stage: "new", stageSince: now, createdBy: (sessionUser && sessionUser.email) || "", createdAt: now, updatedAt: now }, obj));
+    leadAddIdsDirty.add(id);
     leadDirty = true;
     saveEdits("Added lead " + (obj.name || obj.company || ""));
     return id;
@@ -4782,6 +4792,7 @@
       others.forEach((o) => {
         leadAddHistory(o.id, null, "Merged into “" + pName + "”", "archive");
         if (!leadArchive.includes(o.id)) leadArchive.push(o.id);
+        leadArchiveDirty.set(o.id, true);
         merged++;
       });
     });
@@ -5222,12 +5233,12 @@
       const ref = storage.ref().child(path);
       await ref.put(file, { contentType: file.type || "application/octet-stream" });
       const url = await ref.getDownloadURL();
-      leadFiles[id + "#" + Date.now()] = { name: file.name, url, path, size: file.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+      const fkey = id + "#" + Date.now(); leadFiles[fkey] = { name: file.name, url, path, size: file.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "" }; leadFilesDirty.add(fkey);
       leadDirty = true; saveEdits("Attached a file"); if (paint) paint();
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
   }
   async function removeLeadFile(key, paint) {
-    const rec = leadFiles[key]; delete leadFiles[key];
+    const rec = leadFiles[key]; delete leadFiles[key]; leadFilesDirty.add(key);
     leadDirty = true; saveEdits("Removed a file"); if (paint) paint();
     if (rec && rec.path && storage) { try { await storage.ref().child(rec.path).delete(); } catch (e) {} }
   }
@@ -5489,7 +5500,8 @@
         if (!key) { noMobile.push(m.name || m.company || "(unnamed row)"); return; } // no mobile → reject
         if (seen.has(key)) { dup++; return; } // already on the board → keep existing, don't override
         seen.add(key);
-        leadAdds.push(Object.assign({ id: "u" + (leadSeq++), stage: m.stage || "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, m));
+        const nid = "u" + (leadSeq++); leadAddIdsDirty.add(nid);
+        leadAdds.push(Object.assign({ id: nid, stage: m.stage || "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, m));
         added++;
       });
       leadDirty = true;
@@ -8951,13 +8963,56 @@
     seedServiceTeam();
     seedDemoNames();
     seedHqTargets();
+    subscribeEdits(); // live-refresh when anyone else changes the shared data
   }
 
-  async function loadEdits() {
+  // ---- Live sync ----
+  // The shared data used to be read ONCE at login, so one person's change was
+  // invisible on everyone else's screen until they refreshed (and stale tabs
+  // could clobber). We now watch the shared doc and re-apply + re-render when
+  // someone else changes it — carefully, so we never yank data out mid-edit.
+  let editsUnsub = null, editsRefreshTimer = null, editsRetry = 0, editsFirstSnap = true;
+  function subscribeEdits() {
+    if (!db || editsUnsub) return;
     try {
-      const s = await db.collection("edits").doc("overrides").get();
-      if (!s.exists) return;
-      const e = s.data() || {};
+      editsFirstSnap = true;
+      editsUnsub = db.collection("edits").doc("overrides").onSnapshot((snap) => {
+        if (!snap || !snap.exists) return;
+        if (editsFirstSnap) { editsFirstSnap = false; return; } // already loaded at login
+        if (snap.metadata && snap.metadata.hasPendingWrites) return; // our own optimistic write
+        const data = snap.data() || {};
+        const by = (sessionUser && sessionUser.email) || "";
+        // Skip our own just-saved change (already applied locally).
+        if (data.updatedBy && data.updatedBy === by && (Date.now() - (data.updatedAt || 0) < 5000)) return;
+        clearTimeout(editsRefreshTimer);
+        editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 400);
+      }, (err) => console.warn("edits live-sync error", err && err.code));
+    } catch (e) { console.warn("edits subscribe failed", e); }
+  }
+  function applyRemoteEdits(data) {
+    // Don't pull data out from under an active edit or a queued save — retry.
+    const ae = document.activeElement;
+    const typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || "");
+    const savePending = (typeof saveTimer !== "undefined" && saveTimer) || (typeof weeklyWriteTimer !== "undefined" && weeklyWriteTimer);
+    if (typing || savePending) {
+      if (editsRetry++ < 40) { clearTimeout(editsRefreshTimer); editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 1500); }
+      return;
+    }
+    editsRetry = 0;
+    loadEdits(data).then(() => {
+      try { if (currentTab) renderTab(currentTab); } catch (e) {}
+      try { updateLastUpdatedUI(); } catch (e) {}
+    }).catch((e) => console.warn("apply remote edits failed", e));
+  }
+
+  async function loadEdits(pre) {
+    try {
+      let e = pre;
+      if (e == null) {
+        const s = await db.collection("edits").doc("overrides").get();
+        if (!s.exists) return;
+        e = s.data() || {};
+      }
       // Rebuild admin-managed inventory items BEFORE stock/eta (which key by name→index).
       ["esthemax", "devices", "celluma"].forEach((k) => {
         if (e.invAdds && Array.isArray(e.invAdds[k])) invAdds[k] = e.invAdds[k];
@@ -9273,6 +9328,7 @@
           wLeadArchive = leadArchive, wLeadFiles = leadFiles,
           wCustomLeadSources = customLeadSources, wCustomCities = customCities, wCustomLeadOwners = customLeadOwners;
       if (serverData && !leadDirty) {
+        // This session never touched leads — keep the server's copy verbatim.
         if (serverData.leadEdits) wLeadEdits = serverData.leadEdits;
         if (Array.isArray(serverData.leadAdds)) wLeadAdds = serverData.leadAdds;
         if (Array.isArray(serverData.leadRemovals)) wLeadRemovals = serverData.leadRemovals;
@@ -9281,6 +9337,35 @@
         if (Array.isArray(serverData.customLeadSources)) wCustomLeadSources = serverData.customLeadSources;
         if (Array.isArray(serverData.customCities)) wCustomCities = serverData.customCities;
         if (Array.isArray(serverData.customLeadOwners)) wCustomLeadOwners = serverData.customLeadOwners;
+      } else if (serverData && leadDirty) {
+        // This session DID edit leads — MERGE our specific changes onto the
+        // server's current copy so we never clobber another person's leads
+        // (adds, stage moves, notes) that landed since we loaded.
+        const uniq = (a, b) => Array.from(new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]));
+        // leadEdits: server's edits + only the keys WE changed.
+        const srvE = (serverData.leadEdits && typeof serverData.leadEdits === "object") ? serverData.leadEdits : {};
+        const mE = Object.assign({}, srvE);
+        leadEditKeysDirty.forEach((k) => { if (k in leadEdits) mE[k] = leadEdits[k]; else delete mE[k]; });
+        wLeadEdits = mE;
+        // leadAdds: server's adds, then upsert/remove only the ones WE touched.
+        const byId = new Map((Array.isArray(serverData.leadAdds) ? serverData.leadAdds : []).map((x) => [x.id, x]));
+        leadAddIdsDirty.forEach((id) => { const local = leadAdds.find((x) => x.id === id); if (local) byId.set(id, local); else byId.delete(id); });
+        wLeadAdds = Array.from(byId.values());
+        // leadRemovals: union (removals are permanent, never undone in the UI).
+        wLeadRemovals = uniq(serverData.leadRemovals, leadRemovalsDirty.length ? leadRemovals : []);
+        // leadArchive: apply only OUR archive/restore toggles onto the server set.
+        const arSet = new Set(Array.isArray(serverData.leadArchive) ? serverData.leadArchive : []);
+        leadArchiveDirty.forEach((on, id) => { if (on) arSet.add(id); else arSet.delete(id); });
+        wLeadArchive = Array.from(arSet);
+        // leadFiles: server's files + only the file keys WE added/removed.
+        const srvF = (serverData.leadFiles && typeof serverData.leadFiles === "object") ? serverData.leadFiles : {};
+        const mF = Object.assign({}, srvF);
+        leadFilesDirty.forEach((k) => { if (k in leadFiles) mF[k] = leadFiles[k]; else delete mF[k]; });
+        wLeadFiles = mF;
+        // Custom pick-lists are append-only — union with the server's.
+        wCustomLeadSources = uniq(serverData.customLeadSources, customLeadSources);
+        wCustomCities = (function () { const seen = new Set(); const out = []; [].concat(Array.isArray(serverData.customCities) ? serverData.customCities : [], customCities).forEach((c) => { const k = c && (c.state + "|" + c.city); if (c && !seen.has(k)) { seen.add(k); out.push(c); } }); return out; })();
+        wCustomLeadOwners = uniq(serverData.customLeadOwners, customLeadOwners);
       }
       // Payments: same protection. If this session never touched payment data,
       // write the SERVER's copy back so a save from another area (or a stale tab)
