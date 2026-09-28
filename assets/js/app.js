@@ -7098,8 +7098,8 @@
       <div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">🧾 Claim &amp; advance procedure</h2>
         <ul class="wk-desc">
           <li>Reimbursements are done monthly, once a month; submit a day-wise <b>Expense Report</b> (Accounts format).</li>
-          <li>Raise expense advances through <b>HROne → Expense Advance</b>; it goes to your Reporting Manager for approval, then the advance is released.</li>
-          <li>Email expense claims to <b>expenses@primelaze.com</b> by the <b>5th</b> of each month (for the previous month); processed on the <b>20th</b>.</li>
+          <li>Raise expense advances through <b>Zoho Expense → Expense Advance</b>; it goes to your Reporting Manager for approval, then the advance is released.</li>
+          <li>Email expense claims to <b>finance@primelaze.com</b> by the <b>5th</b> of each month (for the previous month); processed on the <b>20th</b>.</li>
           <li>An advance not settled by the next month-end is <b>deducted from salary</b>. The company releases only one month's claim at a time.</li>
           <li>For outstation air travel, submit a detailed <b>tour plan</b> to your Reporting Manager at least a month prior for approval; emergencies may be approved for last-minute booking.</li>
         </ul></div>
