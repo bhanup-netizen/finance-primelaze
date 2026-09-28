@@ -5438,34 +5438,51 @@
       a.download = "lead_import_template.csv"; a.click();
     }
   }
+  const LEAD_UPSERT_FIELDS = ["name", "mobile", "company", "city", "state", "source", "product", "owner", "link", "stage", "occ"];
+  // Set a field on ANY lead (seed "L" via leadEdits, added "u" via the object)
+  // WITHOUT saving each time — used by the bulk upsert import.
+  function leadSetField(id, field, value) {
+    if (String(id).charAt(0) === "L") {
+      leadEdits[id + "#" + field] = value; leadEditKeysDirty.add(id + "#" + field);
+      leadEdits[id + "#updatedAt"] = Date.now(); leadEditKeysDirty.add(id + "#updatedAt");
+    } else {
+      const a = leadAdds.find((x) => x.id === id); if (a) { a[field] = value; a.updatedAt = Date.now(); leadAddIdsDirty.add(id); }
+    }
+  }
+  function leadBulkHistory(id, stage, text) {
+    const l = leadAll().find((x) => x.id === id); if (!l) return;
+    const hist = leadHistory(l).slice();
+    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text });
+    leadSetField(id, "history", hist);
+  }
   function leadMapImportRow(o) {
     const g = (...keys) => { for (const k of keys) { const kk = Object.keys(o).find((x) => x.toLowerCase().replace(/[^a-z]/g, "") === k); if (kk != null && o[kk] !== "") return o[kk]; } return ""; };
     const c = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
     const stageRaw = c(g("stage")).toLowerCase();
-    const stage = LEAD_STAGES.find((s) => s.key === stageRaw || s.label.toLowerCase().indexOf(stageRaw) === 0) ;
+    const stage = stageRaw ? LEAD_STAGES.find((s) => s.key === stageRaw || s.label.toLowerCase().indexOf(stageRaw) === 0) : null;
     const first = c(g("firstname")), last = c(g("lastname"));
     let name = c(g("name", "contactname")) || [first, last].filter(Boolean).join(" ");
-    // Some sheets (e.g. the Instagram tab) carry the name in "Record Type 2/3".
     if (!name) { const n2 = c(o["Record Type 2"]), n3 = c(o["Record Type 3"]); name = [n2, n3].filter((x) => x && !/^na$/i.test(x)).join(" "); }
     if (/^lead$/i.test(name)) name = "";
-    const stageKey = stage ? stage.key : "new";
-    const remark = c(g("remark", "remarks", "notes", "description"));
-    // Owner: explicit column, else the middle token of a "X - Rep - Product"
-    // deal name if it matches a known rep.
+    // "Add Remark" (round-trip export) or "Remark" (template) → a NEW note; the
+    // read-only "Latest Remark" / "Remarks history" columns are ignored on import.
+    const remark = c(g("addremark", "remark", "remarks", "notes", "description"));
     let owner = c(g("owner", "rep", "salesperson"));
     if (!owner) { const parts = c(g("dealname", "deal")).split(/\s*-\s*/); if (parts.length >= 3) owner = leadMatchRep(parts[1]); }
+    const st = normalizeState(g("state")), ci = normalizeCity(g("city"));
     return {
+      _id: c(g("leadid", "id")),
+      _remark: remark,
       name,
       mobile: c(g("mobile", "phone", "contact")).replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, ""),
       company: c(g("company", "companyname", "salon")),
-      city: normalizeCity(g("city")), state: normalizeState(g("state")),
-      source: c(g("source", "leadsource")) || "Other",
+      city: ci, state: st,
+      source: c(g("source", "leadsource")),
       product: c(g("product", "productinterest", "interest")),
       owner: owner,
       link: c(g("attachmentlink", "attachment", "link", "drivelink")),
-      stage: stageKey,
-      occ: c(g("occupation", "occupaction")) || "Salon",
-      history: remark ? [{ at: Date.now(), stage: stageKey, by: (sessionUser && sessionUser.email) || "", text: remark }] : [],
+      stage: stage ? stage.key : "",
+      occ: c(g("occupation", "occupaction")),
     };
   }
   function leadImport(file) {
@@ -5487,30 +5504,53 @@
           });
         }
       } catch (err) { window.alert("Could not read that file: " + err.message); return; }
-      // Mobile number is the unique key. Existing mobiles are never overwritten;
-      // rows without a mobile are rejected and reported.
+      // Upsert: a row that matches an existing lead (by Lead ID, else by mobile)
+      // UPDATES that lead — only the non-blank cells, so blanks never wipe data.
+      // A row with no match is ADDED as a new lead (mobile required for new).
       const mobKey = (s) => String(s || "").replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
-      const seen = new Set(leadAll().map((l) => mobKey(l.mobile)).filter(Boolean));
-      let added = 0, dup = 0;
+      const all = leadAll();
+      const byId = new Map(all.map((l) => [String(l.id), l]));
+      const byMob = new Map(); all.forEach((l) => { const k = mobKey(l.mobile); if (k && !byMob.has(k)) byMob.set(k, l); });
+      const addedMob = new Set();
+      const now = Date.now(), by = (sessionUser && sessionUser.email) || "";
+      let added = 0, updated = 0, dup = 0;
       const noMobile = [];
       rows.forEach((raw) => {
         const m = leadMapImportRow(raw);
         if (!m.name && !m.mobile && !m.company) return; // blank row
+        // Find the existing lead to update.
+        let target = (m._id && byId.get(String(m._id))) || null;
+        if (!target) { const mk = mobKey(m.mobile); if (mk && byMob.has(mk)) target = byMob.get(mk); }
+        if (target) {
+          let changed = false;
+          LEAD_UPSERT_FIELDS.forEach((f) => {
+            const v = m[f];
+            if (v !== "" && v != null && String(v) !== String(target[f] == null ? "" : target[f])) { leadSetField(target.id, f, v); changed = true; }
+          });
+          if (m._remark) { leadBulkHistory(target.id, m.stage || target.stage, m._remark); changed = true; }
+          if (changed) updated++;
+          return;
+        }
+        // New lead — needs a mobile as the unique key.
         const key = mobKey(m.mobile);
-        if (!key) { noMobile.push(m.name || m.company || "(unnamed row)"); return; } // no mobile → reject
-        if (seen.has(key)) { dup++; return; } // already on the board → keep existing, don't override
-        seen.add(key);
+        if (!key) { noMobile.push(m.name || m.company || "(unnamed row)"); return; }
+        if (addedMob.has(key)) { dup++; return; }
+        addedMob.add(key);
         const nid = "u" + (leadSeq++); leadAddIdsDirty.add(nid);
-        leadAdds.push(Object.assign({ id: nid, stage: m.stage || "new", createdBy: (sessionUser && sessionUser.email) || "", createdAt: Date.now(), updatedAt: Date.now() }, m));
+        const add = { id: nid, stage: m.stage || "new", source: m.source || "Other", occ: m.occ || "Salon", createdBy: by, createdAt: now, updatedAt: now };
+        LEAD_UPSERT_FIELDS.forEach((f) => { if (m[f] !== "" && m[f] != null) add[f] = m[f]; });
+        add.history = m._remark ? [{ at: now, stage: add.stage, by: by, text: m._remark }] : [];
+        leadAdds.push(add);
+        byMob.set(key, add); byId.set(nid, add);
         added++;
       });
       leadDirty = true;
-      saveEdits("Imported " + added + " leads");
+      saveEdits("Imported leads (" + added + " new, " + updated + " updated)");
       leadRepaint();
-      let msg = "✅ Imported " + added + " new lead" + (added === 1 ? "" : "s") + ".";
-      if (dup) msg += "\n⏭ " + dup + " already existed (matched by mobile) — kept as-is, not overwritten.";
+      let msg = "✅ " + added + " new lead" + (added === 1 ? "" : "s") + " added, " + updated + " existing lead" + (updated === 1 ? "" : "s") + " updated.";
+      if (dup) msg += "\n⏭ " + dup + " duplicate mobile(s) within the file skipped.";
       if (noMobile.length) {
-        msg += "\n\n⚠ " + noMobile.length + " row" + (noMobile.length === 1 ? "" : "s") + " skipped — NO mobile number:\n" +
+        msg += "\n\n⚠ " + noMobile.length + " new row" + (noMobile.length === 1 ? "" : "s") + " skipped — NO mobile number (needed for new leads):\n" +
           noMobile.slice(0, 12).map((n) => "• " + n).join("\n") + (noMobile.length > 12 ? "\n…and " + (noMobile.length - 12) + " more" : "");
       }
       window.alert(msg);
@@ -5519,16 +5559,19 @@
   }
   function leadExport() {
     const rows = leadFiltered(leadAll());
-    const EXPORT_HEADERS = ["Name", "Mobile", "Company", "City", "State", "Source", "Product", "Owner", "Stage", "Latest Remark", "Sold Value", "Sold Date", "Remarks history", "Attachment link"];
+    // "Lead ID" first so an edited row re-uploads onto the SAME lead; "Add Remark"
+    // is a blank column to fill with a new note on re-upload. Latest Remark /
+    // Remarks history are read-only reference (ignored on import).
+    const EXPORT_HEADERS = ["Lead ID", "Name", "Mobile", "Company", "City", "State", "Source", "Product", "Owner", "Stage", "Add Remark", "Latest Remark", "Sold Value", "Sold Date", "Remarks history", "Attachment link"];
     const aoa = [EXPORT_HEADERS];
     rows.forEach((r) => {
       const hist = leadHistory(r);
       const last = hist.length ? hist[hist.length - 1].text : "";
       const histStr = hist.map((h) => `[${h.at ? fmtWhen(h.at) : "lead sheet"} · ${LEAD_STAGE_LABEL[h.stage || "new"] || ""}] ${h.text}`).join(" | ");
       aoa.push([
-        r.name || "", r.mobile || "", r.company || "", r.city || "", r.state || "",
+        r.id || "", r.name || "", r.mobile || "", r.company || "", r.city || "", r.state || "",
         r.source || "", r.product || "", r.owner || "", LEAD_STAGE_LABEL[r.stage || "new"],
-        last, r.stage === "sold" ? (Number(r.soldAmount) || 0) : "", r.soldDate || "", histStr, r.link || "",
+        "", last, r.stage === "sold" ? (Number(r.soldAmount) || 0) : "", r.soldDate || "", histStr, r.link || "",
       ]);
     });
     const fname = "primelaze_leads_" + leadToday() + ".xlsx";
@@ -5589,7 +5632,7 @@
     return `
       <div class="section-head">
         <h1>Casovil Leads</h1>
-        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually or <b>import your lead sheet (Excel/CSV)</b>. The <b>mobile number is the unique key</b> — existing leads are never overwritten, and rows without a mobile are skipped with a warning. Use ⬇ Template for the format." : "Read-only view."}</p>
+        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually, or <b>download → edit → upload</b>: use <b>⬇ Download (edit)</b> to get the current leads, change or add rows in Excel, then <b>⬆ Upload</b> — rows matched by <b>Lead ID</b> (or mobile) are <b>updated</b> (blank cells are left as-is) and new rows are added. New leads need a mobile. Use <b>⬇ Template</b> for a blank format." : "Read-only view."}</p>
       </div>
       ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
       <div id="leadKpis" class="grid kpi-grid">${leadKpis(rows0)}</div>
@@ -5608,11 +5651,11 @@
         <button id="leadClear" class="ghost-btn" type="button">Clear</button>
         <div class="hq-actions">
           ${admin ? `<button id="leadAddBtn" class="dl-btn" type="button">＋ Add lead</button>` : ""}
-          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Import leads from Excel/CSV — matched by mobile, never overwritten">⬆ Import<input id="leadUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<label class="ghost-btn" style="cursor:pointer" title="Upload Excel/CSV — updates existing leads (by Lead ID or mobile) and adds new ones">⬆ Upload<input id="leadUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
           ${admin ? `<button id="leadMerge" class="ghost-btn" type="button" title="Find leads with the same mobile and merge them">🔀 Merge duplicates</button>` : ""}
           <button id="leadArchBtn" class="ghost-btn${leadViewArchived ? " active" : ""}" type="button" title="Show/hide archived leads">🗄 ${leadViewArchived ? "Back to active" : "Archived (" + archN + ")"}</button>
           <button id="leadTpl" class="ghost-btn" type="button">⬇ Template</button>
-          <button id="leadExport" class="ghost-btn" type="button">⬇ Export view</button>
+          <button id="leadExport" class="ghost-btn" type="button" title="Download the current leads (with Lead ID) to edit and re-upload">⬇ Download (edit)</button>
         </div>
       </div>
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
