@@ -4736,8 +4736,90 @@
       if (a) { a[field] = value; a.updatedAt = Date.now(); leadAddIdsDirty.add(id); }
     }
     leadDirty = true;
+    leadNoteChange(id, field);
     saveEdits("Lead updated (" + field + ")");
   }
+
+  // ---- Post-sale email notifications ------------------------------------
+  // Once a lead is Sold (or Dispatched / Delivered), any change to a relevant
+  // field (dispatch, courier, AWB, delivery, deal value, owner, product …) is
+  // emailed to the sales-ops mailboxes so PO / Admin / Calls always have the
+  // latest dispatch + delivery details. Delivery is server-side: we drop a
+  // document into the Firestore `mail` collection and the Firebase "Trigger
+  // Email" extension sends it (see emails/SETUP-post-sale-email.md). Multiple
+  // field changes from one save are debounced into a single email per lead, and
+  // only the editor making the change queues it (remote sync never re-fires).
+  const LEAD_NOTIFY_TO = ["po@primelaze.com", "adminex@primelaze.com", "calls@primelaze.com"];
+  const LEAD_NOTIFY_FIELDS = {
+    stage: "Stage", soldAmount: "Deal value", soldDate: "Sold on",
+    courier: "Courier", awb: "AWB / tracking", dispatchDate: "Dispatched on",
+    expDelivDate: "Expected delivery", deliveredDate: "Delivered on",
+    owner: "Owner", product: "Product", company: "Company",
+    name: "Contact", mobile: "Mobile", city: "City", state: "State",
+  };
+  let leadNotifyPending = new Map(); // leadId -> Set(changed field labels)
+  let leadNotifyTimer = null;
+  function leadNoteChange(id, field) {
+    if (!Object.prototype.hasOwnProperty.call(LEAD_NOTIFY_FIELDS, field)) return;
+    const r = leadAll().find((x) => x.id === id);
+    if (!r || LEAD_WON.indexOf(r.stage || "") < 0) return; // only post-Sold leads
+    const set = leadNotifyPending.get(id) || new Set();
+    set.add(LEAD_NOTIFY_FIELDS[field]);
+    leadNotifyPending.set(id, set);
+    if (leadNotifyTimer) clearTimeout(leadNotifyTimer);
+    leadNotifyTimer = setTimeout(leadFlushNotify, 3000);
+  }
+  function leadFlushNotify() {
+    leadNotifyTimer = null;
+    const pend = leadNotifyPending; leadNotifyPending = new Map();
+    let sent = 0;
+    pend.forEach((fields, id) => {
+      const r = leadAll().find((x) => x.id === id);
+      if (!r || LEAD_WON.indexOf(r.stage || "") < 0) return;
+      if (leadSendSoldEmail(r, Array.from(fields))) sent++;
+    });
+    if (sent) toast("📧 Post-sale update sent to PO / Admin / Calls");
+  }
+  function leadSendSoldEmail(r, changed) {
+    try {
+      if (!db || !db.collection) return false;
+      const who = (sessionUser && sessionUser.email) || "someone";
+      const stageLabel = LEAD_STAGE_LABEL[r.stage] || r.stage || "";
+      const eh = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      const rows = [
+        ["Lead ID", r.id],
+        ["Contact", r.name || ""],
+        ["Company", r.company || ""],
+        ["Mobile", r.mobile || ""],
+        ["City / State", [r.city, r.state].filter(Boolean).join(", ")],
+        ["Product", r.product || ""],
+        ["Owner", r.owner || ""],
+        ["Stage", stageLabel],
+        ["Deal value", r.soldAmount ? ("₹" + Number(r.soldAmount).toLocaleString("en-IN")) : ""],
+        ["Sold on", r.soldDate || ""],
+        ["Courier / carrier", r.courier || ""],
+        ["AWB / tracking no.", r.awb || ""],
+        ["Dispatched on", r.dispatchDate || ""],
+        ["Expected delivery", r.expDelivDate || ""],
+        ["Delivered on", r.deliveredDate || ""],
+      ].filter(([, v]) => v !== "" && v != null);
+      const tbl = rows.map(([k, v]) => `<tr><td style="padding:5px 16px 5px 0;color:#667;white-space:nowrap;">${eh(k)}</td><td style="padding:5px 0;font-weight:600;">${eh(v)}</td></tr>`).join("");
+      const changedTxt = changed && changed.length ? changed.join(", ") : "Details";
+      const subject = "Post-sale update — " + (r.name || r.company || r.id) + " · " + stageLabel;
+      const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;">
+        <p style="margin:0 0 14px;"><b>${eh(changedTxt)}</b> updated by ${eh(who)} on a sold lead.</p>
+        <table style="border-collapse:collapse;font-size:14px;">${tbl}</table>
+        <p style="color:#8a8a8a;font-size:12px;margin-top:20px;">Automatic notification from the Primelaze Unified Dashboard · Leads. This email is sent whenever a Sold / Dispatched / Delivered lead is updated.</p>
+      </div>`;
+      db.collection("mail").add({
+        to: LEAD_NOTIFY_TO,
+        message: { subject: subject, html: html },
+        _meta: { leadId: r.id, stage: r.stage, changed: changed || [], by: who, at: Date.now() },
+      }).catch((e) => console.warn("Post-sale mail queue failed", e));
+      return true;
+    } catch (e) { console.warn("leadSendSoldEmail error", e); return false; }
+  }
+
   // Archive keeps the lead in the database — it is only hidden from the active
   // board. This is what page admins use for a lead that is not meaningful.
   function leadArchiveSet(id, on) {
