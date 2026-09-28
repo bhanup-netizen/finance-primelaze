@@ -47,6 +47,7 @@
   const canSeePage = (id) => {
     if (id === "passwords") return isSuperAdmin(); // account passwords: super admin only
     if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
+    if (id === "travelpolicy") return roleIsAdmin() || isSuperAdmin(); // travel policy: admin only
     if (id === "admin") {
       if (isSuperAdmin() && appMode === "admin") return true; // full user management
       if (isPageAdmin()) return true;                          // scoped page-admin manager
@@ -144,6 +145,7 @@
     { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
     { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
     { id: "brochures", label: "Brochure Stock", group: "Admin & Logistics", render: renderBrochures },
+    { id: "travelpolicy", label: "Travel Policy", group: "Admin & Logistics", render: renderTravelPolicy },
     { id: "weeklyOps", label: "Duties", group: "Admin & Logistics", render: () => renderWeekly("Admin & Logistics") },
     { id: "admin", label: "⚙ Admin", group: "⚙ Admin", render: renderAdmin },
   ];
@@ -7047,6 +7049,64 @@
       brochureDirty = true; saveEdits(`Brochure ${dir === "in" ? "in" : "out"} · ${r.name || ""} (${qty})`);
       reopen();
     };
+  }
+
+  /* ================= TRAVEL POLICY (Admin & Logistics · admin only) ================= */
+  // Role-wise Travel & Conveyance entitlements (from the NSH/ZSM/RSM/ASM policy
+  // documents) + the ticket-booking flow handled by Admin.
+  const TRAVEL_ROLES = [
+    { key: "ind", label: "Sales Exec / ASM (individual)", advance: "₹20,000 / month", train: "3rd AC train / AC Bus", fuel: "₹8 / km", da: "₹500", ex: "₹500 DA + ₹5/km (or train/bus at actual)", lodgeA: "₹2,500", lodgeB: "₹2,000", food: "₹700", team: "—", lodgeNo: "₹1,000", foodNo: "₹500", mobile: "—" },
+    { key: "rsm", label: "RSM (with reportees)", advance: "₹30,000 / month", train: "2nd AC train / AC Bus", fuel: "₹8 / km", da: "₹600", ex: "₹600 DA + ₹5/km", lodgeA: "₹3,000", lodgeB: "₹2,500", food: "₹800", team: "₹1,500 (2 people)", lodgeNo: "₹1,000", foodNo: "₹500", mobile: "—" },
+    { key: "zsm", label: "ZSM", advance: "₹35,000 / month", train: "2nd AC train / AC Bus", fuel: "₹9 / km", da: "₹700", ex: "₹700 DA + ₹5/km", lodgeA: "₹4,000", lodgeB: "₹3,000", food: "₹1,000", team: "₹2,400 (up to 3)", lodgeNo: "₹1,000", foodNo: "₹600", mobile: "—" },
+    { key: "nsh", label: "NSH", advance: "₹50,000 / month", train: "AC train (all classes) / AC Bus", fuel: "₹11 / km", da: "₹800 + 75 L fuel/mo", ex: "₹900 DA + ₹5/km", lodgeA: "₹5,000", lodgeB: "₹4,000", food: "₹1,200", team: "₹3,500 (total 4)", lodgeNo: "₹1,000", foodNo: "₹800", mobile: "up to ₹2,000" },
+  ];
+  const TRAVEL_ROWS = [
+    ["Monthly expense advance", "advance"],
+    ["Train / bus class", "train"],
+    ["Outstation car fuel (&gt;100 km)", "fuel"],
+    ["HQ / local per-diem (DA)", "da"],
+    ["Ex-station (&gt;50 km)", "ex"],
+    ["Hotel — Type A city (with bill)", "lodgeA"],
+    ["Hotel — Type B city (with bill)", "lodgeB"],
+    ["Food (with bill)", "food"],
+    ["Team food (with bill)", "team"],
+    ["Hotel without bill (A &amp; B)", "lodgeNo"],
+    ["Food without bill", "foodNo"],
+    ["Mobile &amp; Internet", "mobile"],
+  ];
+  function renderTravelPolicy() {
+    if (!(roleIsAdmin() || isSuperAdmin())) return `<div class="section-head"><h1>✈ Travel Policy</h1><p>This policy is visible to admins only.</p></div>`;
+    const head = `<th>Entitlement</th>` + TRAVEL_ROLES.map((r) => `<th class="num">${esc(r.label)}</th>`).join("");
+    const body = TRAVEL_ROWS.map(([label, k]) => `<tr><td class="t-name">${label}</td>${TRAVEL_ROLES.map((r) => `<td class="num">${esc(r[k] || "—")}</td>`).join("")}</tr>`).join("");
+    return `
+      <div class="section-head"><h1>✈ Travel &amp; Conveyance Policy</h1>
+        <p><b>Admin only.</b> Role-wise travel entitlements and the ticket-booking flow. Air travel is <b>booked by the company</b>; other travel &amp; reimbursement per the entitlements below. Applies to all Sales-department employees travelling PAN India.</p></div>
+
+      <div class="block" style="margin-top:8px"><h2 style="margin:0 0 6px">🎫 Ticket booking process (Admin)</h2>
+        <div class="callout"><b>Flow:</b> Salesperson raises the travel request in <b>Zoho Expense</b> → <b>Sales Manager / Director</b> approves → <b>Finance</b> approves → <b>Admin books</b>.</div>
+        <ul class="wk-desc" style="margin-top:8px">
+          <li>Book all tickets <b>within 4 hours of Finance approval</b> during business hours.</li>
+          <li>Requests raised during non-business hours or on a Sunday are booked <b>by 11 am the next morning</b>.</li>
+          <li>Upload all tickets in <b>Zoho Expense</b> and update the salesperson in a timely manner.</li>
+          <li>Air travel is booked by the company; for other modes follow the class entitlement below.</li>
+        </ul></div>
+
+      <div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">📊 Entitlements by role</h2>
+        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+        <p class="muted-note" style="margin-top:8px">Hotel bills must be in the company name with the company GST number. Food is not reimbursed without bills; self-written bills are accepted only for lodging without bills.</p></div>
+
+      <div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">🧾 Claim &amp; advance procedure</h2>
+        <ul class="wk-desc">
+          <li>Reimbursements are done monthly, once a month; submit a day-wise <b>Expense Report</b> (Accounts format).</li>
+          <li>Raise expense advances through <b>HROne → Expense Advance</b>; it goes to your Reporting Manager for approval, then the advance is released.</li>
+          <li>Email expense claims to <b>expenses@primelaze.com</b> by the <b>5th</b> of each month (for the previous month); processed on the <b>20th</b>.</li>
+          <li>An advance not settled by the next month-end is <b>deducted from salary</b>. The company releases only one month's claim at a time.</li>
+          <li>For outstation air travel, submit a detailed <b>tour plan</b> to your Reporting Manager at least a month prior for approval; emergencies may be approved for last-minute booking.</li>
+        </ul></div>
+
+      <div class="block" style="margin-top:16px"><h2 style="margin:0 0 6px">🏙 City classification</h2>
+        <div class="callout"><b>Type A:</b> NCR, Kolkata, Chennai, Mumbai, Hyderabad, Bangalore, Pune, Ahmedabad, Chandigarh. &nbsp; <b>Type B:</b> all other cities.</div>
+        <p class="muted-note" style="margin-top:8px"><b>Notes:</b> For joint outstation work, the manager may claim team food at actuals (against bills). ZSM &amp; NSH may claim a food bill in addition to DA for lunch/dinner with customers/doctors and during team meetings; NSH may include liquor for planned outstation/team dinners.</p></div>`;
   }
 
   function renderWeekly(dept) {
