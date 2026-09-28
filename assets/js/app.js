@@ -4750,6 +4750,7 @@
   // field changes from one save are debounced into a single email per lead, and
   // only the editor making the change queues it (remote sync never re-fires).
   const LEAD_NOTIFY_TO = ["po@primelaze.com", "adminex@primelaze.com", "calls@primelaze.com"];
+  const LEAD_SOLD_EXTRA_TO = ["itsupport@primelaze.com"]; // added only on the move → Sold
   const LEAD_NOTIFY_FIELDS = {
     stage: "Stage", soldAmount: "Deal value", soldDate: "Sold on",
     courier: "Courier", awb: "AWB / tracking", dispatchDate: "Dispatched on",
@@ -4758,6 +4759,7 @@
     name: "Contact", mobile: "Mobile", city: "City", state: "State",
   };
   let leadNotifyPending = new Map(); // leadId -> Set(changed field labels)
+  let leadNotifySoldMove = new Set(); // leadIds whose batch includes a move → Sold
   let leadNotifyTimer = null;
   function leadNoteChange(id, field) {
     if (!Object.prototype.hasOwnProperty.call(LEAD_NOTIFY_FIELDS, field)) return;
@@ -4766,25 +4768,30 @@
     const set = leadNotifyPending.get(id) || new Set();
     set.add(LEAD_NOTIFY_FIELDS[field]);
     leadNotifyPending.set(id, set);
+    // A fresh move into the Sold stage also copies IT Support.
+    if (field === "stage" && (r.stage || "") === "sold") leadNotifySoldMove.add(id);
     if (leadNotifyTimer) clearTimeout(leadNotifyTimer);
     leadNotifyTimer = setTimeout(leadFlushNotify, 3000);
   }
   function leadFlushNotify() {
     leadNotifyTimer = null;
     const pend = leadNotifyPending; leadNotifyPending = new Map();
-    let sent = 0;
+    const moves = leadNotifySoldMove; leadNotifySoldMove = new Set();
+    let sent = 0, itSent = false;
     pend.forEach((fields, id) => {
       const r = leadAll().find((x) => x.id === id);
       if (!r || LEAD_WON.indexOf(r.stage || "") < 0) return;
-      if (leadSendSoldEmail(r, Array.from(fields))) sent++;
+      const soldMove = moves.has(id);
+      if (leadSendSoldEmail(r, Array.from(fields), soldMove)) { sent++; if (soldMove) itSent = true; }
     });
-    if (sent) toast("📧 Post-sale update sent to PO / Admin / Calls");
+    if (sent) toast("📧 Sale update sent to PO / Admin / Calls" + (itSent ? " / IT Support" : ""));
   }
-  function leadSendSoldEmail(r, changed) {
+  function leadSendSoldEmail(r, changed, soldMove) {
     try {
       if (!db || !db.collection) return false;
       const who = (sessionUser && sessionUser.email) || "someone";
       const stageLabel = LEAD_STAGE_LABEL[r.stage] || r.stage || "";
+      const toList = soldMove ? LEAD_NOTIFY_TO.concat(LEAD_SOLD_EXTRA_TO) : LEAD_NOTIFY_TO.slice();
       const eh = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
       const rows = [
         ["Lead ID", r.id],
@@ -4805,16 +4812,19 @@
       ].filter(([, v]) => v !== "" && v != null);
       const tbl = rows.map(([k, v]) => `<tr><td style="padding:5px 16px 5px 0;color:#667;white-space:nowrap;">${eh(k)}</td><td style="padding:5px 0;font-weight:600;">${eh(v)}</td></tr>`).join("");
       const changedTxt = changed && changed.length ? changed.join(", ") : "Details";
-      const subject = "Post-sale update — " + (r.name || r.company || r.id) + " · " + stageLabel;
+      const subject = (soldMove ? "New sale — " : "Post-sale update — ") + (r.name || r.company || r.id) + " · " + stageLabel;
+      const intro = soldMove
+        ? ("Lead moved to <b>Sold</b> by " + eh(who) + ".")
+        : ("<b>" + eh(changedTxt) + "</b> updated by " + eh(who) + " on a sold lead.");
       const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;">
-        <p style="margin:0 0 14px;"><b>${eh(changedTxt)}</b> updated by ${eh(who)} on a sold lead.</p>
+        <p style="margin:0 0 14px;">${intro}</p>
         <table style="border-collapse:collapse;font-size:14px;">${tbl}</table>
         <p style="color:#8a8a8a;font-size:12px;margin-top:20px;">Automatic notification from the Primelaze Unified Dashboard · Leads. This email is sent whenever a Sold / Dispatched / Delivered lead is updated.</p>
       </div>`;
       db.collection("mail").add({
-        to: LEAD_NOTIFY_TO,
+        to: toList,
         message: { subject: subject, html: html },
-        _meta: { leadId: r.id, stage: r.stage, changed: changed || [], by: who, at: Date.now() },
+        _meta: { leadId: r.id, stage: r.stage, changed: changed || [], soldMove: !!soldMove, by: who, at: Date.now() },
       }).catch((e) => console.warn("Post-sale mail queue failed", e));
       return true;
     } catch (e) { console.warn("leadSendSoldEmail error", e); return false; }
