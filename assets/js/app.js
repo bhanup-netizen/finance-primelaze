@@ -5624,7 +5624,7 @@
   const regGroup = (g) => REG_GROUPS.find((x) => x.id === g) || REG_GROUPS[0];
   const REG_IS_CELLUMA = (x) => /cellu/i.test(String((x && x.name) || "") + " " + String((x && x.brand) || ""));
   // Fixed workflow statuses (editable per item, per portal).
-  const REG_STATUSES = ["Not started", "Started", "In progress", "Submitted", "Blocker", "Approved", "Rejected"];
+  const REG_STATUSES = ["Not started", "Started", "In progress", "Query Raised", "Document Pending From Company", "Submitted", "Blocker", "Approved", "Rejected"];
   function regCanonStatus(raw) {
     const t = String(raw || "").toLowerCase();
     if (!t) return "Not started";
@@ -5879,6 +5879,7 @@
     let cls = "b-neutral";
     if (/approved/.test(t)) cls = "b-good";
     else if (/submitted/.test(t)) cls = "b-teal";
+    else if (/query|pending/.test(t)) cls = "b-warn";
     else if (/in progress|started/.test(t)) cls = "b-warn";
     else if (/block|reject/.test(t)) cls = "b-bad";
     return s ? `<span class="badge ${cls}">${esc(s)}</span>` : "—";
