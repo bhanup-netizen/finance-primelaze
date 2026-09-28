@@ -43,7 +43,13 @@
   const canSeeLanding = () => roleIsAdmin() || perms.landing === true;
   const canSeeManagerInc = () => roleIsAdmin() || perms.managerInc === true;
   const roAttr = () => (isAdmin() ? "" : "disabled");
-  const allowedPages = () => (roleIsAdmin() || perms.pages === "all") ? "all" : (perms.pages || []);
+  // Every signed-in user can VIEW pages by default (read-only) — editing stays
+  // gated by role / editPages. An admin can still lock a user down by giving
+  // them an explicit (non-empty) page list; only then are they restricted.
+  const allowedPages = () => {
+    if (roleIsAdmin() || perms.pages === "all") return "all";
+    return (Array.isArray(perms.pages) && perms.pages.length) ? perms.pages : "all";
+  };
   const canSeePage = (id) => {
     if (id === "passwords") return isSuperAdmin(); // account passwords: super admin only
     if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
