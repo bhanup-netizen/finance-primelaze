@@ -7644,8 +7644,9 @@
   const COVERAGE_SEED = window.COVERAGE_SEED || { note: "", rows: [] };
   let coverage = JSON.parse(JSON.stringify(COVERAGE_SEED));
   let covNeedsReseed = false; // set when old-format stored data was refreshed to the new seed
+  let covDirty = false;       // this session changed coverage → write ours, keep server's otherwise
   let covSeq = 100;
-  function covSave(what) { saveEdits(what || "Coverage matrix updated", true); }
+  function covSave(what) { covDirty = true; saveEdits(what || "Coverage matrix updated", true); }
   // ---- Coverage matrix presentation helpers (icons, categories, avatars) ----
   const COV_CATS = [
     { key: "social", label: "Social media & marketplaces", icon: "📣" },
@@ -9326,6 +9327,10 @@
       if (Array.isArray(e.paySnapshots)) paySnapshots = e.paySnapshots;
       editsUpdatedAt = e.updatedAt || 0; editsUpdatedBy = e.updatedBy || "";
       if (Array.isArray(e.log)) { editsLog.length = 0; e.log.forEach((x) => editsLog.push(x)); }
+      // Baseline for the generic clobber guard: remember what every passive
+      // field looked like right after this (re)load, so a later save can tell
+      // whether THIS session changed it (write ours) or not (keep server's).
+      try { snapshotPassiveFields(); } catch (e2) {}
       updateLastUpdatedUI();
     } catch (err) { console.warn("edits read failed", err); }
   }
@@ -9421,6 +9426,58 @@
         if (editsLog.length > 300) editsLog.length = 300;
       }
     } catch (e) { console.warn("weekly load failed", e); }
+  }
+
+  // ---- Universal clobber protection for the remaining shared modules --------
+  // Leads / registration / inventory / payments / brochure have bespoke merges.
+  // Every OTHER shared field used to be written verbatim from this session's
+  // (possibly stale) copy on every save, so a save in one module could silently
+  // overwrite an edit someone made in a different module. This generic guard
+  // fixes all of them at once: we snapshot each field's value at load time; on
+  // save, if this session has NOT changed a field since load, we write the
+  // SERVER's current value back instead of our stale one. If we did change it
+  // (local differs from the snapshot, or an explicit dirty flag is set), we
+  // write ours. Low-traffic modules thus get the same protection as leads.
+  let loadedFieldSnap = {};
+  // [ storedKey, () => localValue, optional () => forceDirty ]
+  const PASSIVE_FIELDS = [
+    ["usdInr", () => orderState.usdInr], ["customs", () => orderState.customs],
+    ["moqJar", () => orderState.moqJar], ["moqRetail", () => orderState.moqRetail],
+    ["buyEmail", () => orderState.buyEmail],
+    ["hqTargets", () => hqEdits], ["hqAdds", () => hqAdds], ["hqQtr", () => hqQtr],
+    ["hqSales", () => hqSales], ["hqEsthSales", () => hqEsthSales], ["hqSpTargets", () => hqSpTargets],
+    ["demo", () => demoEdits], ["demoAdds", () => demoAdds], ["demoRemovals", () => demoRemovals],
+    ["roster", () => rosterEdits], ["rosterAdds", () => rosterAdds], ["rosterRemovals", () => rosterRemovals],
+    ["kraFiles", () => kraFiles],
+    ["customHQs", () => customHQs], ["customDesignations", () => customDesignations],
+    ["customPeople", () => customPeople], ["customAddresses", () => customAddresses],
+    ["vacancies", () => vacancyEdits], ["newDevices", () => newDevices],
+    ["esthOverrides", () => esthOverrides],
+    ["expenseAdds", () => expenseAdds], ["expenseHideBase", () => expenseHideBase],
+    ["orgTop", () => orgTop], ["orgNsm", () => orgNsm], ["termsOverride", () => termsOverride],
+    ["ovEdits", () => ovEdits],
+    ["socOwners", () => socOwners], ["socPageStatus", () => socPageStatus],
+    ["socPageAdds", () => socPageAdds], ["socPageHidden", () => socPageHidden],
+    ["mktDoc", () => mktDoc], ["induction", () => induction], ["attendance", () => attendance],
+    ["coverage", () => coverage, () => covDirty],
+    ["costingAssump", () => costing],
+  ];
+  function snapshotPassiveFields() {
+    PASSIVE_FIELDS.forEach(([k, get]) => { try { loadedFieldSnap[k] = JSON.stringify(get()); } catch (e) { loadedFieldSnap[k] = undefined; } });
+  }
+  // Build the protected value for one passive field given the freshly re-read
+  // server doc. serverData null → keep local (a failed re-read must not lose data).
+  function passiveVal(serverData, key, local, forceDirty) {
+    if (!serverData) return local;
+    if (forceDirty && forceDirty()) return local; // explicit "we changed it"
+    let curStr;
+    try { curStr = JSON.stringify(local); } catch (e) { return local; }
+    const snap = loadedFieldSnap[key];
+    if (snap !== undefined && curStr === snap) {
+      // unchanged by us since load → prefer the server's current value.
+      return (key in serverData) ? serverData[key] : local;
+    }
+    return local; // we changed it → write ours
   }
 
   let saveTimer = null;
@@ -9601,11 +9658,14 @@
         // regMoved: union (hides are additive; a rare re-show is corrected on next edit).
         wRegMoved = regMovedDirty ? uniqArr(serverData.regMoved, regMoved) : (Array.isArray(serverData.regMoved) ? serverData.regMoved : regMoved);
       }
+      // Generic protection for every other shared field (see PASSIVE_FIELDS).
+      const P = {};
+      PASSIVE_FIELDS.forEach(([k, get, dirty]) => { P[k] = passiveVal(serverData, k, get(), dirty); });
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds: wRegAdds, regMoved: wRegMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, paymentAdds: wPaymentAdds, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved, updatedBy: by, updatedAt: at, log: mergedLog, ...P }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
