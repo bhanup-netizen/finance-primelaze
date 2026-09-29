@@ -5924,12 +5924,25 @@
   const socPlatSort = (a, b) => { const ia = SOC_PLAT_ORDER.indexOf(a), ib = SOC_PLAT_ORDER.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b); };
   const regAdds = { cdsco: [], gem: [], products: [], celluma: [], cosmetic: [] }; // items moved/added into a tab
   const regMoved = []; // "<group>:<slug>" hidden from that tab (moved out)
+  // ---- Concurrency protection (mirrors leads) ----------------------------
+  // Registration data is shared in the single edits/overrides doc. Without
+  // this, ANY save from any module wrote this session's (possibly stale)
+  // registration copy back and wiped other people's edits — e.g. remarks Ayush
+  // added would vanish when someone else saved elsewhere. We now track exactly
+  // which registration keys THIS session changed, so a save merges only our
+  // changes onto the server's current copy (see saveEdits).
+  let regDirty = false;
+  const regDocsDirty = new Set();  // regDocs keys we set/removed
+  const regTrackDirty = new Set(); // regTrack keys we changed (status/dates/remarks)
+  const regItemDirty = new Set();  // regItemEdits keys we set/removed
+  let regAddsDirty = false;        // we added / moved / deleted an entry
+  let regMovedDirty = false;       // we hid / unhid an entry
   let regTab = "cdsco", regQ = "", regStatusF = "";
   const canEditReg = () => isAdmin();
   const regSlug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
   // Effective value of an item's own field (corrected value overrides the seed).
   const regItemVal = (g, item, field) => { const v = regItemEdits[g + ":" + regSlug(item.name) + ":" + field]; return v != null ? v : (item[field] || ""); };
-  function regItemSet(g, item, field, val) { regItemEdits[g + ":" + regSlug(item.name) + ":" + field] = val; saveEdits("Registration item " + field + " · " + item.name); }
+  function regItemSet(g, item, field, val) { const k = g + ":" + regSlug(item.name) + ":" + field; regItemEdits[k] = val; regItemDirty.add(k); regDirty = true; saveEdits("Registration item " + field + " · " + item.name); }
   // Fields a registration editor may correct, per group kind (name is the key,
   // so it stays fixed; everything else is editable).
   const REG_ITEM_FIELDS = {
@@ -5966,9 +5979,9 @@
   const regTrackGet = (g, item) => regTrack[regTrackKey(g, item)] || {};
   function regSeedStatus(g, it) { return g === "cdsco" ? it.cdsco : g === "gem" ? it.gem : g === "cosmetic" ? it.status : it.regStatus; }
   function regEffStatus(g, item) { const t = regTrackGet(g, item); return t.status || regCanonStatus(regSeedStatus(g, item)); }
-  function regTrackSet(g, item, field, val) { const k = regTrackKey(g, item); const o = regTrack[k] || (regTrack[k] = {}); o[field] = val; saveEdits("Registration " + field + " · " + item.name); }
+  function regTrackSet(g, item, field, val) { const k = regTrackKey(g, item); const o = regTrack[k] || (regTrack[k] = {}); o[field] = val; regTrackDirty.add(k); regDirty = true; saveEdits("Registration " + field + " · " + item.name); }
   function regRemarks(g, item) { const t = regTrackGet(g, item); return Array.isArray(t.remarks) ? t.remarks : []; }
-  function regAddRemark(g, item, text) { const k = regTrackKey(g, item); const o = regTrack[k] || (regTrack[k] = {}); (o.remarks = o.remarks || []).push({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", text: text }); saveEdits("Registration remark · " + item.name); }
+  function regAddRemark(g, item, text) { const k = regTrackKey(g, item); const o = regTrack[k] || (regTrack[k] = {}); (o.remarks = o.remarks || []).push({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", text: text }); regTrackDirty.add(k); regDirty = true; saveEdits("Registration remark · " + item.name); }
   // Move an item from one tab to another — its status/dates/remarks and documents travel with it.
   function regMoveItem(fromG, item, toG) {
     if (fromG === toG) return;
@@ -5986,11 +5999,13 @@
     const fromTK = fromG + ":" + slug, toTK = toG + ":" + slug;
     if (regTrack[fromTK] && !regTrack[toTK]) { regTrack[toTK] = regTrack[fromTK]; }
     delete regTrack[fromTK];
+    regTrackDirty.add(fromTK); regTrackDirty.add(toTK);
     // migrate documents
     Object.keys(regDocs).forEach((k) => {
       const pre = fromG + ":" + slug + ":";
-      if (k.indexOf(pre) === 0) { const nk = toG + ":" + slug + ":" + k.slice(pre.length); if (!regDocs[nk]) regDocs[nk] = regDocs[k]; delete regDocs[k]; }
+      if (k.indexOf(pre) === 0) { const nk = toG + ":" + slug + ":" + k.slice(pre.length); if (!regDocs[nk]) regDocs[nk] = regDocs[k]; delete regDocs[k]; regDocsDirty.add(k); regDocsDirty.add(nk); }
     });
+    regAddsDirty = true; regMovedDirty = true; regDirty = true;
     saveEdits("Moved " + item.name + " → " + regGroup(toG).label);
   }
   function regMoveDialog(fromG, item) {
@@ -6021,10 +6036,11 @@
     if (regAdds[g]) regAdds[g] = regAdds[g].filter((x) => regSlug(x.name) !== slug);
     if (!regMoved.includes(g + ":" + slug)) regMoved.push(g + ":" + slug);
     const tk = g + ":" + slug;
-    delete regTrack[tk];
+    delete regTrack[tk]; regTrackDirty.add(tk);
     const docPre = g + ":" + slug + ":", itemPre = g + ":" + slug + ":";
-    Object.keys(regDocs).forEach((k) => { if (k.indexOf(docPre) === 0) delete regDocs[k]; });
-    Object.keys(regItemEdits).forEach((k) => { if (k.indexOf(itemPre) === 0) delete regItemEdits[k]; });
+    Object.keys(regDocs).forEach((k) => { if (k.indexOf(docPre) === 0) { delete regDocs[k]; regDocsDirty.add(k); } });
+    Object.keys(regItemEdits).forEach((k) => { if (k.indexOf(itemPre) === 0) { delete regItemEdits[k]; regItemDirty.add(k); } });
+    regAddsDirty = true; regMovedDirty = true; regDirty = true;
     saveEdits("Registration · deleted " + item.name);
   }
   function regStatusBadge(s) {
@@ -6154,6 +6170,7 @@
       if (g === "cdsco") { const at = document.getElementById("ra_appType"); if (at && at.value) obj.appType = at.value; }
       fields.forEach(([f]) => { const el = document.getElementById("ra_" + f); if (el && el.value.trim()) obj[f] = el.value.trim(); });
       (regAdds[g] = regAdds[g] || []).push(obj);
+      regAddsDirty = true; regDirty = true;
       saveEdits("Registration entry added · " + name);
       close(); renderTab("registration");
     };
@@ -6264,6 +6281,7 @@
         if (!url) return;
         if (!/^https?:\/\//i.test(url)) { window.alert("Please paste a full link starting with http…"); return; }
         regDocs[b.dataset.key] = { url, link: true, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+        regDocsDirty.add(b.dataset.key); regDirty = true;
         saveEdits("Registration doc linked"); paint(); regRepaint();
       }));
       list.querySelectorAll(".reg-rm").forEach((b) => (b.onclick = () => { removeRegDoc(b.dataset.key, paint); }));
@@ -6282,6 +6300,7 @@
       const url = await ref.getDownloadURL();
       const prev = regDocs[key];
       regDocs[key] = { name: file.name, url, path, size: file.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+      regDocsDirty.add(key); regDirty = true;
       if (prev && prev.path && prev.path !== path) { try { await storage.ref().child(prev.path).delete(); } catch (e) {} }
       saveEdits("Registration doc uploaded"); if (paint) paint(); regRepaint();
     } catch (e) { window.alert("⚠ Upload failed: " + (e && e.code ? e.code : "error") + ". Storage may not be enabled or rules block it."); }
@@ -6291,6 +6310,7 @@
     const rec = regDocs[key];
     // Tombstone so a seed link (e.g. the pre-filled MD-15) does not reappear.
     regDocs[key] = { cleared: true, at: Date.now(), by: (sessionUser && sessionUser.email) || "" };
+    regDocsDirty.add(key); regDirty = true;
     saveEdits("Registration doc removed"); if (paint) paint(); regRepaint();
     if (rec && rec.path && storage) { try { await storage.ref().child(rec.path).delete(); } catch (e) {} }
   }
@@ -9522,11 +9542,70 @@
         if (Array.isArray(serverData.brochures)) wBrochures = serverData.brochures;
         if (typeof serverData.brochureVersion === "number") wBrochureVersion = serverData.brochureVersion;
       }
+      // Registration: same protection as leads. If this session never touched
+      // registration, write the SERVER's copy back so a save from another module
+      // can't wipe someone's status / remarks / documents with our stale copy
+      // (fixes "Ayush's registration comments auto-deleted"). If we DID edit it,
+      // merge only the keys we changed onto the server's current copy so we never
+      // clobber another editor's concurrent registration changes.
+      let wRegDocs = regDocs, wRegTrack = regTrack, wRegItemEdits = regItemEdits, wRegAdds = regAdds, wRegMoved = regMoved;
+      if (serverData && !regDirty) {
+        if (serverData.regDocs && typeof serverData.regDocs === "object") wRegDocs = serverData.regDocs;
+        if (serverData.regTrack && typeof serverData.regTrack === "object") wRegTrack = serverData.regTrack;
+        if (serverData.regItemEdits && typeof serverData.regItemEdits === "object") wRegItemEdits = serverData.regItemEdits;
+        if (serverData.regAdds && typeof serverData.regAdds === "object") wRegAdds = serverData.regAdds;
+        if (Array.isArray(serverData.regMoved)) wRegMoved = serverData.regMoved;
+      } else if (serverData && regDirty) {
+        const uniqArr = (a, b) => Array.from(new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]));
+        // regDocs: server's + only the keys WE set/removed.
+        const srvD = (serverData.regDocs && typeof serverData.regDocs === "object") ? serverData.regDocs : {};
+        const mD = Object.assign({}, srvD);
+        regDocsDirty.forEach((k) => { if (k in regDocs) mD[k] = regDocs[k]; else delete mD[k]; });
+        wRegDocs = mD;
+        // regTrack: server's + our touched keys. Scalars (status/dates) take our
+        // value; remarks are UNIONED so two people's comments both survive.
+        const srvT = (serverData.regTrack && typeof serverData.regTrack === "object") ? serverData.regTrack : {};
+        const mT = Object.assign({}, srvT);
+        regTrackDirty.forEach((k) => {
+          if (!(k in regTrack)) { delete mT[k]; return; } // deleted locally
+          const so = srvT[k] || {}, lo = regTrack[k] || {};
+          const merged = Object.assign({}, so, lo); // our scalar fields win
+          const seen = new Set(); const rem = [];
+          [].concat(Array.isArray(so.remarks) ? so.remarks : [], Array.isArray(lo.remarks) ? lo.remarks : [])
+            .forEach((r) => { const kk = (r && r.at || 0) + "|" + (r && r.by || "") + "|" + (r && r.text || ""); if (r && !seen.has(kk)) { seen.add(kk); rem.push(r); } });
+          rem.sort((a, b) => (a.at || 0) - (b.at || 0));
+          if (rem.length) merged.remarks = rem;
+          mT[k] = merged;
+        });
+        wRegTrack = mT;
+        // regItemEdits: server's + only the keys WE set/removed.
+        const srvI = (serverData.regItemEdits && typeof serverData.regItemEdits === "object") ? serverData.regItemEdits : {};
+        const mI = Object.assign({}, srvI);
+        regItemDirty.forEach((k) => { if (k in regItemEdits) mI[k] = regItemEdits[k]; else delete mI[k]; });
+        wRegItemEdits = mI;
+        // regAdds: union per group by slug (prefer our copy). Only when we added/
+        // moved/deleted an entry; otherwise keep the server's.
+        if (regAddsDirty) {
+          const srvA = (serverData.regAdds && typeof serverData.regAdds === "object") ? serverData.regAdds : {};
+          const out = {};
+          ["cdsco", "gem", "products", "celluma", "cosmetic"].forEach((g) => {
+            const byS = new Map();
+            (Array.isArray(srvA[g]) ? srvA[g] : []).forEach((x) => { if (x && x.name) byS.set(regSlug(x.name), x); });
+            (Array.isArray(regAdds[g]) ? regAdds[g] : []).forEach((x) => { if (x && x.name) byS.set(regSlug(x.name), x); });
+            out[g] = Array.from(byS.values());
+          });
+          wRegAdds = out;
+        } else if (serverData.regAdds && typeof serverData.regAdds === "object") {
+          wRegAdds = serverData.regAdds;
+        }
+        // regMoved: union (hides are additive; a rare re-show is corrected on next edit).
+        wRegMoved = regMovedDirty ? uniqArr(serverData.regMoved, regMoved) : (Array.isArray(serverData.regMoved) ? serverData.regMoved : regMoved);
+      }
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs, regTrack, regItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds, regMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, usdInr: orderState.usdInr, customs: orderState.customs, moqJar: orderState.moqJar, moqRetail: orderState.moqRetail, buyEmail: orderState.buyEmail, hqTargets: hqEdits, demo: demoEdits, demoAdds, roster: rosterEdits, rosterAdds, rosterRemovals, kraFiles, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, demoRemovals, customHQs, customDesignations, customPeople, customAddresses, paymentAdds: wPaymentAdds, vacancies: vacancyEdits, hqAdds, hqQtr, hqSales, hqEsthSales, hqSpTargets, newDevices, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, esthOverrides, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, expenseAdds, expenseHideBase, orgTop, orgNsm, termsOverride, ovEdits, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, socOwners, socPageStatus, socPageAdds, socPageHidden, mktDoc, induction, attendance, coverage, costingAssump: costing, regAdds: wRegAdds, regMoved: wRegMoved, updatedBy: by, updatedAt: at, log: mergedLog }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
