@@ -3245,14 +3245,17 @@
       { n: 6, stage: "Released by salesperson", status: free, who: "Vikas",
         what: "When the salesperson releases the machine, <b>Vikas</b> sets <b>Status → Free</b> again — ready for the next request. (Keep the Remarks & condition updated on return.)" },
     ];
-    const rows = steps.map((s) =>
-      `<tr>
-        <td class="t-name"><span class="df-num">${s.n}</span> ${esc(s.stage)}</td>
-        <td>${s.status}</td>
-        <td>${esc(s.who)}</td>
-        <td>${s.what}</td>
-      </tr>`).join("");
-    const head = `<th>Stage</th><th>Set status to</th><th>Who does it</th><th>What to do</th>`;
+    const stepCards = steps.map((s) =>
+      `<div class="df-step">
+        <div class="df-step-n">${s.n}</div>
+        <div class="df-step-body">
+          <div class="df-step-head">
+            <h3>${esc(s.stage)}</h3>
+            <div class="df-step-meta">${s.status}${s.who !== "—" ? `<span class="df-who">👤 ${esc(s.who)}</span>` : ""}</div>
+          </div>
+          <p class="df-step-what">${s.what}</p>
+        </div>
+      </div>`).join("");
     return `
       <div class="section-head">
         <h1>Demo Machine Process</h1>
@@ -3267,7 +3270,7 @@
         <div class="muted-note">Free (available) → In Transit (dispatched) → Booked (with salesperson) → Free (released)</div>
       </div>
 
-      ${table(head, rows)}
+      <div class="df-steps">${stepCards}</div>
 
       <div class="df-roles">
         <h2>Who owns which step</h2>
