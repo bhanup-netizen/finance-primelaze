@@ -2916,9 +2916,19 @@
   ];
   const FREE_TEXT_COLS = /remark|missing item|accessor|damage report|dimension|purpose$|^device$|^machine$|serial|flight case id/i;
   const PERSON_COLS = /salesperson|confirmed by|manager|received by|approved by|checked by|owner|current taker/i;
+  const CARRIER_COLS = /^carrier$/i;                    // dispatch carrier dropdown
   const customPeople = []; // admin-added people for person dropdowns
+  const customCarriers = []; // admin-added carriers for the Carrier dropdown
+  // Extra Status options offered on top of whatever the data sheet provides.
+  const DEMO_EXTRA_STATUS = ["In Transit"];
+  // Fixed carrier list (Sales Support can add more via "＋ Add new…").
+  const DEMO_CARRIERS = ["JD Courier", "DTDC", "Maruti Courier", "Carried by Hand", "Cab / Taxi / Bus Booking"];
   // Display-only column renames (keeps the underlying data key for logic).
-  const demoColLabel = (c) => (/^manager$/i.test(c) ? "Current Taker" : c);
+  const demoColLabel = (c) =>
+    /^manager$/i.test(c) ? "Current Taker"
+      : /^booked from$/i.test(c) ? "Booking From (date)"
+      : /^booked to$/i.test(c) ? "Booking To (date)"
+      : c;
   let demoView = "current";
   let demoFilter = "all"; // status filter for the Current-status table
 
@@ -2936,14 +2946,17 @@
     return `${+m[3]} ${MONTHS[+m[2] - 1] || m[2]} ${m[1]}`;
   }
 
-  // Ensure the Current-status view carries the two booking-date columns.
-  // Appended in-memory only (data.enc.js is untouched); the values live in the
-  // demo edits store and persist like any other cell. Safe to call repeatedly.
+  // Ensure the Current-status view carries the booking-date columns and the
+  // dispatch Carrier column. Appended in-memory only (data.enc.js is untouched);
+  // the values live in the demo edits store and persist like any other cell.
+  // Appended in a FIXED order so saved cell indices stay stable. Safe to call
+  // repeatedly.
   function ensureDemoBookingCols() {
     const cur = D.demoMachines && D.demoMachines.current;
     if (!cur || !Array.isArray(cur.columns)) return;
     if (!cur.columns.some((c) => /^booked from$/i.test(c))) cur.columns.push("Booked From");
     if (!cur.columns.some((c) => /^booked to$/i.test(c))) cur.columns.push("Booked To");
+    if (!cur.columns.some((c) => CARRIER_COLS.test(c))) cur.columns.push("Carrier");
   }
 
   // Colour bucket for a status/condition value:
@@ -2998,7 +3011,8 @@
     const cols = D.demoMachines[demoView].columns;
     const uniq = (a, b) => Array.from(new Set(a.concat(b)));
     let base;
-    if (colName === "Status") base = uniq(dd.status || [], distinctDemoValues(colIdx));
+    if (colName === "Status") base = uniq(uniq(dd.status || [], DEMO_EXTRA_STATUS), distinctDemoValues(colIdx));
+    else if (CARRIER_COLS.test(colName)) base = uniq(uniq(DEMO_CARRIERS, customCarriers), distinctDemoValues(colIdx));
     else if (/condition/i.test(colName)) base = uniq(dd.condition || [], distinctDemoValues(colIdx));
     else if (/location|^from$|^to$/i.test(colName)) base = uniq(rf.states || [], distinctDemoValues(colIdx));
     else if (PERSON_COLS.test(colName)) base = uniq(rf.employees || [], customPeople);
@@ -3033,7 +3047,7 @@
     const opts = demoOptions(colName, c, val, rid);
     const optionHtml = `<option value=""${val ? "" : " selected"}>—</option>` +
       opts.map((o) => `<option${o === val ? " selected" : ""}>${esc(o)}</option>`).join("") +
-      (PERSON_COLS.test(colName) ? `<option value="__add__">＋ Add new…</option>` : "");
+      ((PERSON_COLS.test(colName) || CARRIER_COLS.test(colName)) ? `<option value="__add__">＋ Add new…</option>` : "");
     return `<td class="${cls}">${rm}<select class="demo-select ${sc}" data-r="${rid}" data-c="${c}">${optionHtml}</select></td>`;
   }
 
@@ -3099,9 +3113,11 @@
       sel.onchange = () => {
         const rid = sel.dataset.r, c = +sel.dataset.c;
         if (sel.value === "__add__") {
-          const name = (window.prompt("Add new person:") || "").trim();
+          const isCarrier = CARRIER_COLS.test(cols[c] || "");
+          const name = (window.prompt(isCarrier ? "Add new carrier:" : "Add new person:") || "").trim();
           if (!name) { demoRepaint(); return; }
-          if (!customPeople.includes(name)) customPeople.push(name);
+          if (isCarrier) { if (!customCarriers.includes(name)) customCarriers.push(name); }
+          else if (!customPeople.includes(name)) customPeople.push(name);
           demoSetVal(rid, c, name);
           saveEdits(demoWhat(rid, c, name)); demoRepaint(); return;
         }
@@ -9274,6 +9290,7 @@
       }
       if (typeof e.expenseHideBase === "boolean") expenseHideBase = e.expenseHideBase;
       if (Array.isArray(e.customPeople)) { customPeople.length = 0; e.customPeople.forEach((h) => customPeople.push(h)); }
+      if (Array.isArray(e.customCarriers)) { customCarriers.length = 0; e.customCarriers.forEach((c) => customCarriers.push(c)); }
       if (Array.isArray(e.customAddresses)) { customAddresses.length = 0; e.customAddresses.forEach((a) => customAddresses.push(a)); }
       if (e.vacancies) Object.keys(e.vacancies).forEach((k) => { vacancyEdits[k] = e.vacancies[k]; });
       if (e.hqAdds) Object.keys(e.hqAdds).forEach((k) => { hqAdds[k] = e.hqAdds[k]; });
@@ -9451,6 +9468,7 @@
     ["kraFiles", () => kraFiles],
     ["customHQs", () => customHQs], ["customDesignations", () => customDesignations],
     ["customPeople", () => customPeople], ["customAddresses", () => customAddresses],
+    ["customCarriers", () => customCarriers],
     ["vacancies", () => vacancyEdits], ["newDevices", () => newDevices],
     ["esthOverrides", () => esthOverrides],
     ["expenseAdds", () => expenseAdds], ["expenseHideBase", () => expenseHideBase],
