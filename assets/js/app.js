@@ -54,6 +54,7 @@
     if (id === "passwords") return isSuperAdmin(); // account passwords: super admin only
     if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
     if (id === "travelpolicy") return roleIsAdmin() || isSuperAdmin(); // travel policy: admin only
+    if (id === "demoflow") return canSeePage("demo"); // demo process guide: same access as Demo Machines
     if (id === "admin") {
       if (isSuperAdmin() && appMode === "admin") return true; // full user management
       if (isPageAdmin()) return true;                          // scoped page-admin manager
@@ -149,6 +150,7 @@
     { id: "registration", label: "Registration", group: "Admin & Logistics", render: renderReg },
     { id: "order", label: "Inventory", group: "Admin & Logistics", render: renderOrder },
     { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
+    { id: "demoflow", label: "Demo Process", group: "Admin & Logistics", render: renderDemoFlow },
     { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
     { id: "brochures", label: "Brochure Stock", group: "Admin & Logistics", render: renderBrochures },
     { id: "travelpolicy", label: "Travel Policy", group: "Admin & Logistics", render: renderTravelPolicy },
@@ -3198,13 +3200,14 @@
       });
       const add = document.getElementById("demoAddBtn");
       if (add) add.onclick = demoAddRow;
+      document.querySelectorAll("#view [data-goto]").forEach((a) => (a.onclick = () => go(a.dataset.goto)));
       wireDemoFilter();
       wireDemoEdit();
     }, 0);
     return `
       <div class="section-head">
         <h1>Demo Machines</h1>
-        <p>Live status and movement of demo devices. ${isAdmin() ? "Edit cells via dropdowns; Remarks are free text. Changes save for everyone." : "Read-only — an administrator maintains this."}</p>
+        <p>Live status and movement of demo devices. ${isAdmin() ? "Edit cells via dropdowns; Remarks are free text. Changes save for everyone." : "Read-only — an administrator maintains this."} <a class="linkish" data-goto="demoflow">📋 See the end-to-end Demo Process →</a></p>
       </div>
       <div class="controls">
         <div class="seg">
@@ -3214,6 +3217,73 @@
       </div>
       <div id="demoFilterBar">${demoFilterBar()}</div>
       <div id="demoBody">${demoTable()}</div>`;
+  }
+
+  // End-to-end demo-machine process (SOP). Static reference page, visible to
+  // everyone who can see the Demo Machines page. Describes who does what at each
+  // stage and which Status to set. Kept in sync with the Status/Carrier fields
+  // on the Demo Machines page.
+  function renderDemoFlow() {
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-goto]").forEach((a) => (a.onclick = () => go(a.dataset.goto)));
+    }, 0);
+    const chip = (label, cls) => `<span class="demo-chip ${cls}">${esc(label)}</span>`;
+    const free = chip("Free", "demo-good");
+    const transit = chip("In Transit", "demo-warn");
+    const booked = chip("Booked", "demo-info");
+    const steps = [
+      { n: 1, stage: "Machine is available", status: free, who: "—",
+        what: "The machine sits in stock as <b>Free</b>. Anyone can see it is available to be requested for a demo." },
+      { n: 2, stage: "Request raised & machine prepared", status: free, who: "Vikas",
+        what: "When a demo is requested, <b>Vikas</b> prepares the machine and fills in <b>all details</b> on its row — Serial, Salesperson, destination State/Location, and the <b>Booking From / Booking To</b> dates." },
+      { n: 3, stage: "Dispatch", status: transit, who: "Vikas / Mayank",
+        what: "Once the request is confirmed, the machine is dispatched. Select the <b>Carrier</b> (JD Courier / DTDC / Maruti Courier / Carried by Hand / Cab-Taxi-Bus), then set <b>Status → In Transit</b>." },
+      { n: 4, stage: "In transit — tracking", status: transit, who: "Mayank & Ayush",
+        what: "<b>Mayank & Ayush</b> work closely with the logistics partner and track the shipment until it reaches the salesperson." },
+      { n: 5, stage: "Received by salesperson", status: booked, who: "Mayank / Ayush",
+        what: "Once the machine is received by the salesperson, update <b>Status → Booked</b> (it is now with the salesperson / in use)." },
+      { n: 6, stage: "Released by salesperson", status: free, who: "Vikas",
+        what: "When the salesperson releases the machine, <b>Vikas</b> sets <b>Status → Free</b> again — ready for the next request. (Keep the Remarks & condition updated on return.)" },
+    ];
+    const rows = steps.map((s) =>
+      `<tr>
+        <td class="t-name"><span class="df-num">${s.n}</span> ${esc(s.stage)}</td>
+        <td>${s.status}</td>
+        <td>${esc(s.who)}</td>
+        <td>${s.what}</td>
+      </tr>`).join("");
+    const head = `<th>Stage</th><th>Set status to</th><th>Who does it</th><th>What to do</th>`;
+    return `
+      <div class="section-head">
+        <h1>Demo Machine Process</h1>
+        <p>End-to-end flow for every demo machine — who does what at each stage, and which status to set. Keep the <a class="linkish" data-goto="demo">Demo Machines</a> page updated at each step so everyone has the full picture in one place.</p>
+      </div>
+
+      <div class="df-flow">
+        ${free} <span class="df-arrow">→</span>
+        ${transit} <span class="df-arrow">→</span>
+        ${booked} <span class="df-arrow">→</span>
+        ${free}
+        <div class="muted-note">Free (available) → In Transit (dispatched) → Booked (with salesperson) → Free (released)</div>
+      </div>
+
+      ${table(head, rows)}
+
+      <div class="df-roles">
+        <h2>Who owns which step</h2>
+        <ul class="df-list">
+          <li><b>Vikas</b> — prepares the machine & fills all details on request; dispatches; and sets it back to <b>Free</b> when the salesperson releases it.</li>
+          <li><b>Mayank / Vikas</b> — dispatch the machine and set <b>In Transit</b>.</li>
+          <li><b>Mayank & Ayush</b> — coordinate with the logistics partner, track delivery, and set <b>Booked</b> once the salesperson receives it.</li>
+          <li><b>Salesperson</b> — receives the machine (→ Booked) and later releases it (→ Vikas sets Free).</li>
+        </ul>
+        <h2>Key rules</h2>
+        <ul class="df-list">
+          <li>Always record the <b>Carrier</b> and the <b>Booking From / To</b> dates at dispatch.</li>
+          <li>Update the Status the moment a stage changes — the board must always show the true, live location of every machine.</li>
+          <li>Changes save for everyone automatically and appear on other people's screens within a few seconds.</li>
+        </ul>
+      </div>`;
   }
 
   /* ================= PAYMENT COMMITMENTS ================= */
