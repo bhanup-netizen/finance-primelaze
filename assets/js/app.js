@@ -3231,6 +3231,14 @@
     const free = chip("Free", "demo-good");
     const transit = chip("In Transit", "demo-warn");
     const booked = chip("Booked", "demo-info");
+    const inService = chip("In Service", "demo-bad");
+    // Service / repair side-branch — can start from any stage.
+    const serviceSteps = [
+      { icon: "🔧", stage: "Machine goes for service", status: inService, who: "Anyone",
+        what: "If a machine needs attention — at any point — <b>anyone</b> can flag it by setting a service status: <b>In Service, Needs Repair, Needs Cleaning, Needs Foam Replacement, Under Maintenance</b> or <b>Out of Service</b>." },
+      { icon: "✓", stage: "Released from service", status: free, who: "Avinash",
+        what: "Service &amp; repair is <b>Avinash's</b> responsibility. Once the machine is serviced and ready, <b>only Avinash</b> releases it back to <b>Free</b> so it can be requested again." },
+    ];
     const steps = [
       { n: 1, stage: "Machine is available", status: free, who: "—",
         what: "The machine sits in stock as <b>Free</b>. Anyone can see it is available to be requested for a demo." },
@@ -3272,6 +3280,22 @@
 
       <div class="df-steps">${stepCards}</div>
 
+      <h2 class="df-sec">🔧 Service / repair (side branch)</h2>
+      <p class="muted-note" style="margin-top:0">A machine can go for service at any point — while Free, after a demo returns, or if a fault is found in transit. It rejoins the main flow as <b>Free</b> only after Avinash releases it.</p>
+      <div class="df-steps">
+        ${serviceSteps.map((s) =>
+          `<div class="df-step df-step-svc">
+            <div class="df-step-n">${s.icon}</div>
+            <div class="df-step-body">
+              <div class="df-step-head">
+                <h3>${esc(s.stage)}</h3>
+                <div class="df-step-meta">${s.status}<span class="df-who">👤 ${esc(s.who)}</span></div>
+              </div>
+              <p class="df-step-what">${s.what}</p>
+            </div>
+          </div>`).join("")}
+      </div>
+
       <div class="df-roles">
         <h2>Who owns which step</h2>
         <ul class="df-list">
@@ -3279,10 +3303,12 @@
           <li><b>Mayank / Vikas</b> — dispatch the machine and set <b>In Transit</b>.</li>
           <li><b>Mayank & Ayush</b> — coordinate with the logistics partner, track delivery, and set <b>Booked</b> once the salesperson receives it.</li>
           <li><b>Salesperson</b> — receives the machine (→ Booked) and later releases it (→ Vikas sets Free).</li>
+          <li><b>Avinash</b> — owns <b>service / repair</b>. Anyone can put a machine <b>into</b> service, but only Avinash <b>releases it out of service back to Free</b> once it is ready.</li>
         </ul>
         <h2>Key rules</h2>
         <ul class="df-list">
           <li>Always record the <b>Carrier</b> and the <b>Booking From / To</b> dates at dispatch.</li>
+          <li>Any service status (In Service / Needs Repair / Needs Cleaning / Out of Service, etc.) can be set by <b>anyone</b> — but moving a machine <b>out of service back to Free</b> is <b>Avinash's</b> call.</li>
           <li>Update the Status the moment a stage changes — the board must always show the true, live location of every machine.</li>
           <li>Changes save for everyone automatically and appear on other people's screens within a few seconds.</li>
         </ul>
