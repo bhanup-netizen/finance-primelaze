@@ -4846,6 +4846,28 @@
       return r;
     });
   }
+  // ---- Contact ↔ pipelines ------------------------------------------------
+  // A "contact" is identified by mobile number; one contact can have several
+  // leads = several order/product pipelines. These helpers group them so the
+  // detail view can show all pipelines and a combined (contact-level) activity
+  // timeline, and so a new order can be opened under the same contact.
+  const leadContactKey = (l) => String(l && l.mobile || "").replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
+  function leadContactPipelines(r) {
+    const k = leadContactKey(r);
+    if (!k) return [r]; // no mobile → can't group; it stands alone
+    return leadAll().filter((x) => !leadIsArchived(x.id) && leadContactKey(x) === k);
+  }
+  // Create a new pipeline (order) under the same contact — copies contact fields,
+  // starts a fresh pipeline (stage New, blank product/history).
+  function leadNewPipeline(srcId) {
+    const src = leadAll().find((x) => x.id === srcId); if (!src) return;
+    const copy = {};
+    ["name", "mobile", "company", "gender", "occ", "state", "city", "source", "owner"].forEach((f) => { if (src[f]) copy[f] = src[f]; });
+    const nid = leadAddNew(copy);
+    leadAddHistory(nid, "new", "New order / pipeline opened for this contact (same contact, different order)");
+    return nid;
+  }
+
   function leadUpdate(id, field, value) {
     if (String(id).charAt(0) === "L") {
       leadEdits[id + "#" + field] = value; leadEditKeysDirty.add(id + "#" + field);
@@ -5199,15 +5221,28 @@
       if (e.kind === "restore") return `<span class="lead-stage-tag lead-tl-created">Restored</span>`;
       return `<span class="lead-stage-tag lst-${e.stage || "new"}">${esc(LEAD_STAGE_LABEL[e.stage || "new"] || "")}</span>`;
     };
-    const items = events.slice().reverse().map((e) => `
-      <li class="lead-tl-item">
-        <span class="lead-tl-dot ${dot(e)}"></span>
-        <div class="lead-tl-body">
-          <div class="lead-tl-head">${tag(e)}${e.act ? `<span class="lead-act-tag">${esc(leadActLabel(e.act))}</span>` : ""}${e.ev ? `<span class="lead-act-tag lead-ev-tag">${esc(e.ev)}</span>` : ""}<span class="lead-tl-when">${esc(leadWhen(e))}</span></div>
-          <div class="lead-tl-text">${esc(e.text)}</div>
-          <div class="lead-tl-by">${e.by ? "— " + esc(e.by) : (e.kind === "created" ? "— " + enteredBy : "")}</div>
-        </div>
-      </li>`).join("");
+    // Build timeline <li>s for one or more pipelines. When several pipelines are
+    // merged (contact-level view), each entry is tagged with its product.
+    const buildItems = (leads, showPipe) => {
+      let evs = [];
+      leads.forEach((L) => {
+        evs.push({ kind: "created", at: L.createdAt || 0, by: L.createdBy || "", stage: "new", text: "Lead entered into the system", _pl: L });
+        leadHistory(L).forEach((h) => evs.push({ kind: h.kind || "stage", at: h.at, by: h.by, stage: h.stage, text: h.text, act: h.act || "", ev: h.ev || "", _pl: L }));
+      });
+      evs.sort((a, b) => (b.at || 0) - (a.at || 0));
+      return evs.map((e) => `
+        <li class="lead-tl-item">
+          <span class="lead-tl-dot ${dot(e)}"></span>
+          <div class="lead-tl-body">
+            <div class="lead-tl-head">${tag(e)}${e.act ? `<span class="lead-act-tag">${esc(leadActLabel(e.act))}</span>` : ""}${e.ev ? `<span class="lead-act-tag lead-ev-tag">${esc(e.ev)}</span>` : ""}${showPipe && e._pl ? `<span class="lead-act-tag">${esc(e._pl.product || "No product")}</span>` : ""}<span class="lead-tl-when">${esc(leadWhen(e))}</span></div>
+            <div class="lead-tl-text">${esc(e.text)}</div>
+            <div class="lead-tl-by">${e.by ? "— " + esc(e.by) : (e.kind === "created" ? "— " + (e._pl && e._pl.createdBy ? esc(e._pl.createdBy) : enteredBy) : "")}</div>
+          </div>
+        </li>`).join("");
+    };
+    const pipelines = leadContactPipelines(r);
+    const otherPipelines = pipelines.filter((x) => x.id !== r.id);
+    const items = buildItems([r], false);
     const owners = leadOwners();
     const val = (v) => esc(v || "");
     // Field rendered as an input (admin) or plain text (viewer).
@@ -5244,8 +5279,13 @@
       ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.stage === "dispatched" && leadExpectedDelivery(r) ? ` · <b>Exp. delivery:</b> ${esc(leadExpectedDelivery(r))}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
       <div class="ld-attach"><h4 class="ld-h">Attachments</h4><div id="ldFiles"></div>${admin ? `<label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Attach file<input type="file" id="ldFileInput" hidden></label>` : ""}</div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
-      <h4 class="ld-h">Journey</h4>
-      <ol class="lead-tl">${items}</ol>
+      ${(otherPipelines.length || (admin && leadContactKey(r))) ? `<div class="ld-pipelines">
+        <h4 class="ld-h">Orders / pipelines for this contact (${pipelines.length})</h4>
+        ${otherPipelines.length ? `<div class="lead-sib-list">${otherPipelines.map((o) => `<button type="button" class="lead-sib" data-open="${esc(o.id)}"><b>${esc(o.product || "No product")}</b> <span class="lead-stage-tag lst-${o.stage || "new"}">${esc(LEAD_STAGE_LABEL[o.stage || "new"])}</span></button>`).join("")}</div>` : `<div class="muted-note">This is the only pipeline for this contact.</div>`}
+        ${admin && leadContactKey(r) ? `<button type="button" class="ghost-btn" id="ldNewPipe" style="margin-top:8px">＋ New order / pipeline for this contact</button>` : ""}
+      </div>` : ""}
+      <h4 class="ld-h">Journey${otherPipelines.length ? ` <label class="ld-allact"><input type="checkbox" id="ldAllAct"> show all ${pipelines.length} pipelines</label>` : ""}</h4>
+      <ol class="lead-tl" id="ldTl">${items}</ol>
       <div class="lead-modal-actions ld-actions">
         ${canRemarkLeads() ? `<button type="button" class="dl-btn" id="ldAdd">＋ Add update${admin ? " / move stage" : ""}</button>` : ""}
         ${admin && !r.owner && myLeadOwner() ? `<button type="button" class="ghost-btn" id="ldMine">🙋 Assign to me</button>` : ""}
@@ -5261,6 +5301,15 @@
     if (ldOwn) { let lastO = ldOwn.value; ldOwn.onchange = () => { if (ldOwn.value !== "__newrep__") { lastO = ldOwn.value; return; } const nm = addNewRepPrompt(); ldOwn.innerHTML = ownerOptionsHtml(nm || lastO); ldOwn.value = nm || lastO; lastO = ldOwn.value; }; }
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("ldClose").onclick = close;
+    // Other pipelines for this contact: open, create, and merged timeline.
+    wrap.querySelectorAll(".lead-sib[data-open]").forEach((b) => (b.onclick = () => { close(); leadDetailDialog(b.dataset.open); }));
+    const newPipe = document.getElementById("ldNewPipe");
+    if (newPipe) newPipe.onclick = () => {
+      if (!window.confirm("Open a NEW order / pipeline for this contact?\n\nContact details (name, mobile, company, location, owner) are copied; the new pipeline starts fresh at New with no product selected.")) return;
+      const nid = leadNewPipeline(id); close(); leadRepaint(); if (nid) leadDetailDialog(nid);
+    };
+    const allAct = document.getElementById("ldAllAct");
+    if (allAct) allAct.onchange = () => { const ol = document.getElementById("ldTl"); if (ol) ol.innerHTML = allAct.checked ? buildItems(pipelines, true) : buildItems([r], false); };
     // Attachments list + upload.
     const paintFiles = () => {
       const box = document.getElementById("ldFiles"); if (!box) return;

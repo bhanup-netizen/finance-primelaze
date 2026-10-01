@@ -1295,6 +1295,12 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-act-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--text); background: var(--bg); border: 1px solid var(--border); vertical-align: middle; }
 .lead-ev-tag { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .lead-req { color: var(--bad); font-weight: 700; }
+.ld-pipelines { margin: 10px 0; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; }
+.lead-sib-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.lead-sib { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; font-family: inherit; color: var(--text); }
+.lead-sib:hover { border-color: var(--accent); }
+.ld-allact { font-size: 11px; font-weight: 600; color: var(--text-2); margin-left: 8px; white-space: nowrap; }
+.ld-allact input { vertical-align: middle; }
 
 /* Lead Calendar */
 .lcal-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
