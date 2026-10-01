@@ -2727,7 +2727,7 @@
         return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
       return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box, incl. 18% GST)</span></h2>
-        <div class="callout" style="margin-top:6px">${esc(M.note || "")} <b>Offer price</b> = effective net ₹/unit under each buy+free deal.</div></div>${M.groups.map(grp).join("")}`;
+        <div class="callout" style="margin-top:6px">${esc(M.note || "")} <b>Offer price</b> = effective net ₹/unit under each buy+free deal. The <b>${esc(M.discountLabel || "Extra unit · 10% off")}</b> column is the price for any single unit bought beyond a complete pack.</div></div>${M.groups.map(grp).join("")}`;
     };
     // ---- Machines / devices (₹ Lakhs) ----
     const machinesBlock = () => {
