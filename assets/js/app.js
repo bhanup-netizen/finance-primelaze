@@ -4784,7 +4784,7 @@
     return parts.length ? "⏱ " + parts.join(" · ") : "";
   }
   // A lead is "stuck" when it's still open and has sat in its stage too long.
-  const LEAD_STUCK_DAYS = 14;
+  const LEAD_STUCK_DAYS = 30;
   const leadIsStuck = (r) => LEAD_OPEN.indexOf(r.stage || "new") >= 0 && (daysSince(leadStageSince(r)) || 0) >= LEAD_STUCK_DAYS;
   // ---- Follow-up reminders (Casovil MOM) ----
   // A follow-up is "due" when its date is today or in the past and the lead is
