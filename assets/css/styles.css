@@ -1293,6 +1293,8 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-stage-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: #fff; vertical-align: middle; }
 /* Activity-type badge on a timeline entry (Meeting / Calling / WhatsApp / Email) */
 .lead-act-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; color: var(--text); background: var(--bg); border: 1px solid var(--border); vertical-align: middle; }
+.lead-ev-tag { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.lead-req { color: var(--bad); font-weight: 700; }
 /* Follow-up reminder chips */
 .lead-follow { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-bottom: 4px; }
 .lead-follow-overdue { color: #fff; background: var(--lst-lost); }

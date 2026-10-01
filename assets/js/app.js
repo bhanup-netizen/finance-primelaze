@@ -5199,7 +5199,7 @@
       <li class="lead-tl-item">
         <span class="lead-tl-dot ${dot(e)}"></span>
         <div class="lead-tl-body">
-          <div class="lead-tl-head">${tag(e)}${e.act ? `<span class="lead-act-tag">${esc(leadActLabel(e.act))}</span>` : ""}<span class="lead-tl-when">${esc(leadWhen(e))}</span></div>
+          <div class="lead-tl-head">${tag(e)}${e.act ? `<span class="lead-act-tag">${esc(leadActLabel(e.act))}</span>` : ""}${e.ev ? `<span class="lead-act-tag lead-ev-tag">${esc(e.ev)}</span>` : ""}<span class="lead-tl-when">${esc(leadWhen(e))}</span></div>
           <div class="lead-tl-text">${esc(e.text)}</div>
           <div class="lead-tl-by">${e.by ? "— " + esc(e.by) : (e.kind === "created" ? "— " + enteredBy : "")}</div>
         </div>
@@ -5451,21 +5451,25 @@
   }
   // Append a timestamped entry to a lead's journey. `kind` marks special events
   // (archive/restore/created); a normal update leaves it blank.
-  function leadAddHistory(id, stage, text, kind, act) {
+  function leadAddHistory(id, stage, text, kind, act, ev) {
     const l = leadAll().find((x) => x.id === id); if (!l) return;
     const hist = leadHistory(l).slice();
-    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text, kind: kind || "", act: act || "" });
+    hist.push({ at: Date.now(), stage: stage || l.stage || "new", by: (sessionUser && sessionUser.email) || "", text: text, kind: kind || "", act: act || "", ev: ev || "" });
     leadUpdate(id, "history", hist);
   }
   // Activity types a rep logs against a lead (Casovil MOM). "" = a plain note.
   const LEAD_ACTS = [
     { key: "", label: "📝 Note", icon: "📝" },
+    { key: "task", label: "✅ Task", icon: "✅" },
+    { key: "call", label: "📞 Call", icon: "📞" },
+    { key: "event", label: "📅 Event", icon: "📅" },
     { key: "meeting", label: "🤝 Meeting", icon: "🤝" },
-    { key: "call", label: "📞 Calling", icon: "📞" },
     { key: "whatsapp", label: "💬 WhatsApp", icon: "💬" },
     { key: "email", label: "✉️ Email", icon: "✉️" },
   ];
   const leadActLabel = (k) => (LEAD_ACTS.find((a) => a.key === (k || "")) || LEAD_ACTS[0]).label;
+  // Event sub-types — shown when the activity is an Event (or Meeting).
+  const LEAD_EVENT_TYPES = ["Face-to-face meeting", "Clinic visit", "Demo", "Conference / expo", "Other"];
   // "Add to timeline" popup — always lets you record an update and, in the same
   // step, set the stage (defaults to the current stage). Choosing Sold reveals
   // the deal value + date. Opened from the row stage dropdown or the ＋ button.
@@ -5481,9 +5485,11 @@
       <h3>Add to timeline — ${esc(l.name || l.company || "lead")}</h3>
       <label class="lead-remark-label">Activity type
         <select id="lrAct" class="select">${LEAD_ACTS.map((a) => `<option value="${a.key}">${esc(a.label)}</option>`).join("")}</select></label>
-      <label class="lead-remark-label">Update / note
-        <textarea id="lrText" rows="3" placeholder="e.g. Called, shared brochure, asked to follow up next week"></textarea></label>
-      <label class="lead-remark-label">🔔 Next follow-up (optional) — set a reminder date
+      <label class="lead-remark-label" id="lrEvWrap" hidden>Event type
+        <select id="lrEv" class="select">${LEAD_EVENT_TYPES.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("")}</select></label>
+      <label class="lead-remark-label">Update / description <span class="lead-req">*</span>
+        <textarea id="lrText" rows="3" placeholder="What happened / what to do next"></textarea></label>
+      <label class="lead-remark-label">🔔 Next task / action date <span class="lead-req">*</span>
         <input id="lrFollow" type="date" value="${esc(l.nextFollowUp || "")}"></label>
       ${canMove ? `<label class="lead-remark-label">Stage (leave as current, or move it)
         <select id="lrStage" class="select">${LEAD_STAGES.map((s) => `<option value="${s.key}"${preStage === s.key ? " selected" : ""}>${esc(s.label)}${s.key === curStage ? " · current" : ""}</option>`).join("")}</select></label>
@@ -5516,21 +5522,27 @@
       document.getElementById("lrDispBox").hidden = v !== "dispatched";
       document.getElementById("lrDelivBox").hidden = v !== "delivered";
     };
+    const actSel = document.getElementById("lrAct");
+    const evWrap = document.getElementById("lrEvWrap");
+    const toggleEv = () => { if (evWrap) evWrap.hidden = !/^(event|meeting)$/.test(actSel ? actSel.value : ""); };
+    if (actSel) actSel.onchange = toggleEv;
+    toggleEv();
     wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
     document.getElementById("lrCancel").onclick = () => { revert(); close(); };
     document.getElementById("lrSave").onclick = () => {
       let text = (document.getElementById("lrText").value || "").trim();
       const act = (document.getElementById("lrAct") || {}).value || "";
+      const evEl = document.getElementById("lrEv");
+      const evWrapEl = document.getElementById("lrEvWrap");
+      const ev = (evWrapEl && !evWrapEl.hidden && evEl) ? (evEl.value || "") : "";
       const followEl = document.getElementById("lrFollow");
       const follow = followEl ? (followEl.value || "").trim() : "";
       const chosen = stageSel ? stageSel.value : curStage;
       const moved = chosen !== curStage;
-      // Setting a follow-up date, logging an activity, or moving the stage each
-      // count as a valid update on their own — a note is only required when
-      // nothing at all is changing.
-      const hasSomething = text || moved || act || (follow !== (l.nextFollowUp || ""));
-      if (!hasSomething) { window.alert("Please enter an update / note, pick an activity, set a follow-up date, or move the stage."); return; }
-      if (!text) text = moved ? ("Moved to " + (LEAD_STAGE_LABEL[chosen] || chosen)) : (act ? leadActLabel(act) : "Follow-up set");
+      // Description and the next task/action date are now mandatory on every
+      // timeline entry (matches Bigin — always record what happened + what next).
+      if (!text) { window.alert("Please enter a description / update."); return; }
+      if (!follow) { window.alert("Please set the next task / action date."); return; }
       // Save / clear the next-follow-up reminder.
       if (follow !== (l.nextFollowUp || "")) leadUpdate(id, "nextFollowUp", follow);
       if (moved && chosen === "sold") {
@@ -5549,7 +5561,7 @@
         leadUpdate(id, "deliveredDate", (document.getElementById("lrDelivDate").value || "").trim() || leadToday());
       }
       if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
-      leadAddHistory(id, chosen, text, "", act);
+      leadAddHistory(id, chosen, text, "", act, ev);
       close(); leadRepaint();
     };
     setTimeout(() => { const t = document.getElementById("lrText"); if (t) t.focus(); }, 0);
