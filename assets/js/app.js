@@ -134,6 +134,7 @@
     { id: "leads", label: "Casovil Sale", group: "Sale", render: renderLeads },
     { id: "leadcal", label: "Calendar", group: "Sale", render: renderLeadCalendar },
     { id: "leadactivity", label: "Activity Board", group: "Sale", render: renderLeadActivity },
+    { id: "casovilhelp", label: "📖 Help & Training", group: "Sale", render: renderCasovilHelp },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
     { id: "weeklySale", label: "Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
@@ -5858,6 +5859,128 @@
       a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
       a.download = fname.replace(/\.xlsx$/, ".csv"); a.click();
     }
+  }
+
+  // ---- Help & Training: full Casovil dashboard guide with examples ----------
+  function renderCasovilHelp() {
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-goto]").forEach((a) => (a.onclick = () => go(a.dataset.goto)));
+    }, 0);
+    const ex = (title, body) => `<div class="help-ex"><div class="help-ex-t">📍 Example — ${title}</div><div class="help-ex-b">${body}</div></div>`;
+    const step = (n, t) => `<div class="df-step"><div class="df-step-n">${n}</div><div class="df-step-body">${t}</div></div>`;
+    return `
+      <div class="section-head">
+        <h1>📖 Casovil Dashboard — Help &amp; Training</h1>
+        <p>Everything you need to run the Casovil sales pipeline, with simple examples. Use this to train new joiners and as a refresher for the team.</p>
+      </div>
+
+      <div class="help-toc">
+        <b>Jump to:</b>
+        <a href="#h-start">Quick start</a> ·
+        <a href="#h-pages">The pages</a> ·
+        <a href="#h-add">Add a lead</a> ·
+        <a href="#h-stages">Pipeline stages</a> ·
+        <a href="#h-activity">Log an activity</a> ·
+        <a href="#h-sold">Sold &amp; dispatch</a> ·
+        <a href="#h-contact">Multiple orders</a> ·
+        <a href="#h-upload">Download/Upload</a> ·
+        <a href="#h-cal">Calendar</a> ·
+        <a href="#h-board">Activity Board</a> ·
+        <a href="#h-rules">Golden rules</a> ·
+        <a href="#h-faq">FAQ</a>
+      </div>
+
+      <div class="help-cards">
+        <div class="help-card help-new"><h3>🙋 New here?</h3><p>Start with the <a href="#h-start">5-minute quick start</a> below, then read <a href="#h-stages">Pipeline stages</a> and <a href="#h-activity">Log an activity</a>. That covers 90% of daily work.</p></div>
+        <div class="help-card help-exist"><h3>🔁 Already using it?</h3><p>What's new: a <b>Calendar</b>, an <b>Activity Board</b>, <b>Task/Event</b> activity types with <b>Event Type</b>, <b>mandatory</b> next-action date + description, and <b>multiple orders per contact</b>. See the sections below.</p></div>
+      </div>
+
+      <h2 class="df-sec" id="h-start">① Quick start (5 minutes)</h2>
+      <div class="df-steps">
+        ${step(1, "Open <a class='linkish' data-goto='leads'>Casovil Sale</a> — this is the lead board. Each card/row is one enquiry (a “lead”).")}
+        ${step(2, "Find your leads: click <b>👤 My leads</b>, or use the search and the Owner / Stage / State filters.")}
+        ${step(3, "Open a lead to see its full detail &amp; history. Use <b>＋ Add update</b> to log what happened (call, meeting, etc.) and set the next action.")}
+        ${step(4, "Move the lead along the pipeline as it progresses — New → Contacted → … → <b>Sold</b> → Dispatched → Delivered.")}
+        ${step(5, "Check the <a class='linkish' data-goto='leadcal'>Calendar</a> every morning for today's follow-ups, and log every call so it shows on the <a class='linkish' data-goto='leadactivity'>Activity Board</a>.")}
+      </div>
+
+      <h2 class="df-sec" id="h-pages">② The pages</h2>
+      <ul class="df-list">
+        <li><b><a class="linkish" data-goto="leads">Casovil Sale</a></b> — the main lead board: add, filter, open and move leads.</li>
+        <li><b><a class="linkish" data-goto="leadcal">Calendar</a></b> — every lead's next task/action date and expected deliveries in a month view + an upcoming/overdue list.</li>
+        <li><b><a class="linkish" data-goto="leadactivity">Activity Board</a></b> — every activity logged across all leads, filter by person &amp; type (e.g. all of one salesperson's calls).</li>
+        <li><b>📖 Help &amp; Training</b> — this page.</li>
+      </ul>
+
+      <h2 class="df-sec" id="h-add">③ Add a lead</h2>
+      <p>On <b>Casovil Sale</b>, click <b>＋ Add lead</b> (or the ＋ button). Fill the contact's name, <b>mobile (required)</b>, salon/clinic, city/state, source, product and owner. Save.</p>
+      ${ex("a new enquiry", "Dr. Meera calls asking about Celluma. Add lead → Name <b>Dr. Meera</b>, Mobile <b>98xxxxxx21</b>, Company <b>Glow Skin Clinic</b>, City <b>Pune</b>, Source <b>Phone</b>, Product <b>Celluma</b>, Owner <b>you</b> → Save. It appears on the board at stage <b>New</b>.")}
+
+      <h2 class="df-sec" id="h-stages">④ Pipeline stages</h2>
+      <p>Move a lead by opening it and choosing a new stage in <b>＋ Add update</b> (you'll always add a note + next action at the same time).</p>
+      <ul class="df-list">
+        <li><b>New</b> → just entered.</li>
+        <li><b>Contacted</b> → you've reached them.</li>
+        <li><b>Actively working / Demo scheduled / Demo done</b> → in progress.</li>
+        <li><b>Negotiation</b> → discussing price/close.</li>
+        <li><b>Sold ✓</b> → order confirmed (enter deal value).</li>
+        <li><b>Dispatched 🚚</b> → machine sent (enter courier + AWB).</li>
+        <li><b>Delivered ✅</b> → received by customer.</li>
+        <li><b>Lost</b> → didn't convert (still kept in the database).</li>
+      </ul>
+
+      <h2 class="df-sec" id="h-activity">⑤ Log an activity (the important one)</h2>
+      <p>Open a lead → <b>＋ Add update</b>. Pick an <b>Activity type</b>: 📝 Note, ✅ Task, 📞 Call, 📅 Event, 🤝 Meeting, 💬 WhatsApp, ✉️ Email. If you pick <b>Event</b> or <b>Meeting</b>, choose an <b>Event type</b> (Face-to-face meeting, Clinic visit, Demo, Conference/expo, Other).</p>
+      <p><b>Two fields are mandatory every time:</b> a <b>Description</b> (what happened / what to do) and the <b>Next task / action date</b>.</p>
+      ${ex("logging a call", "You call Dr. Meera. Open her lead → ＋ Add update → Type <b>📞 Call</b> → Description “<i>Explained Celluma, sending brochure on WhatsApp</i>” → Next action date <b>in 3 days</b> → (optionally move stage to <b>Contacted</b>) → Save. The call now shows in her Journey and on the Activity Board.")}
+      ${ex("a clinic visit", "Type <b>📅 Event</b> → Event type <b>Clinic visit</b> → Description “<i>Visited clinic, demoed Celluma, decision maker interested</i>” → Next action <b>next Monday</b> → stage <b>Demo done</b> → Save.")}
+
+      <h2 class="df-sec" id="h-sold">⑥ Marking Sold, Dispatched &amp; Delivered</h2>
+      <ul class="df-list">
+        <li><b>Sold:</b> move stage to <b>Sold</b> → enter the <b>deal value</b> and date.</li>
+        <li><b>Dispatched:</b> move to <b>Dispatched</b> → enter <b>Courier</b>, <b>AWB/tracking</b>, dispatch date and expected delivery. It auto-moves to <b>Delivered</b> on the expected date (you can confirm sooner).</li>
+        <li>After a lead is <b>Sold</b>, any change (dispatch, AWB, etc.) automatically emails the PO / Admin / Calls team.</li>
+      </ul>
+      ${ex("closing a deal", "Dr. Meera confirms. Open lead → ＋ Add update → stage <b>Sold ✓</b> → Deal value <b>₹1,20,000</b> → Save. Later, move to <b>Dispatched</b> → Courier <b>DTDC</b>, AWB <b>123456</b> → Save. PO/Admin/Calls get an email automatically.")}
+
+      <h2 class="df-sec" id="h-contact">⑦ Same customer, another order (multiple pipelines)</h2>
+      <p>If an existing customer orders a <b>different product</b>, don't overwrite their lead — open a <b>new pipeline under the same contact</b>. Open the existing lead → <b>＋ New order / pipeline for this contact</b>. Contact details are copied; pick the new product and work it like any lead. In the detail you'll see all of that contact's pipelines, and “show all pipelines” merges their activities.</p>
+      ${ex("a repeat order", "Dr. Meera (already has Celluma) now wants an Exofacial. Open her lead → ＋ New order / pipeline → set Product <b>Exofacial</b>. She now has 2 pipelines under one contact; her Journey can show both together.")}
+
+      <h2 class="df-sec" id="h-upload">⑧ Bulk add / edit by Excel (download → edit → upload)</h2>
+      <div class="df-steps">
+        ${step(1, "Click <b>⬇ Download (edit)</b> to get all current leads as Excel (with a <b>Lead ID</b> column and a blank <b>Add Remark</b> column).")}
+        ${step(2, "Edit any cells, add new rows at the bottom (<b>mobile required</b> for new ones), or type a note in <b>Add Remark</b>. Leave the Lead ID blank for brand-new rows.")}
+        ${step(3, "Click <b>⬆ Upload</b> and pick the file. Rows matched by Lead ID (or mobile) are <b>updated</b> (blank cells are left as-is); unmatched rows are <b>added</b>. It reports how many were added vs updated.")}
+        ${step("•", "Use <b>⬇ Template</b> for a blank sheet when adding from scratch.")}
+      </div>
+
+      <h2 class="df-sec" id="h-cal">⑨ Calendar</h2>
+      <p>The <a class="linkish" data-goto="leadcal">Calendar</a> shows each lead's next action date and expected deliveries. Use ◀ ▶ to change month, <b>Today</b> to jump back, and the <b>Owner</b> filter for one person. Below the grid, <b>Overdue actions</b> and the <b>next 21 days</b> are listed — click any item to open the lead.</p>
+
+      <h2 class="df-sec" id="h-board">⑩ Activity Board</h2>
+      <p>The <a class="linkish" data-goto="leadactivity">Activity Board</a> lists every logged activity. Filter <b>Logged by</b> a person and <b>Type</b> to review work.</p>
+      ${ex("tracking a salesperson's calls", "To see all of Ashutosh's calls: Activity Board → Logged by <b>Ashutosh</b> → Type <b>📞 Call</b>. You get every call he logged, with the lead, note and date.")}
+
+      <h2 class="df-sec" id="h-rules">⑪ Golden rules</h2>
+      <ul class="df-list">
+        <li><b>Refresh after an update is announced</b> (Ctrl + Shift + R) and check the footer shows the latest version. An old browser tab can show stale data.</li>
+        <li><b>Log every interaction</b> — a call, visit or message isn't done until it's on the lead's timeline.</li>
+        <li><b>Always set the next action date</b> — it's what drives your Calendar and follow-ups.</li>
+        <li><b>Archive, don't lose</b> — a lead that isn't meaningful is <b>archived</b> (kept in the database, restorable), never deleted.</li>
+        <li><b>One contact, many orders</b> — use a new pipeline for a new product, don't overwrite.</li>
+        <li>Changes save automatically and appear on teammates' screens within a few seconds.</li>
+      </ul>
+
+      <h2 class="df-sec" id="h-faq">⑫ FAQ</h2>
+      <ul class="df-list">
+        <li><b>I can't move a stage / edit.</b> You may have view-only access — ask the admin for edit rights.</li>
+        <li><b>A lead “disappeared”.</b> Check the <b>Archived</b> view (it's kept, not deleted). If genuinely missing, tell the admin with the name &amp; time.</li>
+        <li><b>Call &amp; WhatsApp buttons</b> — open any lead; tap 📞 Call (opens your dialer) or 💬 WhatsApp. Call <i>recording</i> isn't available in the dashboard.</li>
+        <li><b>Two of us edited together — whose wins?</b> Both are kept; the system merges changes per lead, so nothing is lost.</li>
+      </ul>
+
+      <p class="muted-note" style="margin-top:20px">Questions or something unclear? Tell the admin and we'll improve this page.</p>`;
   }
 
   // ---- Calendar: upcoming tasks / next-actions & expected deliveries --------

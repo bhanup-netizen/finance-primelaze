@@ -1301,6 +1301,20 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-sib:hover { border-color: var(--accent); }
 .ld-allact { font-size: 11px; font-weight: 600; color: var(--text-2); margin-left: 8px; white-space: nowrap; }
 .ld-allact input { vertical-align: middle; }
+/* Help & Training page */
+.help-toc { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin: 10px 0 16px; font-size: 13px; line-height: 2; }
+.help-toc a { color: var(--accent); text-decoration: none; }
+.help-toc a:hover { text-decoration: underline; }
+.help-cards { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 4px; }
+.help-card { flex: 1 1 260px; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--surface-2); }
+.help-card h3 { margin: 0 0 6px; font-size: 15px; }
+.help-card p { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.help-new { border-left: 3px solid var(--accent); }
+.help-exist { border-left: 3px solid var(--good); }
+.help-ex { background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; margin: 10px 0; }
+.help-ex-t { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.help-ex-b { font-size: 13px; line-height: 1.55; color: var(--text); }
+.df-sec[id] { scroll-margin-top: 16px; }
 
 /* Lead Calendar */
 .lcal-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
