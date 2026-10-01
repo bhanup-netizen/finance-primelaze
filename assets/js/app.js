@@ -9256,17 +9256,23 @@
         // Skip our own just-saved change (already applied locally).
         if (data.updatedBy && data.updatedBy === by && (Date.now() - (data.updatedAt || 0) < 5000)) return;
         clearTimeout(editsRefreshTimer);
-        editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 400);
+        editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 150);
       }, (err) => console.warn("edits live-sync error", err && err.code));
     } catch (e) { console.warn("edits subscribe failed", e); }
   }
   function applyRemoteEdits(data) {
     // Don't pull data out from under an active edit or a queued save — retry.
+    // Only genuine free-text entry blocks a refresh (re-rendering would lose the
+    // half-typed text / caret). Dropdowns (stage, status, carrier…) and date
+    // pickers commit their value on change, so we let those refresh live — this
+    // is what lets two people see each other's stage/status moves immediately.
     const ae = document.activeElement;
-    const typing = ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || "");
+    const tag = ae && ae.tagName;
+    const typing = tag === "TEXTAREA" ||
+      (tag === "INPUT" && !/^(date|checkbox|radio|button|submit|range)$/i.test(ae.type || "text"));
     const savePending = (typeof saveTimer !== "undefined" && saveTimer) || (typeof weeklyWriteTimer !== "undefined" && weeklyWriteTimer);
     if (typing || savePending) {
-      if (editsRetry++ < 40) { clearTimeout(editsRefreshTimer); editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 1500); }
+      if (editsRetry++ < 80) { clearTimeout(editsRefreshTimer); editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 700); }
       return;
     }
     editsRetry = 0;
@@ -9475,6 +9481,7 @@
     const deptData = JSON.parse(JSON.stringify(weeklyTasks[dept] || { mandatory: [], monthly: [], optional: [] }));
     clearTimeout(weeklyWriteTimer);
     weeklyWriteTimer = setTimeout(async () => {
+      weeklyWriteTimer = null; // pending save now running — don't block live-sync
       const ref = db.collection("edits").doc("overrides");
       try {
         // Merge the server's log so concurrent activity elsewhere isn't lost,
@@ -9603,6 +9610,7 @@
     clearTimeout(saveTimer);
     const desc = (what == null ? "" : String(what)).slice(0, 120);
     saveTimer = setTimeout(async () => {
+      saveTimer = null; // the pending save is now running — clear it so live-sync isn't blocked
       const stock = {}, ordered = {}, orderedOn = {}, damaged = {};
       D.esthemaxOrder.items.forEach((it, i) => {
         if (orderState.stock[i] != null) stock[it.name] = orderState.stock[i];
