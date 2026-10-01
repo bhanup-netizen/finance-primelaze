@@ -1315,6 +1315,9 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .help-ex-t { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
 .help-ex-b { font-size: 13px; line-height: 1.55; color: var(--text); }
 .df-sec[id] { scroll-margin-top: 16px; }
+/* Casovil CRM inner sub-nav */
+.casovil-seg { margin-bottom: 14px; flex-wrap: wrap; }
+.casovil-seg button { font-size: 13px; }
 
 /* Lead Calendar */
 .lcal-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }

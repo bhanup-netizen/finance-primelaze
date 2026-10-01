@@ -55,8 +55,7 @@
     if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
     if (id === "travelpolicy") return roleIsAdmin() || isSuperAdmin(); // travel policy: admin only
     if (id === "demoflow") return canSeePage("demo"); // demo process guide: same access as Demo Machines
-    if (id === "leadcal" || id === "leadactivity") return canSeePage("leads"); // calendar & activity board: same access as Casovil leads
-    if (id === "casovilhelp") return canSeePage("leads"); // Casovil help/training: same access as leads
+    // Calendar, Activity Board and Help are inner views of the "Casovil CRM" (leads) tab.
     if (id === "admin") {
       if (isSuperAdmin() && appMode === "admin") return true; // full user management
       if (isPageAdmin()) return true;                          // scoped page-admin manager
@@ -131,10 +130,7 @@
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
     { id: "weeklyFin", label: "Duties", group: "Finance", render: () => renderWeekly("Finance") },
     // Sale
-    { id: "leads", label: "Casovil Sale", group: "Sale", render: renderLeads },
-    { id: "leadcal", label: "Calendar", group: "Sale", render: renderLeadCalendar },
-    { id: "leadactivity", label: "Activity Board", group: "Sale", render: renderLeadActivity },
-    { id: "casovilhelp", label: "📖 Help & Training", group: "Sale", render: renderCasovilHelp },
+    { id: "leads", label: "Casovil CRM", group: "Sale", render: renderCasovilCRM },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
     { id: "weeklySale", label: "Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
@@ -5861,6 +5857,28 @@
     }
   }
 
+  // ---- Casovil CRM: one tab holding the Leads board, Calendar, Activity Board
+  // and Help & Training as inner views (keeps the Sale nav tidy). --------------
+  let casovilView = "leads"; // leads | calendar | activity | help
+  function casovilRepaint() { go("leads", true); } // re-render current inner view, keep scroll
+  function renderCasovilCRM() {
+    const views = [
+      { k: "leads", label: "🎯 Leads" },
+      { k: "calendar", label: "📅 Calendar" },
+      { k: "activity", label: "🧾 Activity Board" },
+      { k: "help", label: "📖 Help & Training" },
+    ];
+    const body = casovilView === "calendar" ? renderLeadCalendar()
+      : casovilView === "activity" ? renderLeadActivity()
+      : casovilView === "help" ? renderCasovilHelp()
+      : renderLeads();
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-cv]").forEach((b) => (b.onclick = () => { casovilView = b.dataset.cv; go("leads"); }));
+    }, 0);
+    const nav = `<div class="seg casovil-seg">${views.map((v) => `<button type="button" data-cv="${v.k}" class="${casovilView === v.k ? "active" : ""}">${esc(v.label)}</button>`).join("")}</div>`;
+    return nav + body;
+  }
+
   // ---- Help & Training: full Casovil dashboard guide with examples ----------
   function renderCasovilHelp() {
     setTimeout(() => {
@@ -5897,18 +5915,18 @@
 
       <h2 class="df-sec" id="h-start">① Quick start (5 minutes)</h2>
       <div class="df-steps">
-        ${step(1, "Open <a class='linkish' data-goto='leads'>Casovil Sale</a> — this is the lead board. Each card/row is one enquiry (a “lead”).")}
+        ${step(1, "Open <a class='linkish' data-cv='leads'>Casovil Sale</a> — this is the lead board. Each card/row is one enquiry (a “lead”).")}
         ${step(2, "Find your leads: click <b>👤 My leads</b>, or use the search and the Owner / Stage / State filters.")}
         ${step(3, "Open a lead to see its full detail &amp; history. Use <b>＋ Add update</b> to log what happened (call, meeting, etc.) and set the next action.")}
         ${step(4, "Move the lead along the pipeline as it progresses — New → Contacted → … → <b>Sold</b> → Dispatched → Delivered.")}
-        ${step(5, "Check the <a class='linkish' data-goto='leadcal'>Calendar</a> every morning for today's follow-ups, and log every call so it shows on the <a class='linkish' data-goto='leadactivity'>Activity Board</a>.")}
+        ${step(5, "Check the <a class='linkish' data-cv='calendar'>Calendar</a> every morning for today's follow-ups, and log every call so it shows on the <a class='linkish' data-cv='activity'>Activity Board</a>.")}
       </div>
 
       <h2 class="df-sec" id="h-pages">② The pages</h2>
       <ul class="df-list">
-        <li><b><a class="linkish" data-goto="leads">Casovil Sale</a></b> — the main lead board: add, filter, open and move leads.</li>
-        <li><b><a class="linkish" data-goto="leadcal">Calendar</a></b> — every lead's next task/action date and expected deliveries in a month view + an upcoming/overdue list.</li>
-        <li><b><a class="linkish" data-goto="leadactivity">Activity Board</a></b> — every activity logged across all leads, filter by person &amp; type (e.g. all of one salesperson's calls).</li>
+        <li><b><a class="linkish" data-cv="leads">Casovil Sale</a></b> — the main lead board: add, filter, open and move leads.</li>
+        <li><b><a class="linkish" data-cv="calendar">Calendar</a></b> — every lead's next task/action date and expected deliveries in a month view + an upcoming/overdue list.</li>
+        <li><b><a class="linkish" data-cv="activity">Activity Board</a></b> — every activity logged across all leads, filter by person &amp; type (e.g. all of one salesperson's calls).</li>
         <li><b>📖 Help &amp; Training</b> — this page.</li>
       </ul>
 
@@ -5956,10 +5974,10 @@
       </div>
 
       <h2 class="df-sec" id="h-cal">⑨ Calendar</h2>
-      <p>The <a class="linkish" data-goto="leadcal">Calendar</a> shows each lead's next action date and expected deliveries. Use ◀ ▶ to change month, <b>Today</b> to jump back, and the <b>Owner</b> filter for one person. Below the grid, <b>Overdue actions</b> and the <b>next 21 days</b> are listed — click any item to open the lead.</p>
+      <p>The <a class="linkish" data-cv="calendar">Calendar</a> shows each lead's next action date and expected deliveries. Use ◀ ▶ to change month, <b>Today</b> to jump back, and the <b>Owner</b> filter for one person. Below the grid, <b>Overdue actions</b> and the <b>next 21 days</b> are listed — click any item to open the lead.</p>
 
       <h2 class="df-sec" id="h-board">⑩ Activity Board</h2>
-      <p>The <a class="linkish" data-goto="leadactivity">Activity Board</a> lists every logged activity. Filter <b>Logged by</b> a person and <b>Type</b> to review work.</p>
+      <p>The <a class="linkish" data-cv="activity">Activity Board</a> lists every logged activity. Filter <b>Logged by</b> a person and <b>Type</b> to review work.</p>
       ${ex("tracking a salesperson's calls", "To see all of Ashutosh's calls: Activity Board → Logged by <b>Ashutosh</b> → Type <b>📞 Call</b>. You get every call he logged, with the lead, note and date.")}
 
       <h2 class="df-sec" id="h-rules">⑪ Golden rules</h2>
@@ -6039,10 +6057,10 @@
     </li>`;
     setTimeout(() => {
       document.querySelectorAll("#view [data-open]").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.open)));
-      const pv = document.getElementById("lcalPrev"); if (pv) pv.onclick = () => { leadCalYM = { y: m === 0 ? y - 1 : y, m: m === 0 ? 11 : m - 1 }; renderTab("leadcal"); };
-      const nx = document.getElementById("lcalNext"); if (nx) nx.onclick = () => { leadCalYM = { y: m === 11 ? y + 1 : y, m: m === 11 ? 0 : m + 1 }; renderTab("leadcal"); };
-      const td = document.getElementById("lcalToday"); if (td) td.onclick = () => { leadCalYM = { y: now.getFullYear(), m: now.getMonth() }; renderTab("leadcal"); };
-      const ow = document.getElementById("lcalOwner"); if (ow) ow.onchange = (e) => { leadCalOwner = e.target.value; renderTab("leadcal"); };
+      const pv = document.getElementById("lcalPrev"); if (pv) pv.onclick = () => { leadCalYM = { y: m === 0 ? y - 1 : y, m: m === 0 ? 11 : m - 1 }; casovilRepaint(); };
+      const nx = document.getElementById("lcalNext"); if (nx) nx.onclick = () => { leadCalYM = { y: m === 11 ? y + 1 : y, m: m === 11 ? 0 : m + 1 }; casovilRepaint(); };
+      const td = document.getElementById("lcalToday"); if (td) td.onclick = () => { leadCalYM = { y: now.getFullYear(), m: now.getMonth() }; casovilRepaint(); };
+      const ow = document.getElementById("lcalOwner"); if (ow) ow.onchange = (e) => { leadCalOwner = e.target.value; casovilRepaint(); };
     }, 0);
     return `
       <div class="section-head">
@@ -6088,9 +6106,9 @@
     const kpi = LEAD_ACTS.filter((t) => counts[t.key]).map((t) => `<span class="lact-kpi">${esc(t.label)} <b>${counts[t.key]}</b></span>`).join("");
     setTimeout(() => {
       document.querySelectorAll("#view [data-open]").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.open)));
-      const p = document.getElementById("lactPerson"); if (p) p.onchange = (e) => { leadActPerson = e.target.value; renderTab("leadactivity"); };
-      const t = document.getElementById("lactType"); if (t) t.onchange = (e) => { leadActType = e.target.value; renderTab("leadactivity"); };
-      const c = document.getElementById("lactClear"); if (c) c.onclick = () => { leadActPerson = ""; leadActType = ""; renderTab("leadactivity"); };
+      const p = document.getElementById("lactPerson"); if (p) p.onchange = (e) => { leadActPerson = e.target.value; casovilRepaint(); };
+      const t = document.getElementById("lactType"); if (t) t.onchange = (e) => { leadActType = e.target.value; casovilRepaint(); };
+      const c = document.getElementById("lactClear"); if (c) c.onclick = () => { leadActPerson = ""; leadActType = ""; casovilRepaint(); };
     }, 0);
     const body = rows.length
       ? rows.slice(0, 500).map((a) => `<tr>
