@@ -3249,7 +3249,7 @@
         what: "The machine sits in stock as <b>Free</b>. Anyone can see it is available to be requested for a demo." },
       { n: 2, stage: "Request raised & machine prepared", status: free, who: "Vikas",
         what: "When a demo is requested, <b>Vikas</b> prepares the machine and fills in <b>all details</b> on its row — Serial, Salesperson, destination State/Location, and the <b>Booking From / Booking To</b> dates." },
-      { n: 3, stage: "Dispatch", status: transit, who: "Vikas / Mayank",
+      { n: 3, stage: "Dispatch", status: transit, who: "Ayush & Mayank",
         what: "Once the request is confirmed, the machine is dispatched. Select the <b>Carrier</b> (JD Courier / DTDC / Maruti Courier / Carried by Hand / Cab-Taxi-Bus), then set <b>Status → In Transit</b>." },
       { n: 4, stage: "In transit — tracking", status: transit, who: "Mayank & Ayush",
         what: "<b>Mayank & Ayush</b> work closely with the logistics partner and track the shipment until it reaches the salesperson." },
@@ -3304,8 +3304,8 @@
       <div class="df-roles">
         <h2>Who owns which step</h2>
         <ul class="df-list">
-          <li><b>Vikas</b> — prepares the machine & fills all details on request; dispatches; and sets it back to <b>Free</b> when the salesperson releases it.</li>
-          <li><b>Mayank / Vikas</b> — dispatch the machine and set <b>In Transit</b>.</li>
+          <li><b>Vikas</b> — prepares the machine & fills all details on request; and sets it back to <b>Free</b> when the salesperson releases it.</li>
+          <li><b>Ayush & Mayank</b> — dispatch the machine, record the carrier, and set <b>In Transit</b>.</li>
           <li><b>Mayank & Ayush</b> — coordinate with the logistics partner, track delivery, and set <b>Booked</b> once the salesperson receives it.</li>
           <li><b>Salesperson</b> — receives the machine (→ Booked) and later releases it (→ Vikas sets Free).</li>
           <li><b>Avinash</b> — owns <b>service / repair</b>. Anyone can put a machine <b>into</b> service, but only Avinash <b>releases it out of service back to Free</b> once it is ready.</li>
@@ -9304,16 +9304,19 @@
     return t ? t.id : "overview";
   }
 
-  function go(id) {
+  function go(id, keepScroll) {
     let tab = TABS.find((t) => t.id === id);
     if (!tab || !canSeePage(tab.id)) tab = TABS.find((t) => t.id === firstVisibleTab()) || TABS[0];
     currentTab = tab.id;
+    const sy = keepScroll ? (window.scrollY || window.pageYOffset || 0) : 0;
     document.querySelectorAll("#tabs .tab").forEach((b) => b.classList.toggle("active", b.dataset.group === groupOf(tab.id)));
     mountSubTabs();
     $("#view").innerHTML = pageEditNote(tab.id) + tab.render();
     wirePageEditNote();
     enhanceTables();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    // A live-sync refresh keeps the user where they were; a real navigation
+    // jumps to the top.
+    if (keepScroll) window.scrollTo({ top: sy }); else window.scrollTo({ top: 0, behavior: "smooth" });
     if (location.hash.slice(1) !== tab.id) history.replaceState(null, "", "#" + tab.id);
   }
 
@@ -9593,13 +9596,18 @@
     const typing = tag === "TEXTAREA" ||
       (tag === "INPUT" && !/^(date|checkbox|radio|button|submit|range)$/i.test(ae.type || "text"));
     const savePending = saveTimer || weeklyWriteTimer || saveInFlight || weeklyInFlight;
-    if (typing || savePending) {
-      if (editsRetry++ < 80) { clearTimeout(editsRefreshTimer); editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 700); }
+    // A popup/dialog open (add lead, lead detail, remark, move, etc.) means the
+    // user is mid-form — never re-render underneath it (it would close the form
+    // and jump the page). Wait and retry.
+    const modalOpen = !!document.querySelector(".lead-modal, .modal-wrap, dialog[open]");
+    if (typing || savePending || modalOpen) {
+      if (editsRetry++ < 120) { clearTimeout(editsRefreshTimer); editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 700); }
       return;
     }
     editsRetry = 0;
     loadEdits(data).then(() => {
-      try { if (currentTab) renderTab(currentTab); } catch (e) {}
+      // Live refresh keeps the user's scroll position (don't jump to the top).
+      try { if (currentTab) go(currentTab, true); } catch (e) {}
       try { updateLastUpdatedUI(); } catch (e) {}
     }).catch((e) => console.warn("apply remote edits failed", e));
   }
