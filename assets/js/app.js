@@ -55,6 +55,8 @@
     if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
     if (id === "travelpolicy") return roleIsAdmin() || isSuperAdmin(); // travel policy: admin only
     if (id === "demoflow") return canSeePage("demo"); // demo process guide: same access as Demo Machines
+    if (id === "leadcal" || id === "leadactivity") return canSeePage("leads"); // calendar & activity board: same access as Casovil leads
+    if (id === "casovilhelp") return canSeePage("leads"); // Casovil help/training: same access as leads
     if (id === "admin") {
       if (isSuperAdmin() && appMode === "admin") return true; // full user management
       if (isPageAdmin()) return true;                          // scoped page-admin manager
@@ -130,6 +132,8 @@
     { id: "weeklyFin", label: "Duties", group: "Finance", render: () => renderWeekly("Finance") },
     // Sale
     { id: "leads", label: "Casovil Sale", group: "Sale", render: renderLeads },
+    { id: "leadcal", label: "Calendar", group: "Sale", render: renderLeadCalendar },
+    { id: "leadactivity", label: "Activity Board", group: "Sale", render: renderLeadActivity },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
     { id: "weeklySale", label: "Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
@@ -5805,6 +5809,140 @@
       a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
       a.download = fname.replace(/\.xlsx$/, ".csv"); a.click();
     }
+  }
+
+  // ---- Calendar: upcoming tasks / next-actions & expected deliveries --------
+  let leadCalYM = null;      // { y, m } month being shown
+  let leadCalOwner = "";     // owner filter
+  function leadCalItems() {
+    const out = [];
+    leadAll().filter((r) => !leadIsArchived(r.id)).forEach((l) => {
+      if (leadCalOwner && (l.owner || "") !== leadCalOwner) return;
+      if (l.nextFollowUp) out.push({ date: l.nextFollowUp, kind: "task", lead: l });
+      if (l.stage === "dispatched" && l.expDelivDate) out.push({ date: l.expDelivDate, kind: "delivery", lead: l });
+    });
+    return out;
+  }
+  function leadCalChip(it) {
+    const l = it.lead;
+    const cls = it.kind === "delivery" ? "lcal-deliv" : "lst-" + (l.stage || "new");
+    const icon = it.kind === "delivery" ? "🚚" : "🔔";
+    return `<button class="lcal-item ${cls}" data-open="${esc(l.id)}" title="${esc(l.name || l.company || "lead")} — ${it.kind === "delivery" ? "Expected delivery" : "Next action"}">${icon} ${esc(l.name || l.company || l.mobile || "lead")}</button>`;
+  }
+  function renderLeadCalendar() {
+    const now = new Date();
+    if (!leadCalYM) leadCalYM = { y: now.getFullYear(), m: now.getMonth() };
+    const { y, m } = leadCalYM;
+    const items = leadCalItems();
+    const byDate = {};
+    items.forEach((it) => { (byDate[it.date] = byDate[it.date] || []).push(it); });
+    const first = new Date(y, m, 1);
+    const startDow = first.getDay();
+    const dim = new Date(y, m + 1, 0).getDate();
+    const todayStr = leadToday();
+    const pad = (n) => String(n).padStart(2, "0");
+    const dstr = (d) => y + "-" + pad(m + 1) + "-" + pad(d);
+    const monthLabel = first.toLocaleString("en-IN", { month: "long", year: "numeric" });
+    const owners = leadOwners();
+    const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    let cells = wd.map((d) => `<div class="lcal-dow">${d}</div>`).join("");
+    for (let i = 0; i < startDow; i++) cells += `<div class="lcal-cell lcal-blank"></div>`;
+    for (let d = 1; d <= dim; d++) {
+      const ds = dstr(d);
+      const its = byDate[ds] || [];
+      cells += `<div class="lcal-cell${ds === todayStr ? " lcal-today" : ""}">
+        <div class="lcal-dnum">${d}</div>${its.map(leadCalChip).join("")}</div>`;
+    }
+    // Agenda: overdue tasks + everything in the next 21 days.
+    const hz = new Date(todayStr); hz.setDate(hz.getDate() + 21);
+    const hzStr = hz.toISOString().slice(0, 10);
+    const asc = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    const overdue = items.filter((it) => it.kind === "task" && it.date < todayStr).sort(asc);
+    const upcoming = items.filter((it) => it.date >= todayStr && it.date <= hzStr).sort(asc);
+    const agendaRow = (it) => `<li class="lagenda-row ${it.date < todayStr ? "lagenda-over" : ""}">
+      <span class="lagenda-date">${esc(fmtDate(it.date))}</span>
+      <span class="lagenda-kind">${it.kind === "delivery" ? "🚚 Delivery" : "🔔 Next action"}</span>
+      <button class="linkish lagenda-lead" data-open="${esc(it.lead.id)}">${esc(it.lead.name || it.lead.company || it.lead.mobile || "lead")}</button>
+      <span class="lagenda-stage"><span class="lead-stage-tag lst-${it.lead.stage || "new"}">${esc(LEAD_STAGE_LABEL[it.lead.stage || "new"] || "")}</span></span>
+    </li>`;
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-open]").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.open)));
+      const pv = document.getElementById("lcalPrev"); if (pv) pv.onclick = () => { leadCalYM = { y: m === 0 ? y - 1 : y, m: m === 0 ? 11 : m - 1 }; renderTab("leadcal"); };
+      const nx = document.getElementById("lcalNext"); if (nx) nx.onclick = () => { leadCalYM = { y: m === 11 ? y + 1 : y, m: m === 11 ? 0 : m + 1 }; renderTab("leadcal"); };
+      const td = document.getElementById("lcalToday"); if (td) td.onclick = () => { leadCalYM = { y: now.getFullYear(), m: now.getMonth() }; renderTab("leadcal"); };
+      const ow = document.getElementById("lcalOwner"); if (ow) ow.onchange = (e) => { leadCalOwner = e.target.value; renderTab("leadcal"); };
+    }, 0);
+    return `
+      <div class="section-head">
+        <h1>Lead Calendar</h1>
+        <p>Every lead's <b>next task / action date</b> and <b>expected deliveries</b> in one place. Click any item to open the lead. Overdue actions are listed at the top.</p>
+      </div>
+      <div class="controls" style="align-items:center">
+        <button id="lcalPrev" class="ghost-btn" type="button" aria-label="Previous month">◀</button>
+        <b style="min-width:150px;text-align:center">${esc(monthLabel)}</b>
+        <button id="lcalNext" class="ghost-btn" type="button" aria-label="Next month">▶</button>
+        <button id="lcalToday" class="ghost-btn" type="button">Today</button>
+        <label class="ord-field"><span>Owner</span><select id="lcalOwner" class="select"><option value="">All</option>${owners.map((o) => `<option value="${esc(o)}"${o === leadCalOwner ? " selected" : ""}>${esc(spLabel(o))}</option>`).join("")}</select></label>
+      </div>
+      <div class="lcal-scroll"><div class="lcal-grid">${cells}</div></div>
+      <div class="lagenda">
+        ${overdue.length ? `<h2 class="df-sec" style="color:var(--bad)">⚠ Overdue actions (${overdue.length})</h2><ul class="lagenda-list">${overdue.map(agendaRow).join("")}</ul>` : ""}
+        <h2 class="df-sec">Upcoming — next 21 days (${upcoming.length})</h2>
+        ${upcoming.length ? `<ul class="lagenda-list">${upcoming.map(agendaRow).join("")}</ul>` : `<p class="muted-note">Nothing scheduled in the next 21 days.</p>`}
+      </div>`;
+  }
+
+  // ---- Activity Board: every logged activity (calls, meetings, events…) -----
+  let leadActPerson = "", leadActType = "";
+  function leadAllActivities() {
+    const out = [];
+    leadAll().filter((r) => !leadIsArchived(r.id)).forEach((l) => {
+      leadHistory(l).forEach((h) => {
+        if (!h || (!h.act && !h.text && !h.ev)) return;
+        out.push({ at: h.at || 0, act: h.act || "", ev: h.ev || "", text: h.text || "", by: h.by || "", stage: h.stage || l.stage || "new", lead: l });
+      });
+    });
+    out.sort((a, b) => (b.at || 0) - (a.at || 0));
+    return out;
+  }
+  function renderLeadActivity() {
+    const all = leadAllActivities();
+    const people = Array.from(new Set(all.map((a) => a.by).filter(Boolean))).sort();
+    let rows = all;
+    if (leadActPerson) rows = rows.filter((a) => a.by === leadActPerson);
+    if (leadActType) rows = rows.filter((a) => (a.act || "") === leadActType);
+    const counts = {};
+    rows.forEach((a) => { const k = a.act || ""; counts[k] = (counts[k] || 0) + 1; });
+    const kpi = LEAD_ACTS.filter((t) => counts[t.key]).map((t) => `<span class="lact-kpi">${esc(t.label)} <b>${counts[t.key]}</b></span>`).join("");
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-open]").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.open)));
+      const p = document.getElementById("lactPerson"); if (p) p.onchange = (e) => { leadActPerson = e.target.value; renderTab("leadactivity"); };
+      const t = document.getElementById("lactType"); if (t) t.onchange = (e) => { leadActType = e.target.value; renderTab("leadactivity"); };
+      const c = document.getElementById("lactClear"); if (c) c.onclick = () => { leadActPerson = ""; leadActType = ""; renderTab("leadactivity"); };
+    }, 0);
+    const body = rows.length
+      ? rows.slice(0, 500).map((a) => `<tr>
+          <td class="lact-when">${esc(fmtWhen(a.at))}</td>
+          <td>${a.act ? `<span class="lead-act-tag">${esc(leadActLabel(a.act))}</span>` : "—"}${a.ev ? ` <span class="lead-act-tag lead-ev-tag">${esc(a.ev)}</span>` : ""}</td>
+          <td><button class="linkish" data-open="${esc(a.lead.id)}">${esc(a.lead.name || a.lead.company || a.lead.mobile || "lead")}</button></td>
+          <td><span class="lead-stage-tag lst-${a.stage}">${esc(LEAD_STAGE_LABEL[a.stage] || "")}</span></td>
+          <td class="lact-by">${esc(a.by || "—")}</td>
+          <td class="lact-note">${esc(a.text || "")}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="6" class="muted" style="text-align:center;padding:18px">No activities match this filter.</td></tr>`;
+    return `
+      <div class="section-head">
+        <h1>Activity Board</h1>
+        <p>Every activity logged across all leads — calls, meetings, events, tasks and notes. Filter by person to see, for example, all of a salesperson's calls. Click a lead to open it.</p>
+      </div>
+      <div class="controls">
+        <label class="ord-field"><span>Logged by</span><select id="lactPerson" class="select"><option value="">Everyone</option>${people.map((p) => `<option value="${esc(p)}"${p === leadActPerson ? " selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Type</span><select id="lactType" class="select"><option value="">All types</option>${LEAD_ACTS.filter((a) => a.key).map((a) => `<option value="${a.key}"${a.key === leadActType ? " selected" : ""}>${esc(a.label)}</option>`).join("")}</select></label>
+        ${(leadActPerson || leadActType) ? `<button id="lactClear" class="ghost-btn" type="button">✕ Clear</button>` : ""}
+      </div>
+      ${kpi ? `<div class="lact-kpis">${kpi}</div>` : ""}
+      <p class="muted-note">${rows.length} activit${rows.length === 1 ? "y" : "ies"}${rows.length > 500 ? " (showing latest 500)" : ""}.</p>
+      ${table(`<th>When</th><th>Type</th><th>Lead</th><th>Stage</th><th>Logged by</th><th>Note</th>`, body)}`;
   }
 
   function renderLeads() {
