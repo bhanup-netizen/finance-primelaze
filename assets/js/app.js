@@ -9270,7 +9270,7 @@
     const tag = ae && ae.tagName;
     const typing = tag === "TEXTAREA" ||
       (tag === "INPUT" && !/^(date|checkbox|radio|button|submit|range)$/i.test(ae.type || "text"));
-    const savePending = (typeof saveTimer !== "undefined" && saveTimer) || (typeof weeklyWriteTimer !== "undefined" && weeklyWriteTimer);
+    const savePending = saveTimer || weeklyWriteTimer || saveInFlight || weeklyInFlight;
     if (typing || savePending) {
       if (editsRetry++ < 80) { clearTimeout(editsRefreshTimer); editsRefreshTimer = setTimeout(() => applyRemoteEdits(data), 700); }
       return;
@@ -9466,6 +9466,7 @@
   // single source of truth (loadEdits reads weeklyTasks), and other areas no
   // longer write the weeklyTasks field at all, so nothing can overwrite it.
   let weeklyWriteTimer = null;
+  let weeklyInFlight = false;
   function saveWeekly(dept, what) {
     if (!db || !(roleIsAdmin() || hasAnyEditGrant())) return;
     const desc = String(what == null ? "" : what).slice(0, 120);
@@ -9482,6 +9483,7 @@
     clearTimeout(weeklyWriteTimer);
     weeklyWriteTimer = setTimeout(async () => {
       weeklyWriteTimer = null; // pending save now running — don't block live-sync
+      weeklyInFlight = true;
       const ref = db.collection("edits").doc("overrides");
       try {
         // Merge the server's log so concurrent activity elsewhere isn't lost,
@@ -9511,6 +9513,8 @@
         console.warn("weekly save failed", e);
         toast("✕ NOT saved: " + reason, "bad");
         window.alert("⚠ Weekly duty NOT saved.\n\nExact error: " + reason);
+      } finally {
+        weeklyInFlight = false;
       }
     }, 0);
   }
@@ -9605,12 +9609,14 @@
   }
 
   let saveTimer = null;
+  let saveInFlight = false; // true only while the debounced save is actually running
   function saveEdits(what, immediate) {
     if (!db || !(roleIsAdmin() || hasAnyEditGrant() || canSeePage("leads"))) return;
     clearTimeout(saveTimer);
     const desc = (what == null ? "" : String(what)).slice(0, 120);
     saveTimer = setTimeout(async () => {
       saveTimer = null; // the pending save is now running — clear it so live-sync isn't blocked
+      saveInFlight = true; // but block a remote loadEdits from wiping local state mid-save
       const stock = {}, ordered = {}, orderedOn = {}, damaged = {};
       D.esthemaxOrder.items.forEach((it, i) => {
         if (orderState.stock[i] != null) stock[it.name] = orderState.stock[i];
@@ -9806,6 +9812,8 @@
           saveErrorShown = true;
           window.alert("⚠ Your change was NOT saved to the database.\n\nExact error: " + reason + "\n\nIt shows on your screen but has not stored, so it will disappear on reload.\n\nPlease send this exact error text to the admin.");
         }
+      } finally {
+        saveInFlight = false;
       }
     }, immediate ? 0 : 800);
   }
