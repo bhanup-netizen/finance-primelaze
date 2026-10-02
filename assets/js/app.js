@@ -2739,16 +2739,15 @@
       const o1u = c.o1p + c.o1f, o2u = c.o2p + c.o2f;
       const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
       const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
-      const head = ["Product", "Listed MRP", "Selling MRP (+" + c.hike + "%)", (M.discountLabel || "Extra unit") + " (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u"]
+      const head = ["Product", "MRP", "Per unit (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u"]
         .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
       const grp = (g) => {
         const body = g.rows.map((r) => {
-          const listed = r[2];
-          const mrp = listed * hikeF;
-          const disc = mrp * (1 - c.disc / 100);
+          const mrp = r[2] * hikeF;                 // selling MRP (listed + hike)
+          const single = mrp * (1 - c.disc / 100);  // single-unit / between-offers price
           const e1 = o1u ? mrp * c.o1p / o1u : mrp;
           const e2 = o2u ? mrp * c.o2p / o2u : mrp;
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${rup(listed)}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(disc)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td></tr>`;
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(single)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td></tr>`;
         }).join("");
         return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
@@ -2764,8 +2763,9 @@
             ["Product", "MRP (₹)"].map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join(""),
             EP.accessories.map((a) => `<tr><td class="t-name">${esc(a[0])}</td><td class="num">${rup(a[1])}</td></tr>`).join(""))}</div>`
         : "";
+      const tierNote = `<b>How quantity pricing works:</b> units <b>1–${c.o1p - 1}</b> are at <b>${c.disc}% off</b> each. At the <b>${c.o1p}th</b> unit the <b>${lbl1}</b> offer activates (buy ${c.o1p}, get ${c.o1f} free). Units beyond it are ${c.disc}% off each, until the <b>${c.o2p}th</b> unit where the <b>${lbl2}</b> offer activates (buy ${c.o2p}, get ${c.o2f} free).`;
       return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box, incl. 18% GST)</span></h2>
-        <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${panel}${M.groups.map(grp).join("")}${accBlock}`;
+        <div class="callout" style="margin-top:6px">${esc(M.note || "")}<br>${tierNote}</div></div>${panel}${M.groups.map(grp).join("")}${accBlock}`;
     };
     // ---- Machines / devices (₹ Lakhs) ----
     const machinesBlock = () => {
@@ -2922,9 +2922,23 @@
       };
       return `${assume}${mktTable("salon")}${mktTable("doctor")}`;
     };
+    // Operation cost = company expense ÷ items sold, per item. Add on top of the
+    // landing cost to get the total cost per item. Inputs are saved (super admin).
+    const opCostBlock = () => {
+      const emp = +costing.empExpMonth || 0;
+      const units = +costing.unitsMonth || 0;
+      const perItem = units > 0 ? emp / units : 0;
+      return `<div class="block" style="margin-top:18px"><h2 style="margin:0 0 6px">🧮 Operation cost</h2>
+        <div class="controls cprice-calc">
+          <label class="ord-field"><span>Company expense (₹ / month)</span><input class="cost-in" data-f="empExpMonth" type="number" min="0" value="${esc(emp)}"></label>
+          <label class="ord-field"><span>Items sold (/ month)</span><input class="cost-in" data-f="unitsMonth" type="number" min="0" value="${esc(units)}"></label>
+        </div>
+        <div class="stat-row" style="margin-top:10px"><div class="stat k-warn"><b>${perItem ? "₹" + inr(Math.round(perItem)) : "—"}</b><span>Operation cost / item</span></div></div>
+        <p class="muted-note">Operation cost per item = company expense ÷ items sold. Add this to a product's <b>Landing</b> cost above to get its total cost per item.</p></div>`;
+    };
     // Landing Cost tab = the Esthemax cost side (factory → landing) + accessories
-    // cost. Shared by both markets. No factory PO / allocation calculator here.
-    const landingCostBlock = () => costStructureBlock({ accessories: true, po: false });
+    // cost + the operation-cost calculator. Shared by both markets. No factory PO.
+    const landingCostBlock = () => costStructureBlock({ accessories: true, po: false }) + opCostBlock();
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="landing" class="${cprTab === "landing" ? "active" : ""}">🧴 Landing Cost</button>
       <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>

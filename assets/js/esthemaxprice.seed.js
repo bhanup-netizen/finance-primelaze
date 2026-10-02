@@ -185,23 +185,16 @@ window.ESTHEMAX_PRICE_SEED = {
     },
   ],
   accessories: [
-    // [Product, MRP ₹, Factory $ per unit] — utensil factory prices from the PO
-    // (uniform across colours: Mixing Bowl $4.40, Spatula $1.25, Measuring Cup/Scoop $0.66).
-    ["Rolling Cryo Globes — Pink", 11500, null],
-    ["Rolling Cryo Globes — White", 11500, null],
+    // [Product, MRP ₹, Factory $ per unit] — colour variants share one price, so
+    // each item is a single row ("any colour"). Factory ($) from the PO: Mixing
+    // Bowl $4.40, Spatula $1.25, Measuring Cup/Scoop $0.66.
+    ["Rolling Cryo Globes (any colour)", 11500, null],
     ["Natural Sponge", 6900, null],
     ["Brush", 517.5, null],
     ["Silicone Brush", 690, null],
-    ["Mixing Bowl — White", 1725, 4.40],
-    ["Mixing Bowl — Hot Pink", 1725, 4.40],
-    ["Mixing Bowl — Neon Green", 1725, 4.40],
-    ["Mixing Bowl — Gold", 1725, 4.40],
-    ["Spatula — White", 517.5, 1.25],
-    ["Spatula — Hot Pink", 517.5, 1.25],
-    ["Spatula — Neon Green", 517.5, 1.25],
-    ["Spatula — Gold", 517.5, 1.25],
-    ["Small Spatula — Cream", 230, null],
-    ["Small Spatula — Pink", 230, null],
+    ["Mixing Bowl (any colour)", 1725, 4.40],
+    ["Spatula (any colour)", 517.5, 1.25],
+    ["Small Spatula (any colour)", 230, null],
     ["Measuring Cup", 230, 0.66],
     ["5g Scoop", 115, 0.66],
     ["Rose Quartz Eye Mask — Hydrojelly Mask", 11500, null],
