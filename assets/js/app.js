@@ -2721,7 +2721,7 @@
         if (/^(o1p|o2p)$/.test(el.dataset.f)) v = Math.max(1, Math.round(v));
         if (/^(o1f|o2f)$/.test(el.dataset.f)) v = Math.round(v);
         costing[el.dataset.f] = v;
-        saveEdits("Costing assumptions"); renderTab("companyprice");
+        saveEdits("Costing assumptions"); go("companyprice", true);
       }));
       document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
         const [mid, f] = String(el.dataset.ecalc).split(":");
@@ -2729,7 +2729,7 @@
         if (/p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
         else if (/f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
         (esthPricingOv[mid] = esthPricingOv[mid] || {})[f] = v;
-        saveEdits("Esthemax " + mid + " pricing"); renderTab("companyprice");
+        saveEdits("Esthemax " + mid + " pricing"); go("companyprice", true);
       }));
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) with a live calculator --
