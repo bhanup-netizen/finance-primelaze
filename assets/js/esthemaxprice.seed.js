@@ -58,21 +58,21 @@ window.ESTHEMAX_PRICE_SEED = {
         },
         {
           id: "retail", title: "Retail Hydrojelly Mask", pack: "2 masks / box", rows: [
-            [1, "Antioxidant Goji", 5550],
-            [2, "Super Greens Strength", 5550],
-            [3, "Brightening Complex", 5550],
-            [4, "Egyptian Rose", 5550],
-            [5, "Intensive Aftercare", 5250],
-            [6, "Hyaluronic Acid", 5250],
-            [7, "Cica Complex", 5250],
-            [8, "Illuminating Orange", 5550],
-            [9, "Phyto Nutrients", 5250],
-            [10, "Skin Warrior Ageless", 5250],
-            [11, "Purifying Charcoal", 5550],
+            [1, "Antioxidant Goji", 7500],
+            [2, "Super Greens Strength", 7500],
+            [3, "Brightening Complex", 7500],
+            [4, "Egyptian Rose", 7500],
+            [5, "Intensive Aftercare", 7500],
+            [6, "Hyaluronic Acid", 7500],
+            [7, "Cica Complex", 7500],
+            [8, "Illuminating Orange", 7500],
+            [9, "Phyto Nutrients", 7500],
+            [10, "Skin Warrior Ageless", 7500],
+            [11, "Purifying Charcoal", 7500],
           ],
         },
         {
-          id: "foot", title: "Foot Mask", pack: "5 pairs / pack", rows: [
+          id: "foot", title: "Foot Mask", pack: "5 pairs / pack", priceMode: "target", rows: [
             [1, "Collagen Foot Mask", 14950],
           ],
         },
@@ -115,21 +115,21 @@ window.ESTHEMAX_PRICE_SEED = {
         },
         {
           id: "retail", title: "Retail Hydrojelly Mask", pack: "2 masks / box", rows: [
-            [1, "Antioxidant Goji", 5550],
-            [2, "Super Greens Strength", 5550],
-            [3, "Brightening Complex", 5550],
-            [4, "Egyptian Rose", 5550],
-            [5, "Intensive Aftercare", 5250],
-            [6, "Hyaluronic Acid", 5250],
-            [7, "Cica Complex", 5250],
-            [8, "Illuminating Orange", 5550],
-            [9, "Phyto Nutrients", 5250],
-            [10, "Skin Warrior Ageless", 5250],
-            [11, "Purifying Charcoal", 5550],
+            [1, "Antioxidant Goji", 7500],
+            [2, "Super Greens Strength", 7500],
+            [3, "Brightening Complex", 7500],
+            [4, "Egyptian Rose", 7500],
+            [5, "Intensive Aftercare", 7500],
+            [6, "Hyaluronic Acid", 7500],
+            [7, "Cica Complex", 7500],
+            [8, "Illuminating Orange", 7500],
+            [9, "Phyto Nutrients", 7500],
+            [10, "Skin Warrior Ageless", 7500],
+            [11, "Purifying Charcoal", 7500],
           ],
         },
         {
-          id: "foot", title: "Foot Mask", pack: "5 pairs / pack", rows: [
+          id: "foot", title: "Foot Mask", pack: "5 pairs / pack", priceMode: "target", rows: [
             [1, "Collagen Foot Mask", 14950],
           ],
         },
@@ -179,26 +179,35 @@ window.ESTHEMAX_PRICE_SEED = {
       ],
     },
     {
-      id: "foot", title: "Foot Mask", pack: "5 pairs / pack", rows: [
+      id: "foot", title: "Foot Mask", pack: "5 pairs / pack", priceMode: "target", rows: [
         [1, "Collagen Foot Mask", 55.1, 5344.7, 2351.67, 267.24, 7963.6, null, null, null, 14950],
       ],
     },
   ],
   accessories: [
-    // [Product, MRP ₹, Factory $ per unit] — colour variants share one price, so
-    // each item is a single row ("any colour"). Factory ($) from the PO: Mixing
-    // Bowl $4.40, Spatula $1.25, Measuring Cup/Scoop $0.66.
-    ["Rolling Cryo Globes (any colour)", 11500, null],
-    ["Natural Sponge", 6900, null],
-    ["Brush", 517.5, null],
-    ["Silicone Brush", 690, null],
-    ["Mixing Bowl (any colour)", 1725, 4.40],
-    ["Spatula (any colour)", 517.5, 1.25],
-    ["Small Spatula (any colour)", 230, null],
-    ["Measuring Cup", 230, 0.66],
-    ["5g Scoop", 115, 0.66],
-    ["Rose Quartz Eye Mask — Hydrojelly Mask", 11500, null],
-    ["Rose Quartz Full Face Mask — Hydrojelly Mask", 28750, null],
+    // [Product, MRP ₹ (null = priced to target margin), Factory $ per unit].
+    // Colour variants share one price, so each is a single "any colour" row.
+    // Accessories are priced to the target margins from their landing cost.
+    ["Ampoule Caps (10 caps)", null, 2.50],
+    ["Enzyme Activator", null, 4.40],
+    ["Esthepro Cryo Globes", null, 20.50],
+    ["Rolling Cryo Globes (any colour)", null, 27.50],
+    ["24K Gold Plated Derma Stamp (12 stamps)", null, 82.50],
+    ["5g Scoop for Enzyme Powder", null, 0.22],
+    ["Natural Sponge (50 counts)", null, 17.60],
+    ["Brush", null, 1.35],
+    ["Silicone Brush", null, 1.85],
+    ["Spa Utensils Organizer", null, 9.30],
+    ["Fan Brush", null, 3.50],
+    ["Volume Fan Brush", null, 4.95],
+    ["Gauze (A4 / 100)", null, 6.00],
+    ["Turban", null, 6.00],
+    ["Mixing Bowl (any colour)", null, 4.40],
+    ["Spatula (any colour)", null, 1.25],
+    ["Small Spatula (any colour)", null, 0.66],
+    ["Measuring Cup", null, 0.66],
+    ["Rose Quartz Eye Mask", null, 29.70],
+    ["Rose Quartz Face Mask", null, 66.00],
   ],
   purchaseOrders: [
     {

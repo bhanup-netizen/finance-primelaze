@@ -2755,15 +2755,16 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      // Operation cost per box = average (expense ÷ boxes) WEIGHTED by product
-      // value (listed MRP), so a ₹115 scoop ≠ a ₹28,750 item.
-      const vals = [];
-      (M.groups || []).forEach((g) => (g.rows || []).forEach((r) => vals.push(r[2])));
-      (EP.accessories || []).forEach((a) => vals.push(a[1]));
-      const avgVal = vals.length ? vals.reduce((s, x) => s + x, 0) / vals.length : 0;
-      const opCostFor = (val) => avgVal > 0 ? opCost * (val / avgVal) : opCost;
-      const costOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(r[2]) + inc + extra) : null; };
-      // Tiers price off the LISTED MRP: single = MRP − disc%; offers = MRP × buy/(buy+free).
+      // Operation cost per box = average (expense ÷ boxes) WEIGHTED by each
+      // product's landing cost, so a cheap item carries far less than a premium
+      // one (works for accessories that have no MRP).
+      const lands = [];
+      (M.groups || []).forEach((g) => (g.rows || []).forEach((r) => { const l = landingOf(r[1]); if (l != null) lands.push(l); }));
+      (EP.accessories || []).forEach((a) => { const l = landingOf(a[0]); if (l != null) lands.push(l); });
+      const avgLand = lands.length ? lands.reduce((s, x) => s + x, 0) / lands.length : 0;
+      const opCostFor = (land) => avgLand > 0 ? opCost * (land / avgLand) : opCost;
+      const costOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land) + inc + extra) : null; };
+      // Tiers: single = MRP − disc% (or target-priced); offers = MRP × buy/(buy+free).
       const tiers = [
         { label: "1 unit", frac: 1 - c.disc / 100, tgt: +c.tmSingle || 0 },
         { label: lbl1, frac: o1u ? c.o1p / o1u : 1, tgt: +c.tm1 || 0 },
@@ -2778,13 +2779,18 @@
         return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:${col}">${m.toFixed(1)}%</div></td>`;
       };
       const grp = (g) => {
+        const target = g.priceMode === "target"; // foot mask & accessories: price to target margin
         const body = g.rows.map((r) => {
-          const mrp = r[2];           // listed MRP — same for both markets, not hiked
           const cost = costOf(r);
-          const cells = tiers.map((t) => tierCell(mrp * t.frac, cost, t.tgt)).join("");
+          const mrp = target ? (cost != null ? cost / (1 - (tiers[0].tgt) / 100) : null) : r[2];
+          const cells = tiers.map((t) => {
+            const price = target ? (cost != null && t.tgt < 100 ? cost / (1 - t.tgt / 100) : null) : mrp * t.frac;
+            return tierCell(price, cost, t.tgt);
+          }).join("");
           return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num t-muted">${rup(cost)}</td>${cells}</tr>`;
         }).join("");
-        return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+        const tag = target ? ` <span class="t-muted" style="font-size:11px">· priced to target margin</span>` : "";
+        return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span>${tag}</h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
       const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
       const cnum = (f, val) => `<input class="cost-in" data-f="${f}" type="number" min="0" value="${esc(val)}">`;
@@ -2805,9 +2811,9 @@
         <label class="ord-field"><span>Target margin — ${esc(lbl1)} %</span>${num("tm1", c.tm1)}</label>
         <label class="ord-field"><span>Target margin — ${esc(lbl2)} %</span>${num("tm2", c.tm2)}</label>
       </div>
-      <p class="muted-note" style="margin:4px 0 0"><b>MRP is the listed price — the same for Saloon &amp; Derma (not hiked).</b> 1 box = MRP − ${c.disc}% ; ${esc(lbl1)} &amp; ${esc(lbl2)} are the buy+free offers. <b>Cost/box = Landing + Operation cost + Incentive + Other (₹${inr(Math.round(extra))}).</b> Each cell shows ₹/box and its <b>margin</b>, coloured <span style="color:var(--good);font-weight:700">green</span> at/above target, <span style="color:var(--warn);font-weight:700">amber</span> below, <span style="color:var(--bad);font-weight:700">red</span> at a loss. Targets are a guide — adjust the discount/offers to move the margin. Company expense &amp; boxes are shared with ${esc(mid === "salon" ? "Derma" : "Saloon")}.</p>`;
+      <p class="muted-note" style="margin:4px 0 0"><b>MRP is the listed price — the same for Saloon &amp; Derma (not hiked).</b> 1 box = MRP − ${c.disc}% ; ${esc(lbl1)} &amp; ${esc(lbl2)} are the buy+free offers. <b>Cost/box = Landing + Operation cost + Incentive + Other (₹${inr(Math.round(extra))}).</b> Each cell shows ₹/box and its <b>margin</b>, coloured <span style="color:var(--good);font-weight:700">green</span> at/above target, <span style="color:var(--warn);font-weight:700">amber</span> below, <span style="color:var(--bad);font-weight:700">red</span> at a loss. For the masks (MRP set) targets are a guide — adjust the discount/offers to move the margin. <b>Foot Mask &amp; Accessories have no fixed MRP, so they are priced to the target margins</b> (price = cost ÷ (1 − margin%)) and land exactly on them. Company expense &amp; boxes are shared with ${esc(mid === "salon" ? "Derma" : "Saloon")}.</p>`;
       const accG = Array.isArray(EP.accessories) && EP.accessories.length
-        ? { title: "Accessories", pack: "per unit", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
+        ? { title: "Accessories", pack: "per unit", priceMode: "target", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
         : null;
       const allGroups = M.groups.concat(accG ? [accG] : []);
       return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · MRP same for both markets)</span></h2>
