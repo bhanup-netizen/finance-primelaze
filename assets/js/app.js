@@ -2753,7 +2753,15 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const head = ["Product", "MRP", "Per unit (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u", "Landing", "Profit / box"]
+      // Operation cost is WEIGHTED by each product's selling price, so a cheap
+      // item carries far less of it than an expensive one (not a flat per-box
+      // amount). opCost/box is the average; a product bears opCost × MRP/avgMRP.
+      const allMrp = [];
+      (M.groups || []).forEach((g) => (g.rows || []).forEach((r) => allMrp.push(r[2] * hikeF)));
+      (EP.accessories || []).forEach((a) => allMrp.push(a[1] * hikeF));
+      const avgMrp = allMrp.length ? allMrp.reduce((s, x) => s + x, 0) / allMrp.length : 0;
+      const opCostFor = (mrp) => avgMrp > 0 ? opCost * (mrp / avgMrp) : opCost;
+      const head = ["Product", "MRP", "Per unit (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u", "Landing", "Op. cost", "Profit / box", "Margin"]
         .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
       const grp = (g) => {
         const body = g.rows.map((r) => {
@@ -2762,9 +2770,12 @@
           const e1 = o1u ? mrp * c.o1p / o1u : mrp;
           const e2 = o2u ? mrp * c.o2p / o2u : mrp;
           const land = landingOf(r[1]);
-          const profit = land != null ? (mrp - land - opCost - inc) : null;
-          const profCls = profit != null && profit < 0 ? " style=\"color:var(--bad)\"" : "";
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(single)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td><td class="num t-muted">${rup(land)}</td><td class="num"${profCls}>${rup(profit)}</td></tr>`;
+          const opc = opCostFor(mrp);
+          const profit = land != null ? (mrp - land - opc - inc) : null;
+          const margin = (profit != null && mrp > 0) ? (profit / mrp * 100) : null;
+          const neg = profit != null && profit < 0;
+          const profCls = neg ? " style=\"color:var(--bad)\"" : "";
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(single)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td><td class="num t-muted">${rup(land)}</td><td class="num t-muted">${land != null ? rup(opc) : "—"}</td><td class="num"${profCls}>${rup(profit)}</td><td class="num"${profCls}>${margin != null ? margin.toFixed(1) + "%" : "—"}</td></tr>`;
         }).join("");
         return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
@@ -2782,7 +2793,7 @@
         <label class="ord-field"><span>Incentive per box (₹)</span>${num("inc", inc)}</label>
         <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? "₹" + inr(Math.round(opCost)) : "—"}</div></div>
       </div>
-      <p class="muted-note" style="margin:4px 0 0">Operation cost/box = company expense ÷ boxes. <b>Profit/box = MRP − Landing − Operation cost − Incentive</b> (at full MRP; red = loss). Company expense &amp; boxes are shared with Derma; incentive is per market.</p>`;
+      <p class="muted-note" style="margin:4px 0 0">Operation cost/box = company expense ÷ boxes (the average), then <b>weighted by each product's price</b> — a cheaper item carries less, a premium item more. <b>Profit/box = MRP − Landing − Operation cost − Incentive</b> and <b>Margin = Profit ÷ MRP</b> (at full MRP; red = loss). Company expense &amp; boxes are shared with ${esc(mid === "salon" ? "Derma" : "Saloon")}; incentive is per market.</p>`;
       // Accessories through the SAME price table (MRP + per-unit + offers) so the
       // full selling price shows in Saloon & Derma, just like the masks.
       const accBlock = Array.isArray(EP.accessories) && EP.accessories.length
