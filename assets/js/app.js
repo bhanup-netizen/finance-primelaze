@@ -2689,24 +2689,21 @@
   let cprTab = "saloon"; // Company Price sub-tab: landing | saloon | derma | machines | celluma
   // Costing assumptions (editable, saved to the shared doc; super admin only).
   const costing = { empExpMonth: 3000000, allocMachine: 60, allocCelluma: 10, allocEsth: 30, profitPct: 30, unitsMonth: 0, o1p: 10, o1f: 4, o2p: 10, o2f: 2 };
-  // Per-market Esthemax pricing calculator — saved overrides on top of the seed
-  // defaults: { salon:{hike,disc,o1p,o1f,o2p,o2f}, doctor:{…} }. Super admin edits
-  // the hike %, extra-unit discount % and the two offers live on each market tab.
+  // Per-market, PER-SECTION Esthemax pricing calculator — saved overrides:
+  // { salon: { hydro:{…}, retail:{…}, foot:{…}, acc:{…} }, doctor:{…} }.
+  // Each section has its own incentive, other cost, bulk tiers and 3 target margins.
   const esthPricingOv = {};
-  function esthCalc(mid) {
-    const M = ((window.ESTHEMAX_PRICE_SEED || {}).markets || {})[mid] || {};
-    const o = M.offers || [];
+  function esthCalc(mid, gid) {
     const base = {
-      hike: +M.mrpHikePct || 0, disc: +M.discountPct || 0,
-      o1p: (o[0] && o[0].p) || 5, o1f: (o[0] && o[0].f != null ? o[0].f : 1),
-      o2p: (o[1] && o[1].p) || 10, o2f: (o[1] && o[1].f != null ? o[1].f : 3),
+      o1p: 5, o1f: 1, o2p: 10, o2f: 3,
       inc: 0,        // incentive per box (₹)
       extra: 300,    // other cost per box (₹)
       tmSingle: 50,  // target margin % — single unit
-      tm1: 40,       // target margin % — offer 1 (5+1)
-      tm2: 30,       // target margin % — offer 2 (10+3)
+      tm1: 40,       // target margin % — bulk tier 1
+      tm2: 30,       // target margin % — bulk tier 2
     };
-    return Object.assign(base, esthPricingOv[mid] || {});
+    const mv = esthPricingOv[mid];
+    return Object.assign(base, (mv && mv[gid]) || {});
   }
   function renderCompanyPrice() {
     if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
@@ -2724,12 +2721,13 @@
         saveEdits("Costing assumptions"); go("companyprice", true);
       }));
       document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
-        const [mid, f] = String(el.dataset.ecalc).split(":");
+        const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
         let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
         if (/p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
         else if (/f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
-        (esthPricingOv[mid] = esthPricingOv[mid] || {})[f] = v;
-        saveEdits("Esthemax " + mid + " pricing"); go("companyprice", true);
+        const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
+        (mv[gid] = mv[gid] || {})[f] = v;
+        saveEdits("Esthemax " + mid + " " + gid + " pricing"); go("companyprice", true);
       }));
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) — MRP-driven ------------
@@ -2740,12 +2738,8 @@
       const EP = window.ESTHEMAX_PRICE_SEED || {};
       const M = EP.markets && EP.markets[mid];
       if (!M || !Array.isArray(M.groups)) return `<p class="empty">No ${esc(mid)} price list loaded.</p>`;
-      const c = esthCalc(mid);
-      const o1u = c.o1p + c.o1f, o2u = c.o2p + c.o2f;
-      const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
       const exp = +costing.empExpMonth || 0, boxes = +costing.unitsMonth || 0;
       const opCost = boxes > 0 ? exp / boxes : 0;
-      const inc = +c.inc || 0, extra = +c.extra || 0;
       const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
       const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
       const landingByName = {};
@@ -2756,63 +2750,64 @@
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
       // Operation cost per box = average (expense ÷ boxes) WEIGHTED by each
-      // product's landing cost, so a cheap item carries far less than a premium
-      // one (works for accessories that have no MRP).
+      // product's landing cost. opCost & the weighting are company-wide.
       const lands = [];
       (M.groups || []).forEach((g) => (g.rows || []).forEach((r) => { const l = landingOf(r[1]); if (l != null) lands.push(l); }));
       (EP.accessories || []).forEach((a) => { const l = landingOf(a[0]); if (l != null) lands.push(l); });
       const avgLand = lands.length ? lands.reduce((s, x) => s + x, 0) / lands.length : 0;
       const opCostFor = (land) => avgLand > 0 ? opCost * (land / avgLand) : opCost;
-      const costOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land) + inc + extra) : null; };
-      // EVERYTHING is priced to its target margin: price = cost ÷ (1 − margin%).
-      // The listed MRP is shown only as a reference (may be blank for accessories).
-      const tiers = [
-        { label: "1 unit", tgt: +c.tmSingle || 0 },
-        { label: lbl1, tgt: +c.tm1 || 0 },
-        { label: lbl2, tgt: +c.tm2 || 0 },
-      ];
-      const head = ["Product", "MRP (ref)", "Cost / box"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
-        .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
       const tierCell = (price, cost, tgt) => {
         if (cost == null || price == null) return `<td class="num">—</td>`;
         const m = price > 0 ? (price - cost) / price * 100 : 0;
         const col = m < 0 ? "var(--bad)" : (m + 0.05 >= tgt ? "var(--good)" : "var(--warn)");
         return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:${col}">${m.toFixed(1)}%</div></td>`;
       };
-      const grp = (g) => {
+      const cnum = (f, val) => `<input class="cost-in" data-f="${f}" type="number" min="0" value="${esc(val)}">`;
+      // Company-wide top calculator (expense & boxes feed the operation cost).
+      const topPanel = `<div class="controls cprice-calc">
+        <label class="ord-field"><span>Company expense (₹ / month)</span>${cnum("empExpMonth", exp)}</label>
+        <label class="ord-field"><span>Boxes sold (/ month)</span>${cnum("unitsMonth", boxes)}</label>
+        <div class="ord-field"><span>Avg operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
+      </div>
+      <p class="muted-note" style="margin:4px 0 10px">Each section below has its own calculator — set its incentive, other cost, bulk tiers and the three target margins. <b>Every product is priced to its target margin</b> (price = cost ÷ (1 − margin%)); the margin shows green when met. Company expense &amp; boxes (above) are shared across sections and with ${esc(mid === "salon" ? "Derma" : "Saloon")}.</p>`;
+      // One section = one group with its OWN calculator + price table.
+      const section = (g) => {
+        const gid = g.id || "sec";
+        const c = esthCalc(mid, gid);
+        const inc = +c.inc || 0, extra = +c.extra || 0;
+        const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
+        const tiers = [
+          { label: "1 unit", tgt: +c.tmSingle || 0 },
+          { label: lbl1, tgt: +c.tm1 || 0 },
+          { label: lbl2, tgt: +c.tm2 || 0 },
+        ];
+        const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${gid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
+        const costOfR = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land) + inc + extra) : null; };
+        const head = ["Product", "MRP (ref)", "Cost / box"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
+          .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r) => {
-          const cost = costOf(r);
+          const cost = costOfR(r);
           const cells = tiers.map((t) => tierCell(cost != null && t.tgt < 100 ? cost / (1 - t.tgt / 100) : null, cost, t.tgt)).join("");
           return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(cost)}</td>${cells}</tr>`;
         }).join("");
-        return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+        const panel = `<div class="controls cprice-calc" style="margin-top:6px">
+          <label class="ord-field"><span>Incentive / box (₹)</span>${num("inc", inc)}</label>
+          <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
+          <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "48px")} + ${num("o1f", c.o1f, "48px")}</div></label>
+          <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "48px")} + ${num("o2f", c.o2f, "48px")}</div></label>
+          <label class="ord-field"><span>Margin 1 unit %</span>${num("tmSingle", c.tmSingle)}</label>
+          <label class="ord-field"><span>Margin ${esc(lbl1)} %</span>${num("tm1", c.tm1)}</label>
+          <label class="ord-field"><span>Margin ${esc(lbl2)} %</span>${num("tm2", c.tm2)}</label>
+        </div>`;
+        return `<div class="block cprice-section" style="margin-top:16px"><h3 style="margin:0 0 2px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3>${panel}<div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
-      const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
-      const cnum = (f, val) => `<input class="cost-in" data-f="${f}" type="number" min="0" value="${esc(val)}">`;
-      const panel = `<div class="controls cprice-calc">
-        <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "48px")} + ${num("o1f", c.o1f, "48px")}</div></label>
-        <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "48px")} + ${num("o2f", c.o2f, "48px")}</div></label>
-      </div>
-      <div class="controls cprice-calc" style="margin-top:8px">
-        <label class="ord-field"><span>Company expense (₹ / month)</span>${cnum("empExpMonth", exp)}</label>
-        <label class="ord-field"><span>Boxes sold (/ month)</span>${cnum("unitsMonth", boxes)}</label>
-        <label class="ord-field"><span>Incentive per box (₹)</span>${num("inc", inc)}</label>
-        <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
-        <div class="ord-field"><span>Avg operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
-      </div>
-      <div class="controls cprice-calc" style="margin-top:8px">
-        <label class="ord-field"><span>Target margin — 1 unit %</span>${num("tmSingle", c.tmSingle)}</label>
-        <label class="ord-field"><span>Target margin — ${esc(lbl1)} %</span>${num("tm1", c.tm1)}</label>
-        <label class="ord-field"><span>Target margin — ${esc(lbl2)} %</span>${num("tm2", c.tm2)}</label>
-      </div>
-      <p class="muted-note" style="margin:4px 0 0"><b>MRP is the listed price — the same for Saloon &amp; Derma (not hiked).</b> 1 box = MRP − ${c.disc}% ; ${esc(lbl1)} &amp; ${esc(lbl2)} are the buy+free offers. <b>Cost/box = Landing + Operation cost + Incentive + Other (₹${inr(Math.round(extra))}).</b> Each cell shows ₹/box and its <b>margin</b>, coloured <span style="color:var(--good);font-weight:700">green</span> at/above target, <span style="color:var(--warn);font-weight:700">amber</span> below, <span style="color:var(--bad);font-weight:700">red</span> at a loss. <b>Every product is priced to its target margin</b> — price = cost ÷ (1 − margin%) — so each order type lands exactly on its target (50 / 40 / 30 by default). The two bulk tiers just label the order sizes; MRP is shown only as a reference. Company expense &amp; boxes are shared with ${esc(mid === "salon" ? "Derma" : "Saloon")}.</p>`;
       const accG = Array.isArray(EP.accessories) && EP.accessories.length
-        ? { title: "Accessories", pack: "per unit", priceMode: "target", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
+        ? { id: "acc", title: "Accessories", pack: "per unit", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
         : null;
       const allGroups = M.groups.concat(accG ? [accG] : []);
-      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · MRP same for both markets)</span></h2>
-        <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${panel}
-        ${allGroups.map(grp).join("")}`;
+      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · priced to target margin)</span></h2>
+        <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${topPanel}
+        ${allGroups.map(section).join("")}`;
     };
     // ---- Machines / devices (₹ Lakhs) ----
     const machinesBlock = () => {
