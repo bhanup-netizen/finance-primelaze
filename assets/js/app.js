@@ -2758,10 +2758,10 @@
         <div class="ord-field"><span>Offer 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "48px")} + ${num("o1f", c.o1f, "48px")}</div></div>
         <div class="ord-field"><span>Offer 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "48px")} + ${num("o2f", c.o2f, "48px")}</div></div>
       </div>`;
+      // Accessories through the SAME price table (MRP + per-unit + offers) so the
+      // full selling price shows in Saloon & Derma, just like the masks.
       const accBlock = Array.isArray(EP.accessories) && EP.accessories.length
-        ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(MRP ₹)</span></h3>${table(
-            ["Product", "MRP (₹)"].map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join(""),
-            EP.accessories.map((a) => `<tr><td class="t-name">${esc(a[0])}</td><td class="num">${rup(a[1])}</td></tr>`).join(""))}</div>`
+        ? grp({ title: "Accessories", pack: "per unit", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) })
         : "";
       const tierNote = `<b>How quantity pricing works:</b> units <b>1–${c.o1p - 1}</b> are at <b>${c.disc}% off</b> each. At the <b>${c.o1p}th</b> unit the <b>${lbl1}</b> offer activates (buy ${c.o1p}, get ${c.o1f} free). Units beyond it are ${c.disc}% off each, until the <b>${c.o2p}th</b> unit where the <b>${lbl2}</b> offer activates (buy ${c.o2p}, get ${c.o2f} free).`;
       return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box, incl. 18% GST)</span></h2>
