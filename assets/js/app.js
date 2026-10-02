@@ -2700,7 +2700,11 @@
       hike: +M.mrpHikePct || 0, disc: +M.discountPct || 0,
       o1p: (o[0] && o[0].p) || 5, o1f: (o[0] && o[0].f != null ? o[0].f : 1),
       o2p: (o[1] && o[1].p) || 10, o2f: (o[1] && o[1].f != null ? o[1].f : 3),
-      inc: 0, // incentive per box (₹) — used in the profit calculator
+      inc: 0,        // incentive per box (₹)
+      extra: 300,    // other cost per box (₹)
+      tmSingle: 50,  // target margin % — single unit
+      tm1: 40,       // target margin % — offer 1 (5+1)
+      tm2: 30,       // target margin % — offer 2 (10+3)
     };
     return Object.assign(base, esthPricingOv[mid] || {});
   }
@@ -2744,7 +2748,7 @@
       // and incentive per box (per market). Operation cost/box = expense ÷ boxes.
       const exp = +costing.empExpMonth || 0, boxes = +costing.unitsMonth || 0;
       const opCost = boxes > 0 ? exp / boxes : 0;
-      const inc = +c.inc || 0;
+      const inc = +c.inc || 0, extra = +c.extra || 0;
       const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
       const landingByName = {};
       (EP.groups || []).forEach((g) => (g.rows || []).forEach((r) => { landingByName[r[1]] = r[6]; }));
@@ -2761,21 +2765,28 @@
       (EP.accessories || []).forEach((a) => allMrp.push(a[1] * hikeF));
       const avgMrp = allMrp.length ? allMrp.reduce((s, x) => s + x, 0) / allMrp.length : 0;
       const opCostFor = (mrp) => avgMrp > 0 ? opCost * (mrp / avgMrp) : opCost;
-      const head = ["Product", "MRP", "Per unit (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u", "Landing", "Op. cost", "Profit / box", "Margin"]
+      // Each order type shows its ₹/box and the margin on it, colour-coded
+      // against the target (green ≥ target, amber below, red = loss).
+      const tiers = [
+        { label: "1 unit", frac: (1 - c.disc / 100), tgt: +c.tmSingle || 0 },
+        { label: lbl1, frac: o1u ? c.o1p / o1u : 1, tgt: +c.tm1 || 0 },
+        { label: lbl2, frac: o2u ? c.o2p / o2u : 1, tgt: +c.tm2 || 0 },
+      ];
+      const head = ["Product", "MRP", "Cost / box"].concat(tiers.map((t) => t.label + " (tgt " + t.tgt + "%)"))
         .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
+      const tierCell = (price, cost, tgt) => {
+        if (cost == null) return `<td class="num">${rup(price)}</td>`;
+        const m = price > 0 ? (price - cost) / price * 100 : 0;
+        const col = m < 0 ? "var(--bad)" : (m + 0.05 >= tgt ? "var(--good)" : "var(--warn)");
+        return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:${col}">${m.toFixed(1)}%</div></td>`;
+      };
       const grp = (g) => {
         const body = g.rows.map((r) => {
           const mrp = r[2] * hikeF;                 // selling MRP (listed + hike)
-          const single = mrp * (1 - c.disc / 100);  // single-unit / between-offers price
-          const e1 = o1u ? mrp * c.o1p / o1u : mrp;
-          const e2 = o2u ? mrp * c.o2p / o2u : mrp;
           const land = landingOf(r[1]);
-          const opc = opCostFor(mrp);
-          const profit = land != null ? (mrp - land - opc - inc) : null;
-          const margin = (profit != null && mrp > 0) ? (profit / mrp * 100) : null;
-          const neg = profit != null && profit < 0;
-          const profCls = neg ? " style=\"color:var(--bad)\"" : "";
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(single)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td><td class="num t-muted">${rup(land)}</td><td class="num t-muted">${land != null ? rup(opc) : "—"}</td><td class="num"${profCls}>${rup(profit)}</td><td class="num"${profCls}>${margin != null ? margin.toFixed(1) + "%" : "—"}</td></tr>`;
+          const cost = land != null ? (land + opCostFor(mrp) + inc + extra) : null;
+          const cells = tiers.map((t) => tierCell(mrp * t.frac, cost, t.tgt)).join("");
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num t-muted">${rup(cost)}</td>${cells}</tr>`;
         }).join("");
         return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
@@ -2791,9 +2802,15 @@
         <label class="ord-field"><span>Company expense (₹ / month)</span>${cnum("empExpMonth", exp)}</label>
         <label class="ord-field"><span>Boxes sold (/ month)</span>${cnum("unitsMonth", boxes)}</label>
         <label class="ord-field"><span>Incentive per box (₹)</span>${num("inc", inc)}</label>
-        <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? "₹" + inr(Math.round(opCost)) : "—"}</div></div>
+        <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
+        <div class="ord-field"><span>Avg operation cost / box</span><div class="ecalc-out">${opCost ? "₹" + inr(Math.round(opCost)) : "—"}</div></div>
       </div>
-      <p class="muted-note" style="margin:4px 0 0">Operation cost/box = company expense ÷ boxes (the average), then <b>weighted by each product's price</b> — a cheaper item carries less, a premium item more. <b>Profit/box = MRP − Landing − Operation cost − Incentive</b> and <b>Margin = Profit ÷ MRP</b> (at full MRP; red = loss). Company expense &amp; boxes are shared with ${esc(mid === "salon" ? "Derma" : "Saloon")}; incentive is per market.</p>`;
+      <div class="controls cprice-calc" style="margin-top:8px">
+        <label class="ord-field"><span>Target margin — 1 unit %</span>${num("tmSingle", c.tmSingle)}</label>
+        <label class="ord-field"><span>Target margin — ${esc(lbl1)} %</span>${num("tm1", c.tm1)}</label>
+        <label class="ord-field"><span>Target margin — ${esc(lbl2)} %</span>${num("tm2", c.tm2)}</label>
+      </div>
+      <p class="muted-note" style="margin:4px 0 0"><b>Cost/box = Landing + Operation cost + Incentive + Other (₹${inr(Math.round(extra))}).</b> Operation cost is the average (expense ÷ boxes) <b>weighted by each product's price</b>. Each order type shows its ₹/box and <b>margin = (price − cost) ÷ price</b>, coloured <span style="color:var(--good);font-weight:700">green</span> when it meets the target, <span style="color:var(--warn);font-weight:700">amber</span> below it, <span style="color:var(--bad);font-weight:700">red</span> at a loss. Company expense &amp; boxes are shared with ${esc(mid === "salon" ? "Derma" : "Saloon")}; the rest is per market.</p>`;
       // Accessories through the SAME price table (MRP + per-unit + offers) so the
       // full selling price shows in Saloon & Derma, just like the masks.
       const accBlock = Array.isArray(EP.accessories) && EP.accessories.length
