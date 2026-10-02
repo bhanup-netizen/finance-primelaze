@@ -2743,11 +2743,13 @@
       const c = esthCalc(mid);
       const o1u = c.o1p + c.o1f, o2u = c.o2p + c.o2f;
       const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
-      const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
       const exp = +costing.empExpMonth || 0, boxes = +costing.unitsMonth || 0;
       const opCost = boxes > 0 ? exp / boxes : 0;
       const inc = +c.inc || 0, extra = +c.extra || 0;
       const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
+      // Show both ₹ and the $ equivalent (₹ ÷ USD rate) everywhere.
+      const dol = (n) => (usdN > 0 && n != null) ? ` <span class="cpx-usd">($${(n / usdN).toLocaleString("en-US", { minimumFractionDigits: (n / usdN) < 100 ? 2 : 0, maximumFractionDigits: 2 })})</span>` : "";
+      const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN") + dol(n);
       const landingByName = {};
       (EP.groups || []).forEach((g) => (g.rows || []).forEach((r) => { landingByName[r[1]] = r[6]; }));
       const landingOf = (name) => {
@@ -2804,7 +2806,7 @@
         <label class="ord-field"><span>Boxes sold (/ month)</span>${cnum("unitsMonth", boxes)}</label>
         <label class="ord-field"><span>Incentive per box (₹)</span>${num("inc", inc)}</label>
         <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
-        <div class="ord-field"><span>Avg operation cost / box</span><div class="ecalc-out">${opCost ? "₹" + inr(Math.round(opCost)) : "—"}</div></div>
+        <div class="ord-field"><span>Avg operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
       </div>
       <div class="controls cprice-calc" style="margin-top:8px">
         <label class="ord-field"><span>Target margin — 1 unit %</span>${num("tmSingle", c.tmSingle)}</label>
@@ -2839,9 +2841,12 @@
       if (!EP || !Array.isArray(EP.groups)) return `<p class="empty">No Esthemax price data loaded.</p>`;
       // Cost side only (factory → landing). Selling MRP is shown in the price
       // list above — the MRP column is dropped here to avoid confusion.
+      const usdR = (orderState && orderState.usdInr) || 0;
+      const dolR = (v) => usdR > 0 && v != null ? ` <span class="cpx-usd">($${(v / usdR).toLocaleString("en-US", { minimumFractionDigits: (v / usdR) < 100 ? 2 : 0, maximumFractionDigits: 2 })})</span>` : "";
       const DISP = [2, 3, 4, 5, 6]; // dist$, EXW, customs, transport, landing
       const head = ["Sr", "Variant", "Dist. ($)", "EXW / Factory", "Customs @44%", "Transport", "Landing"].map((c, i) => `<th class="${i === 1 ? "" : "num"}">${esc(c)}</th>`).join("");
-      const fmt = (v, i) => v == null || v === "" ? "—" : (i === 2 ? "$" + v : inr(Math.round(v)));
+      // Show ₹ with the $ equivalent on EXW/Customs/Transport/Landing (not the Dist$ col, already $).
+      const fmt = (v, i) => v == null || v === "" ? "—" : (i === 2 ? "$" + v : (inr(Math.round(v)) + dolR(v)));
       const grp = (g) => {
         const body = g.rows.map((r) => `<tr>
           <td class="num">${r[0]}</td>
@@ -2854,12 +2859,12 @@
         <div class="callout" style="margin-top:6px"><b>Landing = final purchase cost</b> = EXW (factory) × USD→INR × (1 + customs @44%) + transport.</div></div>` + EP.groups.map(grp).join("");
       if (opts.accessories && Array.isArray(EP.accessories) && EP.accessories.length) {
         const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
-        const accHead = ["Sr", "Product", "Factory (₹)", "Landing (₹)", "MRP (₹)"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
+        const accHead = ["Sr", "Product", "Factory", "Landing"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
         const accBody = EP.accessories.map((a, i) => {
           const fu = a[2]; const facR = fu ? fu * usdN : null; const land = fu ? fu * usdN * (1 + custN) : null;
-          return `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${facR ? inr(Math.round(facR)) + ` <span class="t-muted">($${Number(fu).toFixed(2)})</span>` : "—"}</td><td class="num">${land ? inr(Math.round(land)) : "—"}</td><td class="num">${inr(a[1])}</td></tr>`;
+          return `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${facR ? inr(Math.round(facR)) + ` <span class="cpx-usd">($${Number(fu).toFixed(2)})</span>` : "—"}</td><td class="num">${land ? inr(Math.round(land)) + dolR(land) : "—"}</td></tr>`;
         }).join("");
-        out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory ₹ per unit · Landing ₹ · MRP ₹)</span></h3>${table(accHead, accBody)}</div>`;
+        out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory & Landing · ₹ with $ equivalent)</span></h3>${table(accHead, accBody)}</div>`;
       }
       // Factory purchase orders (USD) — what Primelaze pays the esthemax factory.
       if (opts.po && Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
