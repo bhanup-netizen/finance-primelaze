@@ -2734,6 +2734,16 @@
         (mv[gid] = mv[gid] || {})[f] = v;
         saveEdits("Esthemax " + mid + " " + gid + " pricing"); go("companyprice", true);
       }));
+      // Bulk "set all rows" — writes one quantity to every product row's boxes.
+      document.querySelectorAll(".ecalc-all[data-ecallall]").forEach((el) => (el.onchange = () => {
+        const [mid, gid, cnt] = String(el.dataset.ecallall).split(":");
+        const n = parseInt(cnt, 10) || 0;
+        let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0; v = Math.round(v);
+        const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
+        const sv = (mv[gid] = mv[gid] || {});
+        for (let i = 0; i < n; i++) sv["q" + i] = v;
+        saveEdits("Esthemax " + mid + " " + gid + " boxes (all rows)"); go("companyprice", true);
+      }));
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) — MRP-driven ------------
     // MRP is the LISTED price, the SAME for Saloon & Derma (not hiked). 1 box =
@@ -2804,6 +2814,7 @@
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
           <label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
+          <label class="ord-field"><span>Set all rows' boxes</span><input class="ecalc-all" data-ecallall="${mid}:${gid}:${g.rows.length}" type="number" step="1" min="0" placeholder="apply to all" style="width:110px"></label>
           <div class="ord-field"><span>Boxes sold (total of rows)</span><div class="ecalc-out">${sBoxes || "—"}</div></div>
           <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
           <label class="ord-field"><span>Incentive % of sale</span>${num("incPct", c.incPct)}</label>
