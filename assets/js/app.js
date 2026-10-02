@@ -2843,10 +2843,10 @@
       // list above — the MRP column is dropped here to avoid confusion.
       const usdR = (orderState && orderState.usdInr) || 0;
       const dolR = (v) => usdR > 0 && v != null ? ` <span class="cpx-usd">($${(v / usdR).toLocaleString("en-US", { minimumFractionDigits: (v / usdR) < 100 ? 2 : 0, maximumFractionDigits: 2 })})</span>` : "";
-      const DISP = [2, 3, 4, 5, 6]; // dist$, EXW, customs, transport, landing
-      const head = ["Sr", "Variant", "Dist. ($)", "EXW / Factory", "Customs @44%", "Transport", "Landing"].map((c, i) => `<th class="${i === 1 ? "" : "num"}">${esc(c)}</th>`).join("");
-      // Show ₹ with the $ equivalent on EXW/Customs/Transport/Landing (not the Dist$ col, already $).
-      const fmt = (v, i) => v == null || v === "" ? "—" : (i === 2 ? "$" + v : (inr(Math.round(v)) + dolR(v)));
+      const DISP = [3, 4, 5, 6]; // EXW, customs, transport, landing (Dist$ dropped — EXW already shows $)
+      const head = ["Sr", "Variant", "EXW / Factory", "Customs @44%", "Transport", "Landing"].map((c, i) => `<th class="${i === 1 ? "" : "num"}">${esc(c)}</th>`).join("");
+      // ₹ with the $ equivalent on every money column.
+      const fmt = (v, i) => v == null || v === "" ? "—" : (inr(Math.round(v)) + dolR(v));
       const grp = (g) => {
         const body = g.rows.map((r) => `<tr>
           <td class="num">${r[0]}</td>
