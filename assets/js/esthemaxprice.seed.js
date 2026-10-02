@@ -22,7 +22,7 @@ window.ESTHEMAX_PRICE_SEED = {
   markets: {
     salon: {
       id: "salon", label: "Saloon", icon: "🧖",
-      note: "Saloon market. Each order type is priced to its target margin (price = cost ÷ (1 − margin%)). Set the cost inputs and the three target margins in the calculator — it saves for everyone.",
+      note: "Saloon market. MRP is the listed price (same for Saloon & Derma, not hiked). 1 box = MRP − single-box discount %; the two bulk tiers are buy+free offers. Margins are shown against a target guide. Adjust in the calculator — saves for everyone.",
       mrpHikePct: 15, discountPct: 10, discountLabel: "Extra unit · 10% off",
       // {label, p(buy), f(free)} — effective net ₹/unit = MRP × p / (p+f).
       offers: [
@@ -80,7 +80,7 @@ window.ESTHEMAX_PRICE_SEED = {
     },
     doctor: {
       id: "doctor", label: "Derma", icon: "💉",
-      note: "Derma (doctor) market. Each order type is priced to its target margin (price = cost ÷ (1 − margin%)). Set the cost inputs and the three target margins in the calculator — it saves for everyone.",
+      note: "Derma (doctor) market. MRP is the listed price (same for Saloon & Derma, not hiked). 1 box = MRP − single-box discount %; the two bulk tiers are buy+free offers. Margins are shown against a target guide. Adjust in the calculator — saves for everyone.",
       mrpHikePct: 15, discountPct: 10, discountLabel: "Extra unit · 10% off",
       offers: [
         { label: "5+1", p: 5, f: 1 },
