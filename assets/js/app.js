@@ -2727,7 +2727,10 @@
         return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
       return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box, incl. 18% GST)</span></h2>
-        <div class="callout" style="margin-top:6px">${esc(M.note || "")} <b>Offer price</b> = effective net ₹/unit under each buy+free deal. The <b>${esc(M.discountLabel || "Extra unit · 10% off")}</b> column is the price for any single unit bought beyond a complete pack.</div></div>${M.groups.map(grp).join("")}`;
+        <div class="callout" style="margin-top:6px">${esc(M.note || "")} <b>Offer price</b> = effective net ₹/unit under each buy+free deal. The <b>${esc(M.discountLabel || "Extra unit · 10% off")}</b> column is the price for any single unit bought beyond a complete pack.</div></div>${M.groups.map(grp).join("")}`
+        // Full cost side + accessories + factory PO now live under each market
+        // tab (moved out of the Calculation tab).
+        + costStructureBlock({ full: true });
     };
     // ---- Machines / devices (₹ Lakhs) ----
     const machinesBlock = () => {
@@ -2746,9 +2749,10 @@
     const costStructureBlock = (opts = {}) => {
       const EP = window.ESTHEMAX_PRICE_SEED;
       if (!EP || !Array.isArray(EP.groups)) return `<p class="empty">No Esthemax price data loaded.</p>`;
-      // Show landing as the final purchase cost — Marketing/Profit/Total dropped.
-      const DISP = [2, 3, 4, 5, 6, 10]; // dist$, EXW, customs, transport, landing, MRP
-      const head = ["Sr", "Variant", "Dist. ($)", "EXW / Factory", "Customs @44%", "Transport", "Landing", "MRP"].map((c, i) => `<th class="${i === 1 ? "" : "num"}">${esc(c)}</th>`).join("");
+      // Cost side only (factory → landing). Selling MRP is shown in the price
+      // list above — the MRP column is dropped here to avoid confusion.
+      const DISP = [2, 3, 4, 5, 6]; // dist$, EXW, customs, transport, landing
+      const head = ["Sr", "Variant", "Dist. ($)", "EXW / Factory", "Customs @44%", "Transport", "Landing"].map((c, i) => `<th class="${i === 1 ? "" : "num"}">${esc(c)}</th>`).join("");
       const fmt = (v, i) => v == null || v === "" ? "—" : (i === 2 ? "$" + v : inr(Math.round(v)));
       const grp = (g) => {
         const body = g.rows.map((r) => `<tr>
@@ -2885,7 +2889,9 @@
     };
     // Calculation tab = cost-structure breakup (EXW → customs → landing) + the
     // cost-vs-MRP tables (Saloon + Derma). Accessories/PO stay out (full:false).
-    const calcBlock = () => costStructureBlock({ full: true }) + costingBlock();
+    // Calculation = the calculator only (cost structure / accessories / PO were
+    // moved to the Saloon & Derma tabs).
+    const calcBlock = () => costingBlock();
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
       <button data-cprtab="derma" class="${cprTab === "derma" ? "active" : ""}">💉 Derma</button>
@@ -2898,7 +2904,7 @@
       : cprTab === "calc" ? calcBlock()
       : cprTab === "derma" ? marketBlock("doctor")
       : marketBlock("salon");
-    const showFx = cprTab === "machines" || cprTab === "calc";
+    const showFx = cprTab !== "celluma"; // Saloon/Derma now carry the cost structure too
     return `
       <div class="section-head"><h1>💰 Company Price</h1>
         <p><b>Super admin only — confidential.</b> Esthemax selling price lists (<b>Saloon</b> &amp; <b>Derma</b> markets), the cost/MRP <b>Calculation</b>, plus Machines &amp; Celluma.</p></div>
