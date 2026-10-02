@@ -2693,14 +2693,13 @@
   // { salon: { hydro:{…}, retail:{…}, foot:{…}, acc:{…} }, doctor:{…} }.
   // Each section has its own incentive, other cost, bulk tiers and 3 target margins.
   const esthPricingOv = {};
+  const esthQty = {}; // transient per-row quantity (scratch, not persisted) keyed "mid:gid:idx"
   function esthCalc(mid, gid) {
     const base = {
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
       expMo: 0,      // company/section expense per month (₹) — this section only
       boxes: 0,      // boxes sold per month — this section only
       incPct: 3,     // incentive = % of sale (₹300 per ₹10,000 = 3%)
-      extra: 300,    // other cost per box (₹)
-      mm: 25,        // minimum margin % — the floor the price must not go below
       tmSingle: 50,  // target margin % — single unit
       tm1: 40,       // target margin % — bulk tier 1
       tm2: 30,       // target margin % — bulk tier 2
@@ -2736,6 +2735,12 @@
         (mv[gid] = mv[gid] || {})[f] = v;
         saveEdits("Esthemax " + mid + " " + gid + " pricing"); go("companyprice", true);
       }));
+      // Per-row quantity — a local scratch calculator, NOT saved/shared.
+      document.querySelectorAll(".eqty-in[data-eqty]").forEach((el) => (el.oninput = () => {
+        let v = parseInt(el.value, 10); if (isNaN(v) || v < 0) v = 0;
+        esthQty[el.dataset.eqty] = v;
+        go("companyprice", true);
+      }));
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) — MRP-driven ------------
     // MRP is the LISTED price, the SAME for Saloon & Derma (not hiked). 1 box =
@@ -2754,12 +2759,12 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense &amp; boxes</b> (→ operation cost/box), <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), other cost, <b>min margin (floor)</b>, bulk tiers and the three target margins. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell shows the <b>min</b> price and the <b>incentive</b> (₹) for that sale. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense &amp; boxes</b> (→ operation cost/box), <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), bulk tiers and the three target margins. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell shows the <b>incentive</b> (₹) for that sale. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M). Type a <b>Qty</b> on any row to see the <b>total</b> at the matching offer tier.</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
         const c = esthCalc(mid, gid);
-        const incPct = +c.incPct || 0, extra = +c.extra || 0, mm = +c.mm || 0;
+        const incPct = +c.incPct || 0;
         const mgr = !!(+c.mgr); // manager involved → incentive split 2:1 (emp : mgr)
         // Per-section operation cost: this section's expense ÷ its boxes, then
         // weighted by each product's landing within the section.
@@ -2778,27 +2783,42 @@
         // Base cost (landing + weighted operation + other). Incentive is a % of
         // the sale price, so it's folded into the price: price = base ÷
         // (1 − (margin% + incentive%)). The margin then lands exactly on target.
-        const baseOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land) + extra) : null; };
+        const baseOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land)) : null; };
         const priceAt = (base, marginPct) => { const d = 1 - (marginPct + incPct) / 100; return d > 0 ? base / d : null; };
-        // A tier cell: price at the target margin + a small "floor" price at the
-        // minimum margin below it.
+        // A tier cell: price at the target margin + the incentive (₹) for it.
         const tierCell = (base, tgt) => {
           if (base == null) return `<td class="num">—</td>`;
           const price = priceAt(base, tgt);
           if (price == null) return `<td class="num" style="color:var(--bad)">n/a</td>`;
-          const minP = priceAt(base, mm);
           const incAmt = price * incPct / 100;              // incentive = % of sale
           const incLine = mgr
             ? `inc ${rup(incAmt)} · E ${rup(incAmt * 2 / 3)} / M ${rup(incAmt / 3)}`
             : `inc ${rup(incAmt)}`;
-          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div>${minP != null ? `<div class="cpx-usd">min ${rup(minP)}</div>` : ""}<div class="cpx-inc">${incLine}</div></td>`;
+          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLine}</div></td>`;
         };
+        // Which tier a quantity falls into: < tier1-buy → single, < tier2-buy →
+        // tier 1 (5+1), else tier 2 (10+3). Returns {tier, label}.
+        const o1p = +c.o1p || 1, o2p = +c.o2p || 1;
+        const qtyTier = (q) => q >= o2p ? 2 : (q >= o1p ? 1 : 0);
         const head = ["Product", "MRP (ref)", "Base cost"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
+          .concat(["Qty", "Total"])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
-        const body = g.rows.map((r) => {
+        const body = g.rows.map((r, idx) => {
           const base = baseOf(r);
           const cells = tiers.map((t) => tierCell(base, t.tgt)).join("");
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}</tr>`;
+          const qk = mid + ":" + gid + ":" + idx;
+          const q = +esthQty[qk] || 0;
+          const qtyIn = `<input class="eqty-in" data-eqty="${esc(qk)}" type="number" step="1" min="0" value="${q || ""}" placeholder="0" style="width:64px">`;
+          let totalCell = `<td class="num t-muted">—</td>`;
+          if (base != null && q > 0) {
+            const ti = qtyTier(q);
+            const price = priceAt(base, tiers[ti].tgt);
+            if (price != null) {
+              const total = price * q;
+              totalCell = `<td class="num"><div>${rup(total)}</div><div style="font-size:11px" class="t-muted">${q} × ${esc(tiers[ti].label)}</div></td>`;
+            }
+          }
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}<td class="num">${qtyIn}</td>${totalCell}</tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
           <label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
@@ -2806,8 +2826,6 @@
           <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
           <label class="ord-field"><span>Incentive % of sale</span>${num("incPct", c.incPct)}</label>
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
-          <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
-          <label class="ord-field"><span>Min margin % (floor)</span>${num("mm", c.mm)}</label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
           <label class="ord-field"><span>Margin 1 unit %</span>${num("tmSingle", c.tmSingle)}</label>
