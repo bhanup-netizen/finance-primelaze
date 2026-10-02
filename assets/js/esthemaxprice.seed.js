@@ -15,7 +15,7 @@
    Accessories: [Product, MRP, Factory$]. purchaseOrders: factory buys (USD).
    ============================================================ */
 window.ESTHEMAX_PRICE_SEED = {
-  version: 5,
+  version: 6,
   note: "Full Esthemax cost & price structure — distribution ($), factory (EXW), customs @44%, transport, landing and MRP. Saloon & Derma selling MRP is hiked 15% over the listed price; offers 5+1 and 10+3, with extra units beyond a pack at 10% off. Per box, ₹.",
   cols: ["Sr", "Variant", "Dist. ($)", "EXW / Factory", "Customs @44%", "Transport", "Landing", "Marketing", "Profit", "Total", "MRP"],
   // ---- Market price lists (customer-facing MRP + offers, per market) ----
@@ -205,6 +205,7 @@ window.ESTHEMAX_PRICE_SEED = {
     ["Measuring Cup", 230, 0.66],
     ["5g Scoop", 115, 0.66],
     ["Rose Quartz Eye Mask — Hydrojelly Mask", 11500, null],
+    ["Rose Quartz Full Face Mask — Hydrojelly Mask", 28750, null],
   ],
   purchaseOrders: [
     {

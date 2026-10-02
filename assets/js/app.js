@@ -2885,7 +2885,7 @@
     };
     // Calculation tab = cost-structure breakup (EXW → customs → landing) + the
     // cost-vs-MRP tables (Saloon + Derma). Accessories/PO stay out (full:false).
-    const calcBlock = () => costStructureBlock({ full: false }) + costingBlock();
+    const calcBlock = () => costStructureBlock({ full: true }) + costingBlock();
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
       <button data-cprtab="derma" class="${cprTab === "derma" ? "active" : ""}">💉 Derma</button>
