@@ -2700,6 +2700,7 @@
       hike: +M.mrpHikePct || 0, disc: +M.discountPct || 0,
       o1p: (o[0] && o[0].p) || 5, o1f: (o[0] && o[0].f != null ? o[0].f : 1),
       o2p: (o[1] && o[1].p) || 10, o2f: (o[1] && o[1].f != null ? o[1].f : 3),
+      inc: 0, // incentive per box (₹) — used in the profit calculator
     };
     return Object.assign(base, esthPricingOv[mid] || {});
   }
@@ -2739,7 +2740,20 @@
       const o1u = c.o1p + c.o1f, o2u = c.o2p + c.o2f;
       const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
       const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
-      const head = ["Product", "MRP", "Per unit (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u"]
+      // Profit calculator inputs: company expense & boxes (shared, from costing)
+      // and incentive per box (per market). Operation cost/box = expense ÷ boxes.
+      const exp = +costing.empExpMonth || 0, boxes = +costing.unitsMonth || 0;
+      const opCost = boxes > 0 ? exp / boxes : 0;
+      const inc = +c.inc || 0;
+      const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
+      const landingByName = {};
+      (EP.groups || []).forEach((g) => (g.rows || []).forEach((r) => { landingByName[r[1]] = r[6]; }));
+      const landingOf = (name) => {
+        if (name in landingByName) return landingByName[name];
+        const a = (EP.accessories || []).find((x) => x[0] === name);
+        return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
+      };
+      const head = ["Product", "MRP", "Per unit (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u", "Landing", "Profit / box"]
         .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
       const grp = (g) => {
         const body = g.rows.map((r) => {
@@ -2747,17 +2761,28 @@
           const single = mrp * (1 - c.disc / 100);  // single-unit / between-offers price
           const e1 = o1u ? mrp * c.o1p / o1u : mrp;
           const e2 = o2u ? mrp * c.o2p / o2u : mrp;
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(single)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td></tr>`;
+          const land = landingOf(r[1]);
+          const profit = land != null ? (mrp - land - opCost - inc) : null;
+          const profCls = profit != null && profit < 0 ? " style=\"color:var(--bad)\"" : "";
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(single)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td><td class="num t-muted">${rup(land)}</td><td class="num"${profCls}>${rup(profit)}</td></tr>`;
         }).join("");
         return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
       const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
+      const cnum = (f, val) => `<input class="cost-in" data-f="${f}" type="number" min="0" value="${esc(val)}">`;
       const panel = `<div class="controls cprice-calc">
         <label class="ord-field"><span>MRP hike %</span>${num("hike", c.hike)}</label>
         <label class="ord-field"><span>Extra-unit discount %</span>${num("disc", c.disc)}</label>
         <div class="ord-field"><span>Offer 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "48px")} + ${num("o1f", c.o1f, "48px")}</div></div>
         <div class="ord-field"><span>Offer 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "48px")} + ${num("o2f", c.o2f, "48px")}</div></div>
-      </div>`;
+      </div>
+      <div class="controls cprice-calc" style="margin-top:8px">
+        <label class="ord-field"><span>Company expense (₹ / month)</span>${cnum("empExpMonth", exp)}</label>
+        <label class="ord-field"><span>Boxes sold (/ month)</span>${cnum("unitsMonth", boxes)}</label>
+        <label class="ord-field"><span>Incentive per box (₹)</span>${num("inc", inc)}</label>
+        <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? "₹" + inr(Math.round(opCost)) : "—"}</div></div>
+      </div>
+      <p class="muted-note" style="margin:4px 0 0">Operation cost/box = company expense ÷ boxes. <b>Profit/box = MRP − Landing − Operation cost − Incentive</b> (at full MRP; red = loss). Company expense &amp; boxes are shared with Derma; incentive is per market.</p>`;
       // Accessories through the SAME price table (MRP + per-unit + offers) so the
       // full selling price shows in Saloon & Derma, just like the masks.
       const accBlock = Array.isArray(EP.accessories) && EP.accessories.length
@@ -2922,23 +2947,10 @@
       };
       return `${assume}${mktTable("salon")}${mktTable("doctor")}`;
     };
-    // Operation cost = company expense ÷ items sold, per item. Add on top of the
-    // landing cost to get the total cost per item. Inputs are saved (super admin).
-    const opCostBlock = () => {
-      const emp = +costing.empExpMonth || 0;
-      const units = +costing.unitsMonth || 0;
-      const perItem = units > 0 ? emp / units : 0;
-      return `<div class="block" style="margin-top:18px"><h2 style="margin:0 0 6px">🧮 Operation cost</h2>
-        <div class="controls cprice-calc">
-          <label class="ord-field"><span>Company expense (₹ / month)</span><input class="cost-in" data-f="empExpMonth" type="number" min="0" value="${esc(emp)}"></label>
-          <label class="ord-field"><span>Items sold (/ month)</span><input class="cost-in" data-f="unitsMonth" type="number" min="0" value="${esc(units)}"></label>
-        </div>
-        <div class="stat-row" style="margin-top:10px"><div class="stat k-warn"><b>${perItem ? "₹" + inr(Math.round(perItem)) : "—"}</b><span>Operation cost / item</span></div></div>
-        <p class="muted-note">Operation cost per item = company expense ÷ items sold. Add this to a product's <b>Landing</b> cost above to get its total cost per item.</p></div>`;
-    };
     // Landing Cost tab = the Esthemax cost side (factory → landing) + accessories
-    // cost + the operation-cost calculator. Shared by both markets. No factory PO.
-    const landingCostBlock = () => costStructureBlock({ accessories: true, po: false }) + opCostBlock();
+    // cost. Shared by both markets. The profit/operation-cost calculator lives in
+    // each market tab (Saloon / Derma). No factory PO here.
+    const landingCostBlock = () => costStructureBlock({ accessories: true, po: false });
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="landing" class="${cprTab === "landing" ? "active" : ""}">🧴 Landing Cost</button>
       <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
@@ -2951,7 +2963,7 @@
       : cprTab === "landing" ? landingCostBlock()
       : cprTab === "derma" ? marketBlock("doctor")
       : marketBlock("salon");
-    const showFx = cprTab === "landing" || cprTab === "machines";
+    const showFx = cprTab !== "celluma"; // markets show landing/profit which use FX
     return `
       <div class="section-head"><h1>💰 Company Price</h1>
         <p><b>Super admin only — confidential.</b> Esthemax: <b>Landing Cost</b> (shared) and the <b>Saloon</b> &amp; <b>Derma</b> selling price lists (each with its own calculator), plus Machines &amp; Celluma.</p></div>
