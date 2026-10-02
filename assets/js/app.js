@@ -2686,9 +2686,23 @@
   // One consolidated, confidential cost & price sheet: machines and Esthemax
   // with factory (EXW), customs, landing and every selling price. Read-only view
   // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
-  let cprTab = "saloon"; // Company Price sub-tab: saloon | derma | calc | machines | celluma
+  let cprTab = "saloon"; // Company Price sub-tab: landing | saloon | derma | machines | celluma
   // Costing assumptions (editable, saved to the shared doc; super admin only).
   const costing = { empExpMonth: 3000000, allocMachine: 60, allocCelluma: 10, allocEsth: 30, profitPct: 30, unitsMonth: 0, o1p: 10, o1f: 4, o2p: 10, o2f: 2 };
+  // Per-market Esthemax pricing calculator — saved overrides on top of the seed
+  // defaults: { salon:{hike,disc,o1p,o1f,o2p,o2f}, doctor:{…} }. Super admin edits
+  // the hike %, extra-unit discount % and the two offers live on each market tab.
+  const esthPricingOv = {};
+  function esthCalc(mid) {
+    const M = ((window.ESTHEMAX_PRICE_SEED || {}).markets || {})[mid] || {};
+    const o = M.offers || [];
+    const base = {
+      hike: +M.mrpHikePct || 0, disc: +M.discountPct || 0,
+      o1p: (o[0] && o[0].p) || 5, o1f: (o[0] && o[0].f != null ? o[0].f : 1),
+      o2p: (o[1] && o[1].p) || 10, o2f: (o[1] && o[1].f != null ? o[1].f : 3),
+    };
+    return Object.assign(base, esthPricingOv[mid] || {});
+  }
   function renderCompanyPrice() {
     if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
     if (typeof orderInit === "function") orderInit();
@@ -2704,33 +2718,54 @@
         costing[el.dataset.f] = v;
         saveEdits("Costing assumptions"); renderTab("companyprice");
       }));
+      document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
+        const [mid, f] = String(el.dataset.ecalc).split(":");
+        let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
+        if (/p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
+        else if (/f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
+        (esthPricingOv[mid] = esthPricingOv[mid] || {})[f] = v;
+        saveEdits("Esthemax " + mid + " pricing"); renderTab("companyprice");
+      }));
     }, 0);
-    // ---- Esthemax market price list (Saloon / Derma) — MRP + offers ----
-    // Compact, customer-facing: MRP, doctor price, and each offer's effective
-    // net ₹/unit (= MRP × buy / (buy+free)). "Reduce column size" — tight table.
+    // ---- Esthemax market price list (Saloon / Derma) with a live calculator --
+    // Super admin adjusts the MRP hike %, extra-unit discount % and the two
+    // offers; the table recomputes and the settings save for everyone.
     const marketBlock = (mid) => {
       const EP = window.ESTHEMAX_PRICE_SEED || {};
       const M = EP.markets && EP.markets[mid];
       if (!M || !Array.isArray(M.groups)) return `<p class="empty">No ${esc(mid)} price list loaded.</p>`;
-      const offers = M.offers || [];
-      const disc = +M.discountPct || 0;
+      const c = esthCalc(mid);
+      const hikeF = 1 + (c.hike / 100);
+      const o1u = c.o1p + c.o1f, o2u = c.o2p + c.o2f;
+      const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
       const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
-      const eff = (mrp, o) => { const base = o.onDisc ? mrp * (1 - disc / 100) : mrp; return base * o.p / (o.p + o.f); };
-      const head = ["Product", "MRP", M.discountLabel || "Doctor Price"].concat(offers.map((o) => o.label))
-        .map((c, i) => `<th class="${i ? "num" : ""}">${esc(c)}</th>`).join("");
+      const head = ["Product", "Listed MRP", "Selling MRP (+" + c.hike + "%)", (M.discountLabel || "Extra unit") + " (" + c.disc + "% off)", lbl1 + " ₹/u", lbl2 + " ₹/u"]
+        .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
       const grp = (g) => {
         const body = g.rows.map((r) => {
-          const mrp = r[2];
-          const cells = offers.map((o) => `<td class="num">${rup(eff(mrp, o))}</td>`).join("");
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(mrp * (1 - disc / 100))}</td>${cells}</tr>`;
+          const listed = r[2];
+          const mrp = listed * hikeF;
+          const disc = mrp * (1 - c.disc / 100);
+          const e1 = o1u ? mrp * c.o1p / o1u : mrp;
+          const e2 = o2u ? mrp * c.o2p / o2u : mrp;
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${rup(listed)}</td><td class="num t-name">${rup(mrp)}</td><td class="num">${rup(disc)}</td><td class="num">${rup(e1)}</td><td class="num">${rup(e2)}</td></tr>`;
         }).join("");
         return `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
+      const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
+      const panel = `<div class="controls cprice-calc">
+        <label class="ord-field"><span>MRP hike %</span>${num("hike", c.hike)}</label>
+        <label class="ord-field"><span>Extra-unit discount %</span>${num("disc", c.disc)}</label>
+        <div class="ord-field"><span>Offer 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "48px")} + ${num("o1f", c.o1f, "48px")}</div></div>
+        <div class="ord-field"><span>Offer 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "48px")} + ${num("o2f", c.o2f, "48px")}</div></div>
+      </div>`;
+      const accBlock = Array.isArray(EP.accessories) && EP.accessories.length
+        ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(MRP ₹)</span></h3>${table(
+            ["Product", "MRP (₹)"].map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join(""),
+            EP.accessories.map((a) => `<tr><td class="t-name">${esc(a[0])}</td><td class="num">${rup(a[1])}</td></tr>`).join(""))}</div>`
+        : "";
       return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box, incl. 18% GST)</span></h2>
-        <div class="callout" style="margin-top:6px">${esc(M.note || "")} <b>Offer price</b> = effective net ₹/unit under each buy+free deal. The <b>${esc(M.discountLabel || "Extra unit · 10% off")}</b> column is the price for any single unit bought beyond a complete pack.</div></div>${M.groups.map(grp).join("")}`
-        // Full cost side + accessories + factory PO now live under each market
-        // tab (moved out of the Calculation tab).
-        + costStructureBlock({ full: true });
+        <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${panel}${M.groups.map(grp).join("")}${accBlock}`;
     };
     // ---- Machines / devices (₹ Lakhs) ----
     const machinesBlock = () => {
@@ -2762,9 +2797,9 @@
         </tr>`).join("");
         return `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3><div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
-      let out = `<div style="margin-top:6px"><h2 style="margin:0">🧴 Esthemax — cost structure <span class="t-muted" style="font-size:13px">(factory → landing · ₹ per box · distribution price in $)</span></h2>
-        <div class="callout" style="margin-top:6px"><b>Landing = final purchase cost</b> = EXW (factory) × USD→INR × (1 + customs @44%) + transport. This is the buy-in cost the Calculation below builds on.</div></div>` + EP.groups.map(grp).join("");
-      if (opts.full && Array.isArray(EP.accessories) && EP.accessories.length) {
+      let out = `<div style="margin-top:6px"><h2 style="margin:0">🧴 Esthemax — landing cost <span class="t-muted" style="font-size:13px">(factory → landing · ₹ per box · distribution price in $) · same for Saloon &amp; Derma</span></h2>
+        <div class="callout" style="margin-top:6px"><b>Landing = final purchase cost</b> = EXW (factory) × USD→INR × (1 + customs @44%) + transport.</div></div>` + EP.groups.map(grp).join("");
+      if (opts.accessories && Array.isArray(EP.accessories) && EP.accessories.length) {
         const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
         const accHead = ["Sr", "Product", "Factory (₹)", "Landing (₹)", "MRP (₹)"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
         const accBody = EP.accessories.map((a, i) => {
@@ -2774,7 +2809,7 @@
         out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory ₹ per unit · Landing ₹ · MRP ₹)</span></h3>${table(accHead, accBody)}</div>`;
       }
       // Factory purchase orders (USD) — what Primelaze pays the esthemax factory.
-      if (opts.full && Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
+      if (opts.po && Array.isArray(EP.purchaseOrders) && EP.purchaseOrders.length) {
         const usdFmt = (v) => v == null || v === "" ? "—" : "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const poHead = ["Code", "Description", "Volume", "Qty", "Unit $", "Line $"].map((x, i) => `<th class="${i >= 3 ? "num" : ""}">${x}</th>`).join("");
         out += EP.purchaseOrders.map((po) => {
@@ -2887,27 +2922,25 @@
       };
       return `${assume}${mktTable("salon")}${mktTable("doctor")}`;
     };
-    // Calculation tab = cost-structure breakup (EXW → customs → landing) + the
-    // cost-vs-MRP tables (Saloon + Derma). Accessories/PO stay out (full:false).
-    // Calculation = the calculator only (cost structure / accessories / PO were
-    // moved to the Saloon & Derma tabs).
-    const calcBlock = () => costingBlock();
+    // Landing Cost tab = the Esthemax cost side (factory → landing) + accessories
+    // cost. Shared by both markets. No factory PO / allocation calculator here.
+    const landingCostBlock = () => costStructureBlock({ accessories: true, po: false });
     const seg = `<div class="seg" style="margin:14px 0 2px">
+      <button data-cprtab="landing" class="${cprTab === "landing" ? "active" : ""}">🧴 Landing Cost</button>
       <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
       <button data-cprtab="derma" class="${cprTab === "derma" ? "active" : ""}">💉 Derma</button>
-      <button data-cprtab="calc" class="${cprTab === "calc" ? "active" : ""}">🧮 Calculation</button>
       <button data-cprtab="machines" class="${cprTab === "machines" ? "active" : ""}">🔧 Machines</button>
       <button data-cprtab="celluma" class="${cprTab === "celluma" ? "active" : ""}">💡 Celluma</button>
     </div>`;
     const body = cprTab === "machines" ? machinesBlock()
       : cprTab === "celluma" ? cellumaBlock()
-      : cprTab === "calc" ? calcBlock()
+      : cprTab === "landing" ? landingCostBlock()
       : cprTab === "derma" ? marketBlock("doctor")
       : marketBlock("salon");
-    const showFx = cprTab !== "celluma"; // Saloon/Derma now carry the cost structure too
+    const showFx = cprTab === "landing" || cprTab === "machines";
     return `
       <div class="section-head"><h1>💰 Company Price</h1>
-        <p><b>Super admin only — confidential.</b> Esthemax selling price lists (<b>Saloon</b> &amp; <b>Derma</b> markets), the cost/MRP <b>Calculation</b>, plus Machines &amp; Celluma.</p></div>
+        <p><b>Super admin only — confidential.</b> Esthemax: <b>Landing Cost</b> (shared) and the <b>Saloon</b> &amp; <b>Derma</b> selling price lists (each with its own calculator), plus Machines &amp; Celluma.</p></div>
       ${seg}
       ${showFx ? `<div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines in <b>₹ Lakhs</b> (Quotation incl. 5% GST); Esthemax cost <b>₹ per box</b>.</div>` : ""}
       ${body}`;
@@ -9720,6 +9753,7 @@
         }
       }
       if (e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "allocEsth", "profitPct", "unitsMonth", "o1p", "o1f", "o2p", "o2f"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
+      if (e.esthPricing && typeof e.esthPricing === "object") { Object.keys(esthPricingOv).forEach((k) => delete esthPricingOv[k]); Object.assign(esthPricingOv, e.esthPricing); }
       if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.
@@ -9943,6 +9977,7 @@
     ["mktDoc", () => mktDoc], ["induction", () => induction], ["attendance", () => attendance],
     ["coverage", () => coverage, () => covDirty],
     ["costingAssump", () => costing],
+    ["esthPricing", () => esthPricingOv],
   ];
   function snapshotPassiveFields() {
     PASSIVE_FIELDS.forEach(([k, get]) => { try { loadedFieldSnap[k] = JSON.stringify(get()); } catch (e) { loadedFieldSnap[k] = undefined; } });
