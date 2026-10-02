@@ -2696,6 +2696,8 @@
   function esthCalc(mid, gid) {
     const base = {
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
+      expMo: 0,      // company/section expense per month (₹) — this section only
+      boxes: 0,      // boxes sold per month — this section only
       incPct: 3,     // incentive = % of sale (₹300 per ₹10,000 = 3%)
       extra: 300,    // other cost per box (₹)
       mm: 25,        // minimum margin % — the floor the price must not go below
@@ -2724,8 +2726,8 @@
       document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
         const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
         let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
-        if (/p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
-        else if (/f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
+        if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
+        else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
         const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
         (mv[gid] = mv[gid] || {})[f] = v;
         saveEdits("Esthemax " + mid + " " + gid + " pricing"); go("companyprice", true);
@@ -2739,8 +2741,6 @@
       const EP = window.ESTHEMAX_PRICE_SEED || {};
       const M = EP.markets && EP.markets[mid];
       if (!M || !Array.isArray(M.groups)) return `<p class="empty">No ${esc(mid)} price list loaded.</p>`;
-      const exp = +costing.empExpMonth || 0, boxes = +costing.unitsMonth || 0;
-      const opCost = boxes > 0 ? exp / boxes : 0;
       const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
       const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
       const landingByName = {};
@@ -2750,26 +2750,19 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      // Operation cost per box = average (expense ÷ boxes) WEIGHTED by each
-      // product's landing cost. opCost & the weighting are company-wide.
-      const lands = [];
-      (M.groups || []).forEach((g) => (g.rows || []).forEach((r) => { const l = landingOf(r[1]); if (l != null) lands.push(l); }));
-      (EP.accessories || []).forEach((a) => { const l = landingOf(a[0]); if (l != null) lands.push(l); });
-      const avgLand = lands.length ? lands.reduce((s, x) => s + x, 0) / lands.length : 0;
-      const opCostFor = (land) => avgLand > 0 ? opCost * (land / avgLand) : opCost;
-      const cnum = (f, val) => `<input class="cost-in" data-f="${f}" type="number" min="0" value="${esc(val)}">`;
-      // Company-wide top calculator (expense & boxes feed the operation cost).
-      const topPanel = `<div class="controls cprice-calc">
-        <label class="ord-field"><span>Company expense (₹ / month)</span>${cnum("empExpMonth", exp)}</label>
-        <label class="ord-field"><span>Boxes sold (/ month)</span>${cnum("unitsMonth", boxes)}</label>
-        <div class="ord-field"><span>Avg operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
-      </div>
-      <p class="muted-note" style="margin:4px 0 10px">Each section below has its own calculator — set its <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), other cost, <b>min margin (floor)</b>, bulk tiers and the three target margins. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell also shows the <b>min</b> price — the lowest you can sell at before dropping below the minimum margin. Company expense &amp; boxes (above) are shared across sections and with ${esc(mid === "salon" ? "Derma" : "Saloon")}.</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense &amp; boxes</b> (→ operation cost/box), <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), other cost, <b>min margin (floor)</b>, bulk tiers and the three target margins. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell also shows the <b>min</b> price — the lowest you can sell before dropping below the minimum margin.</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
         const c = esthCalc(mid, gid);
         const incPct = +c.incPct || 0, extra = +c.extra || 0, mm = +c.mm || 0;
+        // Per-section operation cost: this section's expense ÷ its boxes, then
+        // weighted by each product's landing within the section.
+        const sExp = +c.expMo || 0, sBoxes = +c.boxes || 0;
+        const opCost = sBoxes > 0 ? sExp / sBoxes : 0;
+        const secLands = g.rows.map((r) => landingOf(r[1])).filter((l) => l != null);
+        const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
+        const opCostFor = (land) => avgLand > 0 ? opCost * (land / avgLand) : opCost;
         const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
         const tiers = [
           { label: "1 unit", tgt: +c.tmSingle || 0 },
@@ -2799,6 +2792,9 @@
           return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}</tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
+          <label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
+          <label class="ord-field"><span>Boxes sold (/ month)</span>${num("boxes", sBoxes)}</label>
+          <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
           <label class="ord-field"><span>Incentive % of sale</span>${num("incPct", c.incPct)}</label>
           <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
           <label class="ord-field"><span>Min margin % (floor)</span>${num("mm", c.mm)}</label>
@@ -2815,7 +2811,7 @@
         : null;
       const allGroups = M.groups.concat(accG ? [accG] : []);
       return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · priced to target margin)</span></h2>
-        <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${topPanel}
+        <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${intro}
         ${allGroups.map(section).join("")}`;
     };
     // ---- Machines / devices (₹ Lakhs) ----
