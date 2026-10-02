@@ -2747,9 +2747,7 @@
       const opCost = boxes > 0 ? exp / boxes : 0;
       const inc = +c.inc || 0, extra = +c.extra || 0;
       const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
-      // Show both ₹ and the $ equivalent (₹ ÷ USD rate) everywhere.
-      const dol = (n) => (usdN > 0 && n != null) ? ` <span class="cpx-usd">($${(n / usdN).toLocaleString("en-US", { minimumFractionDigits: (n / usdN) < 100 ? 2 : 0, maximumFractionDigits: 2 })})</span>` : "";
-      const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN") + dol(n);
+      const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
       const landingByName = {};
       (EP.groups || []).forEach((g) => (g.rows || []).forEach((r) => { landingByName[r[1]] = r[6]; }));
       const landingOf = (name) => {
@@ -2845,8 +2843,8 @@
       const dolR = (v) => usdR > 0 && v != null ? ` <span class="cpx-usd">($${(v / usdR).toLocaleString("en-US", { minimumFractionDigits: (v / usdR) < 100 ? 2 : 0, maximumFractionDigits: 2 })})</span>` : "";
       const DISP = [3, 4, 5, 6]; // EXW, customs, transport, landing (Dist$ dropped — EXW already shows $)
       const head = ["Sr", "Variant", "EXW / Factory", "Customs @44%", "Transport", "Landing"].map((c, i) => `<th class="${i === 1 ? "" : "num"}">${esc(c)}</th>`).join("");
-      // ₹ with the $ equivalent on every money column.
-      const fmt = (v, i) => v == null || v === "" ? "—" : (inr(Math.round(v)) + dolR(v));
+      // ₹ only; the $ equivalent is shown on the Landing column (i === 6) only.
+      const fmt = (v, i) => v == null || v === "" ? "—" : (inr(Math.round(v)) + (i === 6 ? dolR(v) : ""));
       const grp = (g) => {
         const body = g.rows.map((r) => `<tr>
           <td class="num">${r[0]}</td>
@@ -2862,7 +2860,7 @@
         const accHead = ["Sr", "Product", "Factory", "Landing"].map((x, i) => `<th class="${i === 1 ? "" : "num"}">${x}</th>`).join("");
         const accBody = EP.accessories.map((a, i) => {
           const fu = a[2]; const facR = fu ? fu * usdN : null; const land = fu ? fu * usdN * (1 + custN) : null;
-          return `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${facR ? inr(Math.round(facR)) + ` <span class="cpx-usd">($${Number(fu).toFixed(2)})</span>` : "—"}</td><td class="num">${land ? inr(Math.round(land)) + dolR(land) : "—"}</td></tr>`;
+          return `<tr><td class="num">${i + 1}</td><td class="t-name">${esc(a[0])}</td><td class="num">${facR ? inr(Math.round(facR)) : "—"}</td><td class="num">${land ? inr(Math.round(land)) + dolR(land) : "—"}</td></tr>`;
         }).join("");
         out += `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 6px">Accessories <span class="t-muted" style="font-size:12px">(Factory & Landing · ₹ with $ equivalent)</span></h3>${table(accHead, accBody)}</div>`;
       }
