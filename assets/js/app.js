@@ -2802,8 +2802,8 @@
           <label class="ord-field"><span>Incentive % of sale</span>${num("incPct", c.incPct)}</label>
           <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
           <label class="ord-field"><span>Min margin % (floor)</span>${num("mm", c.mm)}</label>
-          <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "48px")} + ${num("o1f", c.o1f, "48px")}</div></label>
-          <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "48px")} + ${num("o2f", c.o2f, "48px")}</div></label>
+          <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
+          <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
           <label class="ord-field"><span>Margin 1 unit %</span>${num("tmSingle", c.tmSingle)}</label>
           <label class="ord-field"><span>Margin ${esc(lbl1)} %</span>${num("tm1", c.tm1)}</label>
           <label class="ord-field"><span>Margin ${esc(lbl2)} %</span>${num("tm2", c.tm2)}</label>
