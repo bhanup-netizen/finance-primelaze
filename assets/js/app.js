@@ -2725,9 +2725,13 @@
       }));
       document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
         const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
-        let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
-        if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
-        else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
+        let v;
+        if (el.type === "checkbox") { v = el.checked ? 1 : 0; }
+        else {
+          v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
+          if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
+          else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
+        }
         const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
         (mv[gid] = mv[gid] || {})[f] = v;
         saveEdits("Esthemax " + mid + " " + gid + " pricing"); go("companyprice", true);
@@ -2750,12 +2754,13 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense &amp; boxes</b> (→ operation cost/box), <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), other cost, <b>min margin (floor)</b>, bulk tiers and the three target margins. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell also shows the <b>min</b> price — the lowest you can sell before dropping below the minimum margin.</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense &amp; boxes</b> (→ operation cost/box), <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), other cost, <b>min margin (floor)</b>, bulk tiers and the three target margins. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell shows the <b>min</b> price and the <b>incentive</b> (₹) for that sale. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
         const c = esthCalc(mid, gid);
         const incPct = +c.incPct || 0, extra = +c.extra || 0, mm = +c.mm || 0;
+        const mgr = !!(+c.mgr); // manager involved → incentive split 2:1 (emp : mgr)
         // Per-section operation cost: this section's expense ÷ its boxes, then
         // weighted by each product's landing within the section.
         const sExp = +c.expMo || 0, sBoxes = +c.boxes || 0;
@@ -2782,7 +2787,11 @@
           const price = priceAt(base, tgt);
           if (price == null) return `<td class="num" style="color:var(--bad)">n/a</td>`;
           const minP = priceAt(base, mm);
-          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div>${minP != null ? `<div class="cpx-usd">min ${rup(minP)}</div>` : ""}</td>`;
+          const incAmt = price * incPct / 100;              // incentive = % of sale
+          const incLine = mgr
+            ? `inc ${rup(incAmt)} · E ${rup(incAmt * 2 / 3)} / M ${rup(incAmt / 3)}`
+            : `inc ${rup(incAmt)}`;
+          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div>${minP != null ? `<div class="cpx-usd">min ${rup(minP)}</div>` : ""}<div class="cpx-inc">${incLine}</div></td>`;
         };
         const head = ["Product", "MRP (ref)", "Base cost"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
@@ -2796,6 +2805,7 @@
           <label class="ord-field"><span>Boxes sold (/ month)</span>${num("boxes", sBoxes)}</label>
           <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
           <label class="ord-field"><span>Incentive % of sale</span>${num("incPct", c.incPct)}</label>
+          <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Other cost / box (₹)</span>${num("extra", extra)}</label>
           <label class="ord-field"><span>Min margin % (floor)</span>${num("mm", c.mm)}</label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
