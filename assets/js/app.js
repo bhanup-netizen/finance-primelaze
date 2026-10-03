@@ -2730,6 +2730,7 @@
           else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
           else if (/^q\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row boxes sold ≥ 0
           else if (/^p\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row manual price ≥ 0
+          else if (/^ir\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row incentive ₹ ≥ 0
         }
         const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
         (mv[gid] = mv[gid] || {})[f] = v;
@@ -2794,23 +2795,31 @@
         // Incentive is a flat ₹ added to cost, then priced to the target margin:
         // price = (base + incentive) ÷ (1 − margin%). The margin then lands on
         // target and the incentive is a fixed ₹ regardless of price.
-        const priceAt = (base, marginPct) => { const d = 1 - marginPct / 100; return d > 0 ? (base + incRs) / d : null; };
-        const incLineOf = () => mgr
-          ? `inc ${rup(incRs)} · E ${rup(incRs * 2 / 3)} / M ${rup(incRs / 3)}`
-          : `inc ${rup(incRs)}`;
+        // Accessories carry a per-row incentive (prices vary widely); every
+        // other section uses the one section-level incentive for all rows.
+        const isAcc = gid === "acc";
+        const priceAt = (base, marginPct, inc) => { const d = 1 - marginPct / 100; return d > 0 ? (base + inc) / d : null; };
+        const incLineOf = (inc) => mgr
+          ? `inc ${rup(inc)} · E ${rup(inc * 2 / 3)} / M ${rup(inc / 3)}`
+          : `inc ${rup(inc)}`;
         // A tier cell: price at the target margin + the flat incentive (₹).
-        const tierCell = (base, tgt) => {
+        const tierCell = (base, tgt, inc) => {
           if (base == null) return `<td class="num">—</td>`;
-          const price = priceAt(base, tgt);
+          const price = priceAt(base, tgt, inc);
           if (price == null) return `<td class="num" style="color:var(--bad)">n/a</td>`;
-          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLineOf()}</div></td>`;
+          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
         };
         const head = ["Product", "MRP (ref)", "Base cost"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
-          .concat(["My price", "Boxes sold"])
+          .concat(isAcc ? ["Incentive ₹"] : []).concat(["My price", "Boxes sold"])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
           const base = baseOf(r);
-          const cells = tiers.map((t) => tierCell(base, t.tgt)).join("");
+          // Row incentive: accessories can override per row; others use section ₹.
+          const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
+          const cells = tiers.map((t) => tierCell(base, t.tgt, rowInc)).join("");
+          const incCell = isAcc
+            ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
+            : "";
           const q = qtyOf(idx);
           const qtyIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:q${idx}" type="number" step="1" min="0" value="${q || ""}" placeholder="0" style="width:64px">`;
           // Manual "my price" — the admin types a selling price and sees the
@@ -2819,18 +2828,18 @@
           const mpIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:p${idx}" type="number" step="1" min="0" value="${mp || ""}" placeholder="—" style="width:84px">`;
           let mpInfo = "";
           if (base != null && mp > 0) {
-            const realMargin = (mp - base - incRs) / mp * 100; // profit after flat incentive
+            const realMargin = (mp - base - rowInc) / mp * 100; // profit after flat incentive
             const col = realMargin >= 0 ? "var(--good)" : "var(--bad)";
-            mpInfo = `<div style="font-size:11px;font-weight:700;color:${col}">${realMargin.toFixed(0)}%</div><div class="cpx-inc">${incLineOf()}</div>`;
+            mpInfo = `<div style="font-size:11px;font-weight:700;color:${col}">${realMargin.toFixed(0)}%</div><div class="cpx-inc">${incLineOf(rowInc)}</div>`;
           }
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}<td class="num">${mpIn}${mpInfo}</td><td class="num">${qtyIn}</td></tr>`;
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}${incCell}<td class="num">${mpIn}${mpInfo}</td><td class="num">${qtyIn}</td></tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
           <label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
           <label class="ord-field"><span>Set all rows' boxes</span><input class="ecalc-all" data-ecallall="${mid}:${gid}:${g.rows.length}" type="number" step="1" min="0" placeholder="apply to all" style="width:110px"></label>
           <div class="ord-field"><span>Boxes sold (total of rows)</span><div class="ecalc-out">${sBoxes || "—"}</div></div>
           <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
-          <label class="ord-field"><span>Incentive (₹ / sale)</span>${num("incRs", c.incRs)}</label>
+          <label class="ord-field"><span>Incentive (₹ / sale)${isAcc ? " — default" : ""}</span>${num("incRs", c.incRs)}</label>
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
