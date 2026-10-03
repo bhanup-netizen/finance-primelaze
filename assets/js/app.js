@@ -2696,7 +2696,8 @@
   function esthCalc(mid, gid) {
     const base = {
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
-      expMo: 0,      // company/section expense per month (₹) — this section only
+      expMo: 0,      // company/section expense per month (₹) — jar & retail only
+      boxes: 0,      // boxes sold per month (section-level) — jar & retail only
       incRs: 300,    // incentive = flat ₹ per sale
       u1off: 10,     // 1 unit price = MRP − this % (auto-fill when 1 unit left blank)
       off1: 5,       // 5+1 price = 1-unit base price − this %
@@ -2718,7 +2719,7 @@
         v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
         if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
         else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
-        else if (/^q\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row boxes sold ≥ 0
+        else if (f === "boxes") v = Math.max(0, Math.round(v));       // section boxes sold ≥ 0
         else if (/^ir\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row incentive ₹ ≥ 0
         else if (/^mrp\d+$/.test(f)) v = Math.max(0, Math.round(v));  // row MRP ₹ ≥ 0
         else if (/^u1\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row 1-unit base price ≥ 0
@@ -2727,15 +2728,6 @@
       const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
       (mv[gid] = mv[gid] || {})[f] = v;
       saveEdits("Esthemax " + mid + " " + gid + " pricing"); esthRepaintSection(mid, gid);
-    }));
-    document.querySelectorAll(".ecalc-all[data-ecallall]").forEach((el) => (el.onchange = () => {
-      const [mid, gid, cnt] = String(el.dataset.ecallall).split(":");
-      const n = parseInt(cnt, 10) || 0;
-      let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0; v = Math.round(v);
-      const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
-      const sv = (mv[gid] = mv[gid] || {});
-      for (let i = 0; i < n; i++) sv["q" + i] = v;
-      saveEdits("Esthemax " + mid + " " + gid + " boxes (all rows)"); esthRepaintSection(mid, gid);
     }));
   }
   function esthRepaintSection(mid, gid) {
@@ -2800,25 +2792,23 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> and its <b>1 unit</b> price per row. Leave <b>1 unit</b> blank and it auto-fills as <b>MRP − %</b> (the % you set, default 10), or type your own base price. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are that 1-unit base price <b>minus the % you set</b> for each (not off MRP). Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing + operation cost for reference. Enter <b>Boxes sold</b> per row — their total ÷ company expense sets the operation cost/box. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> and its <b>1 unit</b> price per row. Leave <b>1 unit</b> blank and it auto-fills as <b>MRP − %</b> (the % you set, default 10), or type your own base price. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are that 1-unit base price <b>minus the % you set</b> for each (not off MRP). Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing (+ operation cost where it applies) for reference. Operation cost (company expense ÷ <b>boxes sold</b>) is added only in the <b>Hydrojelly jar</b> and <b>Retail</b> sections. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
         const c = esthCalc(mid, gid);
         const incRs = +c.incRs || 0; // flat incentive ₹ per sale
         const mgr = !!(+c.mgr); // manager involved → incentive split 2:1 (emp : mgr)
-        // Per-section operation cost: this section's expense ÷ total boxes sold.
-        // Boxes sold is entered PER PRODUCT ROW (c.q0, c.q1, …); the total of
-        // those row quantities drives the per-box rate, weighted by landing.
-        const sExp = +c.expMo || 0;
-        const qtyOf = (idx) => Math.max(0, +c["q" + idx] || 0);
-        const sBoxes = g.rows.reduce((s, r, idx) => s + qtyOf(idx), 0);
-        const opCost = sBoxes > 0 ? sExp / sBoxes : 0;
+        const isAcc = gid === "acc";
+        // Operation cost (company expense ÷ boxes sold) applies ONLY to the jar
+        // (hydro) and retail sections, and is a single section-level figure.
+        const useBoxes = (gid === "hydro" || gid === "retail");
+        const sExp = +c.expMo || 0, sBoxes = +c.boxes || 0;
+        const opCost = useBoxes && sBoxes > 0 ? sExp / sBoxes : 0;
         const secLands = g.rows.map((r) => landingOf(r[1])).filter((l) => l != null);
         const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
-        const opCostFor = (land) => avgLand > 0 ? opCost * (land / avgLand) : opCost;
+        const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
         const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
-        const isAcc = gid === "acc";
         const u1off = +c.u1off || 0;   // 1 unit = MRP − this % (auto-fill)
         const off1 = +c.off1 || 0;     // 5+1 = base − this %
         const off2 = +c.off2 || 0;     // 10+3 = base − this %
@@ -2834,7 +2824,7 @@
           return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px" class="t-muted">−${(+offPct).toFixed(0)}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
         };
         const head = ["Product", "MRP", "Cost", "1 unit", lbl1 + " · −" + off1 + "%", lbl2 + " · −" + off2 + "%"]
-          .concat(isAcc ? ["Incentive ₹"] : []).concat(["Boxes sold"])
+          .concat(isAcc ? ["Incentive ₹"] : [])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
           const cost = baseOf(r);
@@ -2856,15 +2846,12 @@
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
-          const q = qtyOf(idx);
-          const qtyIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:q${idx}" type="number" step="1" min="0" value="${q || ""}" placeholder="0" style="width:64px">`;
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${mrpIn}</td><td class="num t-muted">${rup(cost)}</td>${unitCell}${cell5}${cell10}${incCell}<td class="num">${qtyIn}</td></tr>`;
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${mrpIn}</td><td class="num t-muted">${rup(cost)}</td>${unitCell}${cell5}${cell10}${incCell}</tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
-          <label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
-          <label class="ord-field"><span>Set all rows' boxes</span><input class="ecalc-all" data-ecallall="${mid}:${gid}:${g.rows.length}" type="number" step="1" min="0" placeholder="apply to all" style="width:110px"></label>
-          <div class="ord-field"><span>Boxes sold (total of rows)</span><div class="ecalc-out">${sBoxes || "—"}</div></div>
-          <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
+          ${useBoxes ? `<label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
+          <label class="ord-field"><span>Boxes sold (/ month)</span>${num("boxes", sBoxes)}</label>
+          <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>` : ""}
           <label class="ord-field"><span>Incentive (₹ / sale)${isAcc ? " — default" : ""}</span>${num("incRs", c.incRs)}</label>
           <label class="ord-field"><span>1 unit = MRP − %</span>${num("u1off", c.u1off)}</label>
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
