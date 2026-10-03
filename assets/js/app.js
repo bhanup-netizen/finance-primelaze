@@ -2752,9 +2752,13 @@
       off1: 5,       // 5+1 price = 1-unit base price − this %
       off2: 10,      // 10+3 price = 1-unit base price − this %
     };
-    const mv = esthPricingOv[mid];
+    const mv = esthPricingOv[esthStoreMid(mid, gid)];
     return Object.assign(base, (mv && mv[gid]) || {});
   }
+  // Accessories are the same products at the same price in every market, so
+  // their calculator settings are stored once (under "salon") and shared by
+  // Saloon & Derma — set them in either market and both show the same.
+  function esthStoreMid(mid, gid) { return gid === "acc" ? "salon" : mid; }
   // Single source of truth for Esthemax selling prices. Both the super-admin
   // Company Price calculator (section()) and the salesperson Pricing view read
   // from this so the numbers always match. Returns per-row computed prices:
@@ -2809,7 +2813,9 @@
     });
     return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, u1off, off1, off2, mgr, opCost, lbl1, lbl2, rows };
   }
-  const ESTH_SALES_SECTIONS = ["hydro", "retail", "foot", "acc"];
+  // Sales price list sections — Foot Mask is intentionally excluded here and
+  // kept only in the super-admin Company Price tab.
+  const ESTH_SALES_SECTIONS = ["hydro", "retail", "acc"];
   // Each rendered Esthemax section registers a generator so a single input
   // edit can repaint ONLY that section in place (no full-page re-render → no
   // scroll jump, no lost focus).
@@ -2829,9 +2835,10 @@
         else if (/^u1\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row 1-unit base price ≥ 0
         else if (/^(off1|off2|u1off)$/.test(f)) v = Math.max(0, Math.min(100, v)); // discount % 0–100
       }
-      const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
+      const sm = esthStoreMid(mid, gid); // accessories share one store across markets
+      const mv = (esthPricingOv[sm] = esthPricingOv[sm] || {});
       (mv[gid] = mv[gid] || {})[f] = v;
-      saveEdits("Esthemax " + mid + " " + gid + " pricing"); esthRepaintSection(mid, gid);
+      saveEdits("Esthemax " + sm + " " + gid + " pricing"); esthRepaintSection(mid, gid);
     }));
   }
   function esthRepaintSection(mid, gid) {
