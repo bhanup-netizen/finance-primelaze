@@ -4900,8 +4900,6 @@
     "Puducherry": ["Puducherry", "Karaikal"],
   };
   const customCities = []; // [{state, city}] admin-added cities, persisted
-  const customStates = []; // admin-added states/regions not in INDIAN_STATES, persisted
-  const allStates = () => INDIAN_STATES.concat(customStates.filter((s) => INDIAN_STATES.indexOf(s) < 0));
   const titleCase = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim().replace(/\b([a-z])/g, (m) => m.toUpperCase());
   const STATE_FIX = { "west bangal": "West Bengal", "westbengal": "West Bengal", "wb": "West Bengal", "tamilnadu": "Tamil Nadu", "tamil nadu": "Tamil Nadu", "telengana": "Telangana", "delhi ncr": "Delhi", "ncr": "Delhi", "orissa": "Odisha", "pondicherry": "Puducherry", "uttaranchal": "Uttarakhand", "j k": "Jammu and Kashmir", "jk": "Jammu and Kashmir", "up": "Uttar Pradesh", "mp": "Madhya Pradesh", "hp": "Himachal Pradesh", "hr": "Haryana", "uk": "Uttarakhand", "kerela": "Kerala", "karnatak": "Karnataka", "arunanchal pradesh": "Arunachal Pradesh", "gujrat": "Gujarat" };
   const CITY_FIX = { "bhilwada": "Bhilwara", "hydrabad": "Hyderabad", "vellora": "Vellore", "zirukpur": "Zirakpur", "bangalore": "Bengaluru", "bombay": "Mumbai", "calcutta": "Kolkata", "gurgaon": "Gurugram", "gurgoan": "Gurugram", "gajiyabaad": "Ghaziabad", "jaiputr": "Jaipur", "vijaywada": "Vijayawada", "gorengaon": "Goregaon", "mysore": "Mysuru", "new delhi": "New Delhi", "vijay nagar": "Vijay Nagar", "juhu": "Mumbai", "juhu mumbai": "Mumbai" };
@@ -4945,12 +4943,13 @@
     leadAdds.forEach((l) => { if (normalizeState(l.state) === state && l.city) inData.add(normalizeCity(l.city)); });
     return Array.from(new Set(base.concat(cust).concat(Array.from(inData)))).sort((a, b) => a.localeCompare(b));
   }
-  function stateOptionsHtml(cur) {
-    const list = allStates();
-    const extra = cur && list.indexOf(cur) < 0 ? `<option selected>${esc(cur)}</option>` : "";
-    return `<option value="">— State —</option>${extra}${list.map((s) => `<option${s === cur ? " selected" : ""}>${esc(s)}</option>`).join("")}<option value="__newstate__">＋ Add new state…</option>`;
+  // States are a FIXED, uniform list (28 states + 8 UTs). No custom/free-text
+  // entries — everyone must pick from the same canonical names so the data
+  // stays consistent (no "UP" vs "Uttar Pradesh" vs "uttarpradesh").
+  function stateSelectHtml(id, cur) {
+    const extra = cur && INDIAN_STATES.indexOf(cur) < 0 ? `<option selected>${esc(cur)}</option>` : "";
+    return `<select id="${id}"><option value="">— State —</option>${extra}${INDIAN_STATES.map((s) => `<option${s === cur ? " selected" : ""}>${esc(s)}</option>`).join("")}</select>`;
   }
-  function stateSelectHtml(id, cur) { return `<select id="${id}">${stateOptionsHtml(cur)}</select>`; }
   function cityOptionsHtml(state, cur) {
     const list = citiesForState(state);
     const extra = cur && list.indexOf(cur) < 0 ? `<option selected>${esc(cur)}</option>` : "";
@@ -4961,22 +4960,8 @@
   function wireStateCity(stateId, cityId) {
     const st = document.getElementById(stateId), ct = document.getElementById(cityId);
     if (!st || !ct) return;
-    let lastCity = ct.value, lastState = st.value;
-    st.onchange = () => {
-      // "＋ Add new state…" prompts for a new state/region and adds it.
-      if (st.value === "__newstate__") {
-        const name = (window.prompt("New state / region name:") || "").trim();
-        if (name) {
-          const ns = titleCase(name);
-          if (!allStates().includes(ns)) { customStates.push(ns); leadDirty = true; saveEdits("Added state: " + ns); }
-          st.innerHTML = stateOptionsHtml(ns); st.value = ns; lastState = ns;
-        } else { st.value = lastState; }
-        ct.innerHTML = cityOptionsHtml(st.value, ""); lastCity = "";
-        return;
-      }
-      lastState = st.value;
-      ct.innerHTML = cityOptionsHtml(st.value, ""); lastCity = "";
-    };
+    let lastCity = ct.value;
+    st.onchange = () => { ct.innerHTML = cityOptionsHtml(st.value, ""); lastCity = ""; };
     ct.onchange = () => {
       if (ct.value !== "__newcity__") { lastCity = ct.value; return; }
       const name = (window.prompt("New city name:") || "").trim();
@@ -10122,7 +10107,6 @@
       if (e.leadFiles && typeof e.leadFiles === "object") { Object.keys(leadFiles).forEach((k) => delete leadFiles[k]); Object.assign(leadFiles, e.leadFiles); }
       if (Array.isArray(e.customLeadSources)) { customLeadSources.length = 0; e.customLeadSources.forEach((s) => customLeadSources.push(s)); }
       if (Array.isArray(e.customCities)) { customCities.length = 0; e.customCities.forEach((c) => customCities.push(c)); }
-      if (Array.isArray(e.customStates)) { customStates.length = 0; e.customStates.forEach((s) => customStates.push(s)); }
       if (Array.isArray(e.customLeadOwners)) { customLeadOwners.length = 0; e.customLeadOwners.forEach((o) => customLeadOwners.push(o)); }
       if (typeof e.payClearBefore === "string") payClearBefore = e.payClearBefore;
       if (typeof e.payHideAll === "boolean") payHideAll = e.payHideAll;
@@ -10351,7 +10335,7 @@
       // clobber it with our stale snapshot (fixes "leads deleting automatically").
       let wLeadEdits = leadEdits, wLeadAdds = leadAdds, wLeadRemovals = leadRemovals,
           wLeadArchive = leadArchive, wLeadFiles = leadFiles,
-          wCustomLeadSources = customLeadSources, wCustomCities = customCities, wCustomStates = customStates, wCustomLeadOwners = customLeadOwners;
+          wCustomLeadSources = customLeadSources, wCustomCities = customCities, wCustomLeadOwners = customLeadOwners;
       if (serverData && !leadDirty) {
         // This session never touched leads — keep the server's copy verbatim.
         if (serverData.leadEdits) wLeadEdits = serverData.leadEdits;
@@ -10361,7 +10345,6 @@
         if (serverData.leadFiles) wLeadFiles = serverData.leadFiles;
         if (Array.isArray(serverData.customLeadSources)) wCustomLeadSources = serverData.customLeadSources;
         if (Array.isArray(serverData.customCities)) wCustomCities = serverData.customCities;
-        if (Array.isArray(serverData.customStates)) wCustomStates = serverData.customStates;
         if (Array.isArray(serverData.customLeadOwners)) wCustomLeadOwners = serverData.customLeadOwners;
       } else if (serverData && leadDirty) {
         // This session DID edit leads — MERGE our specific changes onto the
@@ -10391,7 +10374,6 @@
         // Custom pick-lists are append-only — union with the server's.
         wCustomLeadSources = uniq(serverData.customLeadSources, customLeadSources);
         wCustomCities = (function () { const seen = new Set(); const out = []; [].concat(Array.isArray(serverData.customCities) ? serverData.customCities : [], customCities).forEach((c) => { const k = c && (c.state + "|" + c.city); if (c && !seen.has(k)) { seen.add(k); out.push(c); } }); return out; })();
-        wCustomStates = uniq(serverData.customStates, customStates);
         wCustomLeadOwners = uniq(serverData.customLeadOwners, customLeadOwners);
       }
       // Payments: same protection. If this session never touched payment data,
@@ -10480,7 +10462,7 @@
       refreshPageEditNote(); // keep the per-page activity log live
       try {
         await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, paymentAdds: wPaymentAdds, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customStates: wCustomStates, customLeadOwners: wCustomLeadOwners, regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved, updatedBy: by, updatedAt: at, log: mergedLog, ...P }, { merge: true });
+          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, paymentAdds: wPaymentAdds, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved, updatedBy: by, updatedAt: at, log: mergedLog, ...P }, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
