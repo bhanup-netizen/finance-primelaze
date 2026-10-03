@@ -2697,7 +2697,7 @@
     const base = {
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
       expMo: 0,      // company/section expense per month (₹) — this section only
-      incPct: 3,     // incentive = % of sale (₹300 per ₹10,000 = 3%)
+      incRs: 300,    // incentive = flat ₹ per sale (added on top of base cost)
       tmSingle: 50,  // target margin % — single unit
       tm1: 40,       // target margin % — bulk tier 1
       tm2: 30,       // target margin % — bulk tier 2
@@ -2763,12 +2763,12 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense</b>, <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), bulk tiers and the three target margins. Enter <b>Boxes sold</b> per product row; their total ÷ company expense sets the <b>operation cost/box</b>, so the <b>1 unit / 5+1 / 10+3</b> prices adjust automatically. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell shows the <b>incentive</b> (₹) for that sale. Or type your own number in <b>My price</b> to see the margin % and incentive it gives. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense</b>, <b>incentive (₹ per sale)</b>, bulk tiers and the three target margins. Enter <b>Boxes sold</b> per product row; their total ÷ company expense sets the <b>operation cost/box</b>, so the <b>1 unit / 5+1 / 10+3</b> prices adjust automatically. Each order type is <b>priced to its target margin</b> (price = (base + incentive) ÷ (1 − margin%)), and each cell shows the flat <b>incentive</b> (₹) for that sale. Or type your own number in <b>My price</b> to see the margin % it gives. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
         const c = esthCalc(mid, gid);
-        const incPct = +c.incPct || 0;
+        const incRs = +c.incRs || 0; // flat incentive ₹ per sale
         const mgr = !!(+c.mgr); // manager involved → incentive split 2:1 (emp : mgr)
         // Per-section operation cost: this section's expense ÷ total boxes sold.
         // Boxes sold is entered PER PRODUCT ROW (c.q0, c.q1, …); the total of
@@ -2791,17 +2791,19 @@
         // the sale price, so it's folded into the price: price = base ÷
         // (1 − (margin% + incentive%)). The margin then lands exactly on target.
         const baseOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land)) : null; };
-        const priceAt = (base, marginPct) => { const d = 1 - (marginPct + incPct) / 100; return d > 0 ? base / d : null; };
-        // A tier cell: price at the target margin + the incentive (₹) for it.
+        // Incentive is a flat ₹ added to cost, then priced to the target margin:
+        // price = (base + incentive) ÷ (1 − margin%). The margin then lands on
+        // target and the incentive is a fixed ₹ regardless of price.
+        const priceAt = (base, marginPct) => { const d = 1 - marginPct / 100; return d > 0 ? (base + incRs) / d : null; };
+        const incLineOf = () => mgr
+          ? `inc ${rup(incRs)} · E ${rup(incRs * 2 / 3)} / M ${rup(incRs / 3)}`
+          : `inc ${rup(incRs)}`;
+        // A tier cell: price at the target margin + the flat incentive (₹).
         const tierCell = (base, tgt) => {
           if (base == null) return `<td class="num">—</td>`;
           const price = priceAt(base, tgt);
           if (price == null) return `<td class="num" style="color:var(--bad)">n/a</td>`;
-          const incAmt = price * incPct / 100;              // incentive = % of sale
-          const incLine = mgr
-            ? `inc ${rup(incAmt)} · E ${rup(incAmt * 2 / 3)} / M ${rup(incAmt / 3)}`
-            : `inc ${rup(incAmt)}`;
-          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLine}</div></td>`;
+          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLineOf()}</div></td>`;
         };
         const head = ["Product", "MRP (ref)", "Base cost"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
           .concat(["My price", "Boxes sold"])
@@ -2817,13 +2819,9 @@
           const mpIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:p${idx}" type="number" step="1" min="0" value="${mp || ""}" placeholder="—" style="width:84px">`;
           let mpInfo = "";
           if (base != null && mp > 0) {
-            const realMargin = (1 - base / mp) * 100 - incPct;
-            const incAmt = mp * incPct / 100;
+            const realMargin = (mp - base - incRs) / mp * 100; // profit after flat incentive
             const col = realMargin >= 0 ? "var(--good)" : "var(--bad)";
-            const incLine = mgr
-              ? `inc ${rup(incAmt)} · E ${rup(incAmt * 2 / 3)} / M ${rup(incAmt / 3)}`
-              : `inc ${rup(incAmt)}`;
-            mpInfo = `<div style="font-size:11px;font-weight:700;color:${col}">${realMargin.toFixed(0)}%</div><div class="cpx-inc">${incLine}</div>`;
+            mpInfo = `<div style="font-size:11px;font-weight:700;color:${col}">${realMargin.toFixed(0)}%</div><div class="cpx-inc">${incLineOf()}</div>`;
           }
           return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}<td class="num">${mpIn}${mpInfo}</td><td class="num">${qtyIn}</td></tr>`;
         }).join("");
@@ -2832,7 +2830,7 @@
           <label class="ord-field"><span>Set all rows' boxes</span><input class="ecalc-all" data-ecallall="${mid}:${gid}:${g.rows.length}" type="number" step="1" min="0" placeholder="apply to all" style="width:110px"></label>
           <div class="ord-field"><span>Boxes sold (total of rows)</span><div class="ecalc-out">${sBoxes || "—"}</div></div>
           <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
-          <label class="ord-field"><span>Incentive % of sale</span>${num("incPct", c.incPct)}</label>
+          <label class="ord-field"><span>Incentive (₹ / sale)</span>${num("incRs", c.incRs)}</label>
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
