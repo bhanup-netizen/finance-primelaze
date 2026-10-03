@@ -2698,7 +2698,8 @@
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
       expMo: 0,      // company/section expense per month (₹) — this section only
       incRs: 300,    // incentive = flat ₹ per sale (added on top of base cost)
-      tmSingle: 50,  // target margin % — single unit
+      u1off: 10,     // 1 unit price = MRP − this % (when the product has an MRP)
+      tmSingle: 50,  // target margin % — single unit (fallback when no MRP / off=0)
       tm1: 40,       // target margin % — bulk tier 1
       tm2: 30,       // target margin % — bulk tier 2
     };
@@ -2764,7 +2765,7 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense</b>, <b>incentive (₹ per sale)</b>, bulk tiers and the three target margins. Enter <b>Boxes sold</b> per product row; their total ÷ company expense sets the <b>operation cost/box</b>, so the <b>1 unit / 5+1 / 10+3</b> prices adjust automatically. Each order type is <b>priced to its target margin</b> (price = (base + incentive) ÷ (1 − margin%)), and each cell shows the flat <b>incentive</b> (₹) for that sale. Or type your own number in <b>My price</b> to see the margin % it gives. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense</b>, <b>incentive (₹ per sale)</b>, bulk tiers and the three target margins. Enter <b>Boxes sold</b> per product row; their total ÷ company expense sets the <b>operation cost/box</b>, so the <b>1 unit / 5+1 / 10+3</b> prices adjust automatically. The <b>1 unit</b> price is <b>MRP − a %</b> you set (default 10%); <b>5+1 / 10+3</b> are priced to their target margin (price = (base + incentive) ÷ (1 − margin%)). Each cell shows the achieved margin % and the flat <b>incentive</b> (₹) for that sale. Or type your own number in <b>My price</b> to see the margin % it gives. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
@@ -2798,6 +2799,9 @@
         // Accessories carry a per-row incentive (prices vary widely); every
         // other section uses the one section-level incentive for all rows.
         const isAcc = gid === "acc";
+        // 1 unit price from MRP: price = MRP − u1off%. Only for sections whose
+        // products carry an MRP (not accessories). 0 = fall back to target margin.
+        const u1off = isAcc ? 0 : (+c.u1off || 0);
         const priceAt = (base, marginPct, inc) => { const d = 1 - marginPct / 100; return d > 0 ? (base + inc) / d : null; };
         const incLineOf = (inc) => mgr
           ? `inc ${rup(inc)} · E ${rup(inc * 2 / 3)} / M ${rup(inc / 3)}`
@@ -2809,14 +2813,27 @@
           if (price == null) return `<td class="num" style="color:var(--bad)">n/a</td>`;
           return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
         };
-        const head = ["Product", "MRP (ref)", "Base cost"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
+        // 1 unit cell priced off MRP (MRP − u1off%); shows the achieved margin.
+        const mrpUnitCell = (base, mrp, off, inc) => {
+          const price = mrp * (1 - off / 100);
+          const m = price > 0 ? (price - base - inc) / price * 100 : 0;
+          const col = m >= 0 ? "var(--good)" : "var(--bad)";
+          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:${col}">${m.toFixed(0)}% · MRP −${off}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
+        };
+        const head = ["Product", "MRP (ref)", "Base cost"]
+          .concat(tiers.map((t, ti) => (ti === 0 && u1off > 0) ? (t.label + " · MRP −" + u1off + "%") : (t.label + " · " + t.tgt + "%")))
           .concat(isAcc ? ["Incentive ₹"] : []).concat(["My price", "Boxes sold"])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
           const base = baseOf(r);
+          const mrp = +r[2] || 0;
           // Row incentive: accessories can override per row; others use section ₹.
           const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
-          const cells = tiers.map((t) => tierCell(base, t.tgt, rowInc)).join("");
+          const cells = tiers.map((t, ti) => {
+            // 1 unit = MRP − u1off% when a product MRP is available; else target margin.
+            if (ti === 0 && u1off > 0 && mrp > 0 && base != null) return mrpUnitCell(base, mrp, u1off, rowInc);
+            return tierCell(base, t.tgt, rowInc);
+          }).join("");
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
@@ -2840,10 +2857,11 @@
           <div class="ord-field"><span>Boxes sold (total of rows)</span><div class="ecalc-out">${sBoxes || "—"}</div></div>
           <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
           <label class="ord-field"><span>Incentive (₹ / sale)${isAcc ? " — default" : ""}</span>${num("incRs", c.incRs)}</label>
+          ${isAcc ? "" : `<label class="ord-field"><span>1 unit = MRP − %</span>${num("u1off", c.u1off)}</label>`}
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
-          <label class="ord-field"><span>Margin 1 unit %</span>${num("tmSingle", c.tmSingle)}</label>
+          <label class="ord-field"><span>Margin 1 unit %${!isAcc && u1off > 0 ? " (if no MRP)" : ""}</span>${num("tmSingle", c.tmSingle)}</label>
           <label class="ord-field"><span>Margin ${esc(lbl1)} %</span>${num("tm1", c.tm1)}</label>
           <label class="ord-field"><span>Margin ${esc(lbl2)} %</span>${num("tm2", c.tm2)}</label>
         </div>`;
