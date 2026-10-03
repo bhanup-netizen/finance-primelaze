@@ -2697,11 +2697,10 @@
     const base = {
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
       expMo: 0,      // company/section expense per month (₹) — this section only
-      incRs: 300,    // incentive = flat ₹ per sale (added on top of base cost)
-      u1off: 10,     // 1 unit price = MRP − this % (when the product has an MRP)
-      tmSingle: 50,  // target margin % — single unit (fallback when no MRP / off=0)
-      tm1: 40,       // target margin % — bulk tier 1
-      tm2: 30,       // target margin % — bulk tier 2
+      incRs: 300,    // incentive = flat ₹ per sale
+      u1off: 10,     // 1 unit price = MRP − this % (auto-fill when 1 unit left blank)
+      off1: 5,       // 5+1 price = 1-unit base price − this %
+      off2: 10,      // 10+3 price = 1-unit base price − this %
     };
     const mv = esthPricingOv[mid];
     return Object.assign(base, (mv && mv[gid]) || {});
@@ -2730,8 +2729,10 @@
           if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
           else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
           else if (/^q\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row boxes sold ≥ 0
-          else if (/^p\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row manual price ≥ 0
           else if (/^ir\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row incentive ₹ ≥ 0
+          else if (/^mrp\d+$/.test(f)) v = Math.max(0, Math.round(v));  // row MRP ₹ ≥ 0
+          else if (/^u1\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row 1-unit base price ≥ 0
+          else if (/^(off1|off2|u1off)$/.test(f)) v = Math.max(0, Math.min(100, v)); // discount % 0–100
         }
         const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
         (mv[gid] = mv[gid] || {})[f] = v;
@@ -2765,7 +2766,7 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense</b>, <b>incentive (₹ per sale)</b>, bulk tiers and the three target margins. Enter <b>Boxes sold</b> per product row; their total ÷ company expense sets the <b>operation cost/box</b>, so the <b>1 unit / 5+1 / 10+3</b> prices adjust automatically. The <b>1 unit</b> price is <b>MRP − a %</b> you set (default 10%); <b>5+1 / 10+3</b> are priced to their target margin (price = (base + incentive) ÷ (1 − margin%)). Each cell shows the achieved margin % and the flat <b>incentive</b> (₹) for that sale. Or type your own number in <b>My price</b> to see the margin % it gives. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> and its <b>1 unit</b> price per row. Leave <b>1 unit</b> blank and it auto-fills as <b>MRP − %</b> (the % you set, default 10), or type your own base price. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are that 1-unit base price <b>minus the % you set</b> for each (not off MRP). Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing + operation cost for reference. Enter <b>Boxes sold</b> per row — their total ÷ company expense sets the operation cost/box. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
@@ -2783,73 +2784,47 @@
         const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
         const opCostFor = (land) => avgLand > 0 ? opCost * (land / avgLand) : opCost;
         const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
-        const tiers = [
-          { label: "1 unit", tgt: +c.tmSingle || 0 },
-          { label: lbl1, tgt: +c.tm1 || 0 },
-          { label: lbl2, tgt: +c.tm2 || 0 },
-        ];
-        const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${gid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
-        // Base cost (landing + weighted operation + other). Incentive is a % of
-        // the sale price, so it's folded into the price: price = base ÷
-        // (1 − (margin% + incentive%)). The margin then lands exactly on target.
-        const baseOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land)) : null; };
-        // Incentive is a flat ₹ added to cost, then priced to the target margin:
-        // price = (base + incentive) ÷ (1 − margin%). The margin then lands on
-        // target and the incentive is a fixed ₹ regardless of price.
-        // Accessories carry a per-row incentive (prices vary widely); every
-        // other section uses the one section-level incentive for all rows.
         const isAcc = gid === "acc";
-        // 1 unit price from MRP: price = MRP − u1off%. Only for sections whose
-        // products carry an MRP (not accessories). 0 = fall back to target margin.
-        const u1off = isAcc ? 0 : (+c.u1off || 0);
-        const priceAt = (base, marginPct, inc) => { const d = 1 - marginPct / 100; return d > 0 ? (base + inc) / d : null; };
+        const u1off = +c.u1off || 0;   // 1 unit = MRP − this % (auto-fill)
+        const off1 = +c.off1 || 0;     // 5+1 = base − this %
+        const off2 = +c.off2 || 0;     // 10+3 = base − this %
+        const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${gid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
+        // Cost (landing + weighted operation cost) — shown for reference only.
+        const baseOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land)) : null; };
         const incLineOf = (inc) => mgr
           ? `inc ${rup(inc)} · E ${rup(inc * 2 / 3)} / M ${rup(inc / 3)}`
           : `inc ${rup(inc)}`;
-        // A tier cell: price at the target margin + the flat incentive (₹).
-        const tierCell = (base, tgt, inc) => {
-          if (base == null) return `<td class="num">—</td>`;
-          const price = priceAt(base, tgt, inc);
-          if (price == null) return `<td class="num" style="color:var(--bad)">n/a</td>`;
-          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
+        // An offer cell: base price − off% + the flat incentive (₹). No margin.
+        const offerCell = (price, offPct, inc) => {
+          if (!(price > 0)) return `<td class="num t-muted">—</td>`;
+          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px" class="t-muted">−${(+offPct).toFixed(0)}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
         };
-        // 1 unit cell priced off MRP (MRP − u1off%); shows the achieved margin.
-        const mrpUnitCell = (base, mrp, off, inc) => {
-          const price = mrp * (1 - off / 100);
-          const m = price > 0 ? (price - base - inc) / price * 100 : 0;
-          const col = m >= 0 ? "var(--good)" : "var(--bad)";
-          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:${col}">${m.toFixed(0)}% · MRP −${off}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
-        };
-        const head = ["Product", "MRP (ref)", "Base cost"]
-          .concat(tiers.map((t, ti) => (ti === 0 && u1off > 0) ? (t.label + " · MRP −" + u1off + "%") : (t.label + " · " + t.tgt + "%")))
-          .concat(isAcc ? ["Incentive ₹"] : []).concat(["My price", "Boxes sold"])
+        const head = ["Product", "MRP", "Cost", "1 unit", lbl1 + " · −" + off1 + "%", lbl2 + " · −" + off2 + "%"]
+          .concat(isAcc ? ["Incentive ₹"] : []).concat(["Boxes sold"])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
-          const base = baseOf(r);
-          const mrp = +r[2] || 0;
+          const cost = baseOf(r);
+          // MRP: editable per row (falls back to the seed MRP).
+          const mrpEff = c["mrp" + idx] != null ? +c["mrp" + idx] : (+r[2] || 0);
+          const mrpVal = c["mrp" + idx] != null ? Math.round(+c["mrp" + idx]) : (r[2] != null ? r[2] : "");
+          const mrpIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:mrp${idx}" type="number" step="1" min="0" value="${esc(mrpVal)}" placeholder="—" style="width:84px">`;
+          // 1 unit base price: typed, else auto = MRP − u1off%.
+          const u1typed = c["u1" + idx] != null ? +c["u1" + idx] : 0;
+          const auto1 = mrpEff > 0 ? mrpEff * (1 - u1off / 100) : 0;
+          const base1 = u1typed > 0 ? u1typed : auto1;
+          const u1In = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:u1${idx}" type="number" step="1" min="0" value="${u1typed > 0 ? Math.round(u1typed) : ""}" placeholder="${auto1 > 0 ? Math.round(auto1) : "—"}" style="width:84px">`;
           // Row incentive: accessories can override per row; others use section ₹.
           const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
-          const cells = tiers.map((t, ti) => {
-            // 1 unit = MRP − u1off% when a product MRP is available; else target margin.
-            if (ti === 0 && u1off > 0 && mrp > 0 && base != null) return mrpUnitCell(base, mrp, u1off, rowInc);
-            return tierCell(base, t.tgt, rowInc);
-          }).join("");
+          const u1Hint = base1 > 0 ? `<div style="font-size:11px" class="t-muted">${u1typed > 0 ? "typed" : "MRP −" + u1off + "%"}</div><div class="cpx-inc">${incLineOf(rowInc)}</div>` : "";
+          const unitCell = `<td class="num">${u1In}${u1Hint}</td>`;
+          const cell5 = offerCell(base1 > 0 ? base1 * (1 - off1 / 100) : 0, off1, rowInc);
+          const cell10 = offerCell(base1 > 0 ? base1 * (1 - off2 / 100) : 0, off2, rowInc);
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
           const q = qtyOf(idx);
           const qtyIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:q${idx}" type="number" step="1" min="0" value="${q || ""}" placeholder="0" style="width:64px">`;
-          // Manual "my price" — the admin types a selling price and sees the
-          // margin it yields (after folding incentive out) + the incentive ₹.
-          const mp = +c["p" + idx] || 0;
-          const mpIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:p${idx}" type="number" step="1" min="0" value="${mp || ""}" placeholder="—" style="width:84px">`;
-          let mpInfo = "";
-          if (base != null && mp > 0) {
-            const realMargin = (mp - base - rowInc) / mp * 100; // profit after flat incentive
-            const col = realMargin >= 0 ? "var(--good)" : "var(--bad)";
-            mpInfo = `<div style="font-size:11px;font-weight:700;color:${col}">${realMargin.toFixed(0)}%</div><div class="cpx-inc">${incLineOf(rowInc)}</div>`;
-          }
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}${incCell}<td class="num">${mpIn}${mpInfo}</td><td class="num">${qtyIn}</td></tr>`;
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${mrpIn}</td><td class="num t-muted">${rup(cost)}</td>${unitCell}${cell5}${cell10}${incCell}<td class="num">${qtyIn}</td></tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
           <label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
@@ -2857,13 +2832,12 @@
           <div class="ord-field"><span>Boxes sold (total of rows)</span><div class="ecalc-out">${sBoxes || "—"}</div></div>
           <div class="ord-field"><span>Operation cost / box</span><div class="ecalc-out">${opCost ? rup(opCost) : "—"}</div></div>
           <label class="ord-field"><span>Incentive (₹ / sale)${isAcc ? " — default" : ""}</span>${num("incRs", c.incRs)}</label>
-          ${isAcc ? "" : `<label class="ord-field"><span>1 unit = MRP − %</span>${num("u1off", c.u1off)}</label>`}
+          <label class="ord-field"><span>1 unit = MRP − %</span>${num("u1off", c.u1off)}</label>
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
-          <label class="ord-field"><span>Margin 1 unit %${!isAcc && u1off > 0 ? " (if no MRP)" : ""}</span>${num("tmSingle", c.tmSingle)}</label>
-          <label class="ord-field"><span>Margin ${esc(lbl1)} %</span>${num("tm1", c.tm1)}</label>
-          <label class="ord-field"><span>Margin ${esc(lbl2)} %</span>${num("tm2", c.tm2)}</label>
+          <label class="ord-field"><span>${esc(lbl1)} = base − %</span>${num("off1", c.off1)}</label>
+          <label class="ord-field"><span>${esc(lbl2)} = base − %</span>${num("off2", c.off2)}</label>
         </div>`;
         return `<div class="block cprice-section" style="margin-top:16px"><h3 style="margin:0 0 2px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3>${panel}<div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
