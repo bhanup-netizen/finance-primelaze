@@ -2729,6 +2729,7 @@
           if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
           else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
           else if (/^q\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row boxes sold ≥ 0
+          else if (/^p\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row manual price ≥ 0
         }
         const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
         (mv[gid] = mv[gid] || {})[f] = v;
@@ -2762,7 +2763,7 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense</b>, <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), bulk tiers and the three target margins. Enter <b>Boxes sold</b> per product row; their total ÷ company expense sets the <b>operation cost/box</b>, so the <b>1 unit / 5+1 / 10+3</b> prices adjust automatically. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell shows the <b>incentive</b> (₹) for that sale. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Each section has its own calculator — set its <b>company expense</b>, <b>incentive % of sale</b> (3% = ₹300 per ₹10,000), bulk tiers and the three target margins. Enter <b>Boxes sold</b> per product row; their total ÷ company expense sets the <b>operation cost/box</b>, so the <b>1 unit / 5+1 / 10+3</b> prices adjust automatically. Each order type is <b>priced to its target margin</b> (incentive folded in), and each cell shows the <b>incentive</b> (₹) for that sale. Or type your own number in <b>My price</b> to see the margin % and incentive it gives. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
@@ -2803,14 +2804,28 @@
           return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px;font-weight:700;color:var(--good)">${(+tgt).toFixed(0)}%</div><div class="cpx-inc">${incLine}</div></td>`;
         };
         const head = ["Product", "MRP (ref)", "Base cost"].concat(tiers.map((t) => t.label + " · " + t.tgt + "%"))
-          .concat(["Boxes sold"])
+          .concat(["My price", "Boxes sold"])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
           const base = baseOf(r);
           const cells = tiers.map((t) => tierCell(base, t.tgt)).join("");
           const q = qtyOf(idx);
           const qtyIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:q${idx}" type="number" step="1" min="0" value="${q || ""}" placeholder="0" style="width:64px">`;
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}<td class="num">${qtyIn}</td></tr>`;
+          // Manual "my price" — the admin types a selling price and sees the
+          // margin it yields (after folding incentive out) + the incentive ₹.
+          const mp = +c["p" + idx] || 0;
+          const mpIn = `<input class="ecalc-in" data-ecalc="${mid}:${gid}:p${idx}" type="number" step="1" min="0" value="${mp || ""}" placeholder="—" style="width:84px">`;
+          let mpInfo = "";
+          if (base != null && mp > 0) {
+            const realMargin = (1 - base / mp) * 100 - incPct;
+            const incAmt = mp * incPct / 100;
+            const col = realMargin >= 0 ? "var(--good)" : "var(--bad)";
+            const incLine = mgr
+              ? `inc ${rup(incAmt)} · E ${rup(incAmt * 2 / 3)} / M ${rup(incAmt / 3)}`
+              : `inc ${rup(incAmt)}`;
+            mpInfo = `<div style="font-size:11px;font-weight:700;color:${col}">${realMargin.toFixed(0)}%</div><div class="cpx-inc">${incLine}</div>`;
+          }
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num t-muted">${rup(r[2])}</td><td class="num t-muted">${rup(base)}</td>${cells}<td class="num">${mpIn}${mpInfo}</td><td class="num">${qtyIn}</td></tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
           <label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
