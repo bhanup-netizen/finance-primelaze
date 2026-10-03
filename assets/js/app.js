@@ -2541,6 +2541,8 @@
     setTimeout(() => {
       const edl = document.getElementById("esthPriceDl");
       if (edl) edl.onclick = () => downloadEsthemaxSalesPrice();
+      const epdf = document.getElementById("esthPricePdf");
+      if (epdf) epdf.onclick = () => downloadEsthemaxPdf();
       document.querySelectorAll("[data-mkt]").forEach((b) => {
         b.onclick = () => { mkt = b.dataset.mkt; go("prices", true); };
       });
@@ -2583,7 +2585,10 @@
           <button data-mkt="salon" class="${mkt === "salon" ? "active" : ""}">Saloon (Salon)</button>
           <button data-mkt="doctor" class="${mkt === "doctor" ? "active" : ""}">Derma (Doctor)</button>
         </div>
-        <div class="hq-actions"><button id="esthPriceDl" class="dl-btn" type="button" title="Download this Esthemax price list">⬇ Price list</button></div>
+        <div class="hq-actions">
+          <button id="esthPriceDl" class="dl-btn" type="button" title="Download this Esthemax price list (Excel)">⬇ Excel</button>
+          <button id="esthPricePdf" class="dl-btn" type="button" title="Download this Esthemax price list (PDF)">⬇ PDF</button>
+        </div>
       </div>
       ${policy}${offersNote}
       ${ESTH_SALES_SECTIONS.map(sectionTable).join("")}`;
@@ -2619,6 +2624,32 @@
       a.download = fname.replace(/\.xlsx$/, ".csv");
       a.click();
     }
+  }
+  // Printable PDF of the Esthemax selling-price list (current market).
+  function downloadEsthemaxPdf() {
+    const mLabel = mkt === "salon" ? "Saloon" : "Derma";
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+    const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+    const blocks = ESTH_SALES_SECTIONS.map((gid) => {
+      const S = esthComputeSection(mkt, gid);
+      if (!S || !S.rows.length) return "";
+      const head = [{ label: "#", num: 1 }, { label: "Product" }, { label: "MRP", num: 1 },
+        { label: "1 unit", num: 1 }, { label: S.lbl1, num: 1 }, { label: S.lbl2, num: 1 }, { label: "Incentive ₹", num: 1 }];
+      const body = S.rows.map((r) => `<tr><td class="num">${r.sr}</td><td>${esc(r.name)}</td>
+        <td class="num">${rup(r.mrp)}</td><td class="num"><b>${rup(r.unit)}</b></td>
+        <td class="num">${rup(r.p5)}</td><td class="num">${rup(r.p10)}</td>
+        <td class="num">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
+      return `<h2>${esc(S.title)} <span style="font-weight:400;font-size:12px">(${esc(S.pack)})</span></h2>${pTable(head, body)}`;
+    }).join("");
+    const html = `
+      <div class="p-section">
+        <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Price List</h1>
+        <div class="p-sub">${esc(mLabel)} market · per box (₹)</div>
+        <p class="p-meta">Generated ${esc(stamp)}</p>
+        <p class="p-meta"><b>Payment &amp; incentive:</b> all orders are 100% advance — dispatch only after payment received. Incentive (₹ per box) is released only after the customer's payment is realised, not at booking/dispatch. 1 unit = MRP − discount; 5+1 / 10+3 are buy-and-free bulk offers (price per paid box).</p>
+        ${blocks}
+      </div>`;
+    printHtml(html);
   }
 
   function mktBody() {
