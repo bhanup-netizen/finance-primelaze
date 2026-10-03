@@ -2544,12 +2544,9 @@
       document.querySelectorAll("[data-mkt]").forEach((b) => {
         b.onclick = () => { mkt = b.dataset.mkt; go("prices", true); };
       });
-      document.querySelectorAll("[data-pmode]").forEach((b) => {
-        b.onclick = () => { pricingMode = b.dataset.pmode; go("prices", true); };
-      });
     }, 0);
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
-    const adm = priceAdmin();
+    const adm = false; // cost / landing is shown only in the Company Price tab
     const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
     const sectionTable = (gid) => {
       const S = esthComputeSection(mkt, gid);
@@ -2579,10 +2576,9 @@
     return `
       <div class="section-head">
         <h1>Esthemax Price List — ${esc(mLabel)}</h1>
-        <p>${adm ? "Admin view — selling prices with landing cost shown for reference. " : "Selling prices for the sales team. "}1 unit = MRP − discount; 5+1 &amp; 10+3 are bulk offers. Incentive is the ₹ you earn per box.</p>
+        <p>Selling prices for the sales team. 1 unit = MRP − discount; 5+1 &amp; 10+3 are bulk offers. Incentive is the ₹ you earn per box. ${canSeeLanding() ? "(Cost/landing is in the Company Price tab.)" : ""}</p>
       </div>
       <div class="controls">
-        ${canSeeLanding() ? priceModeToggle() : ""}
         <div class="seg">
           <button data-mkt="salon" class="${mkt === "salon" ? "active" : ""}">Saloon (Salon)</button>
           <button data-mkt="doctor" class="${mkt === "doctor" ? "active" : ""}">Derma (Doctor)</button>
@@ -2595,7 +2591,7 @@
   // Download the computed Esthemax selling-price list for the current market.
   function downloadEsthemaxSalesPrice() {
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
-    const adm = priceAdmin();
+    const adm = false; // selling prices only — cost stays in Company Price
     const r0 = (n) => n == null ? "" : Math.round(n);
     const aoa = [["Esthemax Price List — " + mLabel + " · all orders 100% advance; incentive released only after payment realised"]];
     ESTH_SALES_SECTIONS.forEach((gid) => {
