@@ -2705,6 +2705,67 @@
     const mv = esthPricingOv[mid];
     return Object.assign(base, (mv && mv[gid]) || {});
   }
+  // Each rendered Esthemax section registers a generator so a single input
+  // edit can repaint ONLY that section in place (no full-page re-render → no
+  // scroll jump, no lost focus).
+  const esthSecGen = {};
+  function wireEsthInputs() {
+    document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
+      const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
+      let v;
+      if (el.type === "checkbox") { v = el.checked ? 1 : 0; }
+      else {
+        v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
+        if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
+        else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
+        else if (/^q\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row boxes sold ≥ 0
+        else if (/^ir\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row incentive ₹ ≥ 0
+        else if (/^mrp\d+$/.test(f)) v = Math.max(0, Math.round(v));  // row MRP ₹ ≥ 0
+        else if (/^u1\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row 1-unit base price ≥ 0
+        else if (/^(off1|off2|u1off)$/.test(f)) v = Math.max(0, Math.min(100, v)); // discount % 0–100
+      }
+      const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
+      (mv[gid] = mv[gid] || {})[f] = v;
+      saveEdits("Esthemax " + mid + " " + gid + " pricing"); esthRepaintSection(mid, gid);
+    }));
+    document.querySelectorAll(".ecalc-all[data-ecallall]").forEach((el) => (el.onchange = () => {
+      const [mid, gid, cnt] = String(el.dataset.ecallall).split(":");
+      const n = parseInt(cnt, 10) || 0;
+      let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0; v = Math.round(v);
+      const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
+      const sv = (mv[gid] = mv[gid] || {});
+      for (let i = 0; i < n; i++) sv["q" + i] = v;
+      saveEdits("Esthemax " + mid + " " + gid + " boxes (all rows)"); esthRepaintSection(mid, gid);
+    }));
+  }
+  function esthRepaintSection(mid, gid) {
+    const host = document.getElementById("esec_" + mid + "_" + gid);
+    const gen = esthSecGen[mid + ":" + gid];
+    if (!host || !gen) { go("companyprice", true); return; } // fallback: full refresh
+    // Preserve this section's table scroll + the focused field across repaint.
+    const wrap = host.querySelector(".table-wrap");
+    const sl = wrap ? wrap.scrollLeft : 0, st = wrap ? wrap.scrollTop : 0;
+    const ae = document.activeElement;
+    let fsel = null, caret = null;
+    if (ae && host.contains(ae) && ae.dataset) {
+      if (ae.dataset.ecalc) fsel = `[data-ecalc="${ae.dataset.ecalc}"]`;
+      else if (ae.dataset.ecallall) fsel = `[data-ecallall="${ae.dataset.ecallall}"]`;
+      try { caret = ae.selectionStart; } catch (e) {}
+    }
+    const tmp = document.createElement("div");
+    tmp.innerHTML = gen();
+    const fresh = tmp.firstElementChild;
+    if (!fresh) { go("companyprice", true); return; }
+    host.replaceWith(fresh);
+    enhanceTables();      // adds sort/filter to the fresh table only
+    wireEsthInputs();     // re-attach handlers (idempotent across the page)
+    const wrap2 = fresh.querySelector(".table-wrap");
+    if (wrap2) { wrap2.scrollLeft = sl; wrap2.scrollTop = st; }
+    if (fsel) {
+      const el = fresh.querySelector(fsel);
+      if (el) { try { el.focus({ preventScroll: true }); if (caret != null && el.setSelectionRange) el.setSelectionRange(caret, caret); } catch (e) {} }
+    }
+  }
   function renderCompanyPrice() {
     if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
     if (typeof orderInit === "function") orderInit();
@@ -2720,34 +2781,7 @@
         costing[el.dataset.f] = v;
         saveEdits("Costing assumptions"); go("companyprice", true);
       }));
-      document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
-        const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
-        let v;
-        if (el.type === "checkbox") { v = el.checked ? 1 : 0; }
-        else {
-          v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
-          if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
-          else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
-          else if (/^q\d+$/.test(f)) v = Math.max(0, Math.round(v));    // row boxes sold ≥ 0
-          else if (/^ir\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row incentive ₹ ≥ 0
-          else if (/^mrp\d+$/.test(f)) v = Math.max(0, Math.round(v));  // row MRP ₹ ≥ 0
-          else if (/^u1\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row 1-unit base price ≥ 0
-          else if (/^(off1|off2|u1off)$/.test(f)) v = Math.max(0, Math.min(100, v)); // discount % 0–100
-        }
-        const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
-        (mv[gid] = mv[gid] || {})[f] = v;
-        saveEdits("Esthemax " + mid + " " + gid + " pricing"); go("companyprice", true);
-      }));
-      // Bulk "set all rows" — writes one quantity to every product row's boxes.
-      document.querySelectorAll(".ecalc-all[data-ecallall]").forEach((el) => (el.onchange = () => {
-        const [mid, gid, cnt] = String(el.dataset.ecallall).split(":");
-        const n = parseInt(cnt, 10) || 0;
-        let v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0; v = Math.round(v);
-        const mv = (esthPricingOv[mid] = esthPricingOv[mid] || {});
-        const sv = (mv[gid] = mv[gid] || {});
-        for (let i = 0; i < n; i++) sv["q" + i] = v;
-        saveEdits("Esthemax " + mid + " " + gid + " boxes (all rows)"); go("companyprice", true);
-      }));
+      wireEsthInputs();
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) — MRP-driven ------------
     // MRP is the LISTED price, the SAME for Saloon & Derma (not hiked). 1 box =
@@ -2839,13 +2873,15 @@
           <label class="ord-field"><span>${esc(lbl1)} = base − %</span>${num("off1", c.off1)}</label>
           <label class="ord-field"><span>${esc(lbl2)} = base − %</span>${num("off2", c.off2)}</label>
         </div>`;
-        return `<div class="block cprice-section" style="margin-top:16px"><h3 style="margin:0 0 2px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3>${panel}<div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+        // Register a generator so an edit repaints only this section in place.
+        esthSecGen[mid + ":" + gid] = () => section(g);
+        return `<div class="block cprice-section" id="esec_${mid}_${gid}" style="margin-top:16px"><h3 style="margin:0 0 2px">${esc(g.title)} <span class="t-muted" style="font-size:12px">(${esc(g.pack)})</span></h3>${panel}<div class="table-wrap"><table class="cprice-table cprice-mkt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
       };
       const accG = Array.isArray(EP.accessories) && EP.accessories.length
         ? { id: "acc", title: "Accessories", pack: "per unit", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
         : null;
       const allGroups = M.groups.concat(accG ? [accG] : []);
-      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · priced to target margin)</span></h2>
+      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · 1 unit from MRP, offers off base)</span></h2>
         <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${intro}
         ${allGroups.map(section).join("")}`;
     };
