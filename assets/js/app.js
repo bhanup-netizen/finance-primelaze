@@ -9452,11 +9452,34 @@
     if (!tab || !canSeePage(tab.id)) tab = TABS.find((t) => t.id === firstVisibleTab()) || TABS[0];
     currentTab = tab.id;
     const sy = keepScroll ? (window.scrollY || window.pageYOffset || 0) : 0;
+    // On a live/in-place refresh, preserve the inner scroll of each table (the
+    // .table-wrap has its own max-height + overflow) and the focused field, so
+    // editing a calculator input doesn't jump the view back to the top.
+    const cssEsc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"');
+    let wrapScroll = null, focusSel = null, caret = null;
+    if (keepScroll) {
+      wrapScroll = Array.from(document.querySelectorAll("#view .table-wrap")).map((w) => [w.scrollLeft, w.scrollTop]);
+      const ae = document.activeElement;
+      if (ae && ae.closest && ae.closest("#view")) {
+        if (ae.dataset && ae.dataset.ecalc) focusSel = `[data-ecalc="${cssEsc(ae.dataset.ecalc)}"]`;
+        else if (ae.dataset && ae.dataset.ecallall) focusSel = `[data-ecallall="${cssEsc(ae.dataset.ecallall)}"]`;
+        else if (ae.id) focusSel = "#" + cssEsc(ae.id);
+        try { caret = ae.selectionStart; } catch (e) {}
+      }
+    }
     document.querySelectorAll("#tabs .tab").forEach((b) => b.classList.toggle("active", b.dataset.group === groupOf(tab.id)));
     mountSubTabs();
     $("#view").innerHTML = pageEditNote(tab.id) + tab.render();
     wirePageEditNote();
     enhanceTables();
+    if (keepScroll) {
+      const wraps = document.querySelectorAll("#view .table-wrap");
+      if (wrapScroll) wrapScroll.forEach((p, i) => { if (wraps[i]) { wraps[i].scrollLeft = p[0]; wraps[i].scrollTop = p[1]; } });
+      if (focusSel) {
+        const el = document.querySelector("#view " + focusSel);
+        if (el) { try { el.focus({ preventScroll: true }); if (caret != null && el.setSelectionRange) el.setSelectionRange(caret, caret); } catch (e) {} }
+      }
+    }
     // A live-sync refresh keeps the user where they were; a real navigation
     // jumps to the top.
     if (keepScroll) window.scrollTo({ top: sy }); else window.scrollTo({ top: 0, behavior: "smooth" });
