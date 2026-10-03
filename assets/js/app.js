@@ -2538,38 +2538,91 @@
   }
 
   function renderEsthemax() {
-    const refresh = () => { $("#mktBody").innerHTML = mktBody(); wireOverrides(); };
     setTimeout(() => {
-      wireOverrides();
       const edl = document.getElementById("esthPriceDl");
-      if (edl) edl.onclick = () => downloadEsthemaxPrice();
+      if (edl) edl.onclick = () => downloadEsthemaxSalesPrice();
       document.querySelectorAll("[data-mkt]").forEach((b) => {
-        b.onclick = () => { mkt = b.dataset.mkt; document.querySelectorAll("[data-mkt]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
-      });
-      document.querySelectorAll("[data-grp]").forEach((b) => {
-        b.onclick = () => { mktGroup = b.dataset.grp; document.querySelectorAll("[data-grp]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
+        b.onclick = () => { mkt = b.dataset.mkt; go("prices", true); };
       });
       document.querySelectorAll("[data-pmode]").forEach((b) => {
-        b.onclick = () => { pricingMode = b.dataset.pmode; document.querySelectorAll("[data-pmode]").forEach((x) => x.classList.toggle("active", x === b)); refresh(); };
+        b.onclick = () => { pricingMode = b.dataset.pmode; go("prices", true); };
       });
     }, 0);
+    const mLabel = mkt === "salon" ? "Saloon" : "Derma";
+    const adm = priceAdmin();
+    const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+    const sectionTable = (gid) => {
+      const S = esthComputeSection(mkt, gid);
+      if (!S || !S.rows.length) return "";
+      const cols = ["#", "Product", "MRP"].concat(adm ? ["Cost"] : [])
+        .concat(["1 unit", S.lbl1, S.lbl2, "Incentive ₹"]);
+      const head = cols.map((x, i) => `<th class="${i >= 2 ? "num" : (i === 0 ? "num" : "")}">${esc(x)}</th>`).join("");
+      const body = S.rows.map((r) => `<tr>
+        <td class="num t-muted">${r.sr}</td>
+        <td class="t-name">${esc(r.name)}</td>
+        <td class="num t-muted">${rup(r.mrp)}</td>
+        ${adm ? `<td class="num t-muted">${rup(r.cost)}</td>` : ""}
+        <td class="num"><b>${rup(r.unit)}</b></td>
+        <td class="num">${rup(r.p5)}</td>
+        <td class="num">${rup(r.p10)}</td>
+        <td class="num cpx-inc">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
+      return `<div class="block" style="margin-top:14px"><h2 style="margin:0 0 4px">${esc(S.title)} <span class="t-muted" style="font-size:12px">(${esc(S.pack)})</span></h2>
+        <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+    };
+    // Is a manager split in effect anywhere this market? (for the policy note)
+    const anyMgr = ESTH_SALES_SECTIONS.some((gid) => { const S = esthComputeSection(mkt, gid); return S && S.mgr; });
+    const policy = `<div class="callout" style="margin-top:10px"><b>💰 Payment &amp; incentive policy</b><br>
+      • All Esthemax orders are booked on <b>100% advance payment</b> — dispatch only after payment is received.<br>
+      • Your <b>incentive is released only after the customer's payment is realised</b> (credited to the company), <b>not</b> at order booking or dispatch.<br>
+      • Incentive shown is the flat <b>₹ per unit/box sold</b> for that order type.${anyMgr ? " When a manager is involved, it splits <b>2:1</b> — you 66%, manager 33%." : ""}</div>`;
+    const offersNote = `<div class="muted-note" style="margin-top:8px"><b>How to read:</b> <b>1 unit</b> is the single-box price. <b>5+1 / 10+3</b> are buy-and-free bulk offers (e.g. buy 5 get 1 free) — the figure shown is the <b>price per paid box</b> at that offer. Prices are per box in ₹.</div>`;
     return `
       <div class="section-head">
-        <h1>Esthemax Pricing</h1>
-        <p>${priceAdmin() ? "Admin view — full MRP, doctor price and every bulk-offer tier with effective net prices, plus the cost breakdown." : "Sales view — MRP and offer (doctor) price per product."} New Structure (+15% MRP hike). Excl. GST unless stated.</p>
+        <h1>Esthemax Price List — ${esc(mLabel)}</h1>
+        <p>${adm ? "Admin view — selling prices with landing cost shown for reference. " : "Selling prices for the sales team. "}1 unit = MRP − discount; 5+1 &amp; 10+3 are bulk offers. Incentive is the ₹ you earn per box.</p>
       </div>
       <div class="controls">
-        ${priceModeToggle()}
+        ${canSeeLanding() ? priceModeToggle() : ""}
         <div class="seg">
-          <button data-mkt="salon" class="${mkt === "salon" ? "active" : ""}">Salon Market</button>
-          <button data-mkt="doctor" class="${mkt === "doctor" ? "active" : ""}">Doctor Market</button>
+          <button data-mkt="salon" class="${mkt === "salon" ? "active" : ""}">Saloon (Salon)</button>
+          <button data-mkt="doctor" class="${mkt === "doctor" ? "active" : ""}">Derma (Doctor)</button>
         </div>
-        <div class="seg">
-          ${MKT_GROUPS.map((g) => `<button data-grp="${g.id}" class="${mktGroup === g.id ? "active" : ""}">${g.label}</button>`).join("")}
-        </div>
-        <div class="hq-actions"><button id="esthPriceDl" class="dl-btn" type="button" title="Download this Esthemax price list (Excel)">⬇ Price list (Excel)</button></div>
+        <div class="hq-actions"><button id="esthPriceDl" class="dl-btn" type="button" title="Download this Esthemax price list">⬇ Price list</button></div>
       </div>
-      <div id="mktBody">${mktBody()}</div>`;
+      ${policy}${offersNote}
+      ${ESTH_SALES_SECTIONS.map(sectionTable).join("")}`;
+  }
+  // Download the computed Esthemax selling-price list for the current market.
+  function downloadEsthemaxSalesPrice() {
+    const mLabel = mkt === "salon" ? "Saloon" : "Derma";
+    const adm = priceAdmin();
+    const r0 = (n) => n == null ? "" : Math.round(n);
+    const aoa = [["Esthemax Price List — " + mLabel + " · all orders 100% advance; incentive released only after payment realised"]];
+    ESTH_SALES_SECTIONS.forEach((gid) => {
+      const S = esthComputeSection(mkt, gid);
+      if (!S || !S.rows.length) return;
+      aoa.push([]);
+      aoa.push([S.title + " (" + S.pack + ")"]);
+      aoa.push(["#", "Product", "MRP"].concat(adm ? ["Cost"] : []).concat(["1 unit", S.lbl1, S.lbl2, "Incentive (per box)"]));
+      S.rows.forEach((r) => {
+        aoa.push([r.sr, r.name, r0(r.mrp)].concat(adm ? [r0(r.cost)] : [])
+          .concat([r0(r.unit), r0(r.p5), r0(r.p10), r.unit != null ? r0(r.inc) : ""]));
+      });
+    });
+    const fname = ("Esthemax_" + mLabel + "_price_list").replace(/[^\w]+/g, "_") + ".xlsx";
+    if (window.XLSX) {
+      const ws = window.XLSX.utils.aoa_to_sheet(aoa);
+      ws["!cols"] = [{ wch: 5 }, { wch: 34 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+      const wb = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(wb, ws, "Prices");
+      window.XLSX.writeFile(wb, fname);
+    } else {
+      const csv = aoa.map((r) => r.map((c) => `"${String(c == null ? "" : c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const a = document.createElement("a");
+      a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+      a.download = fname.replace(/\.xlsx$/, ".csv");
+      a.click();
+    }
   }
 
   function mktBody() {
@@ -2706,6 +2759,61 @@
     const mv = esthPricingOv[mid];
     return Object.assign(base, (mv && mv[gid]) || {});
   }
+  // Single source of truth for Esthemax selling prices. Both the super-admin
+  // Company Price calculator (section()) and the salesperson Pricing view read
+  // from this so the numbers always match. Returns per-row computed prices:
+  //   cost  = landing (+ operation cost where it applies: jar & retail)
+  //   unit  = typed 1-unit price, else MRP − u1off%
+  //   p5/p10 = unit − off1% / off2%   ·   inc = flat incentive ₹ for that sale
+  function esthComputeSection(mid, gid) {
+    const EP = window.ESTHEMAX_PRICE_SEED || {};
+    const M = EP.markets && EP.markets[mid];
+    if (!M) return null;
+    let g = (M.groups || []).find((x) => x.id === gid);
+    if (!g && gid === "acc") {
+      g = (Array.isArray(EP.accessories) && EP.accessories.length)
+        ? { id: "acc", title: "Accessories", pack: "per unit", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
+        : null;
+    }
+    if (!g) return null;
+    const c = esthCalc(mid, gid);
+    const usdN = (orderState && orderState.usdInr) || 0, custN = (orderState && orderState.customs) || 0;
+    const landingByName = {};
+    (EP.groups || []).forEach((gr) => (gr.rows || []).forEach((r) => { landingByName[r[1]] = r[6]; }));
+    const landingOf = (name) => {
+      if (name in landingByName) return landingByName[name];
+      const a = (EP.accessories || []).find((x) => x[0] === name);
+      return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
+    };
+    const isAcc = gid === "acc";
+    const useBoxes = (gid === "hydro" || gid === "retail");
+    const incRs = +c.incRs || 0, u1off = +c.u1off || 0, off1 = +c.off1 || 0, off2 = +c.off2 || 0;
+    const mgr = !!(+c.mgr);
+    const sExp = +c.expMo || 0, sBoxes = +c.boxes || 0;
+    const opCost = useBoxes && sBoxes > 0 ? sExp / sBoxes : 0;
+    const secLands = g.rows.map((r) => landingOf(r[1])).filter((l) => l != null);
+    const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
+    const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
+    const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
+    const rows = g.rows.map((r, idx) => {
+      const land = landingOf(r[1]);
+      const cost = land != null ? land + opCostFor(land) : null;
+      const mrpEff = c["mrp" + idx] != null ? +c["mrp" + idx] : (+r[2] || 0);
+      const u1typed = c["u1" + idx] != null ? +c["u1" + idx] : 0;
+      const auto1 = mrpEff > 0 ? mrpEff * (1 - u1off / 100) : 0;
+      const base1 = u1typed > 0 ? u1typed : auto1;
+      const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
+      return {
+        idx, sr: r[0], name: r[1], mrp: mrpEff || null, cost,
+        unit: base1 > 0 ? base1 : null,
+        p5: base1 > 0 ? base1 * (1 - off1 / 100) : null,
+        p10: base1 > 0 ? base1 * (1 - off2 / 100) : null,
+        inc: rowInc, typed: u1typed > 0,
+      };
+    });
+    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, u1off, off1, off2, mgr, opCost, lbl1, lbl2, rows };
+  }
+  const ESTH_SALES_SECTIONS = ["hydro", "retail", "foot", "acc"];
   // Each rendered Esthemax section registers a generator so a single input
   // edit can repaint ONLY that section in place (no full-page re-render → no
   // scroll jump, no lost focus).
@@ -2792,7 +2900,7 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> and its <b>1 unit</b> price per row. Leave <b>1 unit</b> blank and it auto-fills as <b>MRP − %</b> (the % you set, default 10), or type your own base price. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are that 1-unit base price <b>minus the % you set</b> for each (not off MRP). Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing (+ operation cost where it applies) for reference. Operation cost (company expense ÷ <b>boxes sold</b>) is added only in the <b>Hydrojelly jar</b> and <b>Retail</b> sections. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M).</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> and its <b>1 unit</b> price per row. Leave <b>1 unit</b> blank and it auto-fills as <b>MRP − %</b> (the % you set, default 10), or type your own base price. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are that 1-unit base price <b>minus the % you set</b> for each (not off MRP). Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing (+ operation cost where it applies) for reference. Operation cost (company expense ÷ <b>boxes sold</b>) is added only in the <b>Hydrojelly jar</b> and <b>Retail</b> sections. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M). <b>Policy:</b> all orders are 100% advance; incentive is released only after the customer's payment is realised.</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
