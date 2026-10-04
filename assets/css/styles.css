@@ -412,6 +412,17 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 }
 .q-totals { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 14px; }
 .q-totals b { color: var(--accent); }
+.q-cat-panel { margin: 4px 0 12px; padding: 14px 16px; }
+.q-cat-head { margin-bottom: 10px; }
+.q-cat-group { margin-bottom: 10px; border-top: 1px solid var(--border); padding-top: 8px; }
+.q-cat-gtitle { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+.q-cat-gtitle label { cursor: pointer; }
+.q-cat-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 16px; }
+.q-cat-opt { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 4px; border-radius: 6px; cursor: pointer; }
+.q-cat-opt:hover { background: var(--surface-2); }
+.q-cat-nm { flex: 1 1 auto; }
+.q-cat-price { color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.q-cat-actions { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* ---------- Tabs ---------- */
 .tabs {

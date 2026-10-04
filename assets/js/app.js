@@ -8974,12 +8974,22 @@
     }
     return out;
   }
-  function quoteCatalogOptions() {
+  // Checkbox panel grouped by category (Devices, Celluma, Esthemax sections) so
+  // several items can be ticked and added in one go.
+  function quoteCatalogPanelHtml() {
     const cat = quoteCatalog();
     const groups = {};
     cat.forEach((x, i) => { (groups[x.group] = groups[x.group] || []).push({ i, x }); });
-    return `<option value="">＋ Add from catalog…</option>` +
-      Object.keys(groups).map((g) => `<optgroup label="${esc(g)}">${groups[g].map(({ i, x }) => `<option value="${i}">${esc(x.name)}${x.price ? " — " + rupQ(x.price) : ""}</option>`).join("")}</optgroup>`).join("");
+    const sections = Object.keys(groups).map((g) => `
+      <div class="q-cat-group">
+        <div class="q-cat-gtitle"><label><input type="checkbox" class="q-cat-all"> ${esc(g)} <span class="t-muted">(${groups[g].length})</span></label></div>
+        <div class="q-cat-items">${groups[g].map(({ i, x }) => `<label class="q-cat-opt"><input type="checkbox" class="q-cat-cb" value="${i}"><span class="q-cat-nm">${esc(x.name)}</span><span class="q-cat-price">${x.price ? rupQ(x.price) : ""}</span></label>`).join("")}</div>
+      </div>`).join("");
+    return `<div class="q-cat-panel card">
+      <div class="q-cat-head"><b>Pick items to add</b> <span class="t-muted">— tick any number across sections, then “Add selected”.</span></div>
+      ${sections || `<div class="empty">No catalog items.</div>`}
+      <div class="q-cat-actions"><button type="button" class="dl-btn" id="qCatAdd">Add selected</button> <button type="button" class="ghost-btn" id="qCatClose">Close</button></div>
+    </div>`;
   }
   function canEditQuote(q) { return roleIsAdmin() || isSuperAdmin() || (q && q.createdBy && sessionUser && q.createdBy === sessionUser.email); }
 
@@ -9031,9 +9041,10 @@
           </div>
           <div class="perm-group">
             <div class="perm-title">Items
-              <select id="qCatalog" class="select" style="max-width:280px;margin-left:8px">${quoteCatalogOptions()}</select>
+              <button type="button" class="dl-btn" id="qCatBtn" style="padding:5px 12px;margin-left:8px">＋ Add from catalog…</button>
               <button type="button" class="linkish" id="qAddItem">+ add blank line</button>
             </div>
+            <div id="qCatPanel"></div>
             <div class="q-head"><span>Description</span><span>HSN</span><span>Qty</span><span>Unit price ₹</span><span></span></div>
             <div id="qItems">${itemRows}</div>
             <div id="qTotals" class="q-totals"></div>
@@ -9087,12 +9098,42 @@
       document.querySelectorAll("#qItems .q-qty, #qItems .q-rate").forEach((inp) => inp.oninput = refreshQuoteTotals);
     };
     wire();
+    // Drop the single empty placeholder row the first time real items are added.
+    const dropEmptyFirstRow = () => {
+      const box = $("#qItems");
+      if (box.children.length === 1) {
+        const r = box.children[0];
+        const d = r.querySelector(".q-desc").value.trim(), rt = r.querySelector(".q-rate").value.trim();
+        if (!d && !rt) r.remove();
+      }
+    };
     $("#qAddItem").onclick = () => { const box = $("#qItems"); box.insertAdjacentHTML("beforeend", quoteItemRow({ hsn: QUOTE_HSN_DEVICE, qty: 1 }, box.children.length)); wire(); };
-    const cat = document.getElementById("qCatalog");
-    if (cat) cat.onchange = () => {
-      const list = quoteCatalog(); const x = list[+cat.value];
-      if (x) { const box = $("#qItems"); box.insertAdjacentHTML("beforeend", quoteItemRow({ desc: x.name, hsn: x.hsn, qty: 1, rate: x.price }, box.children.length)); wire(); refreshQuoteTotals(); }
-      cat.value = "";
+    const addCatalogItems = (chosen) => {
+      if (!chosen.length) return;
+      dropEmptyFirstRow();
+      const box = $("#qItems");
+      chosen.forEach((x) => box.insertAdjacentHTML("beforeend", quoteItemRow({ desc: x.name, hsn: x.hsn, qty: 1, rate: x.price }, box.children.length)));
+      wire(); refreshQuoteTotals();
+    };
+    const wireCatPanel = () => {
+      document.querySelectorAll(".q-cat-all").forEach((a) => a.onchange = () => {
+        a.closest(".q-cat-group").querySelectorAll(".q-cat-cb").forEach((cb) => { cb.checked = a.checked; });
+      });
+      const add = document.getElementById("qCatAdd");
+      if (add) add.onclick = () => {
+        const list = quoteCatalog();
+        const chosen = Array.from(document.querySelectorAll(".q-cat-cb:checked")).map((cb) => list[+cb.value]).filter(Boolean);
+        addCatalogItems(chosen);
+        document.getElementById("qCatPanel").innerHTML = "";
+      };
+      const close = document.getElementById("qCatClose");
+      if (close) close.onclick = () => { document.getElementById("qCatPanel").innerHTML = ""; };
+    };
+    const catBtn = document.getElementById("qCatBtn");
+    if (catBtn) catBtn.onclick = () => {
+      const p = document.getElementById("qCatPanel");
+      p.innerHTML = p.innerHTML ? "" : quoteCatalogPanelHtml();
+      if (p.innerHTML) wireCatPanel();
     };
     const tax = document.getElementById("qTax"); if (tax) tax.oninput = refreshQuoteTotals;
     refreshQuoteTotals();
