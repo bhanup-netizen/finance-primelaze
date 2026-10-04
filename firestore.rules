@@ -70,6 +70,14 @@ service cloud.firestore {
       allow delete: if isAdmin() || isPageEditor();
     }
 
+    // Quotations — any signed-in user may read/download and create/update their
+    // own quotations (the dashboard lets sales self-serve). Same model as
+    // challans: an internal team tool, so creation isn't gated on editPages.
+    match /quotations/{doc} {
+      allow read, create, update: if isSignedIn();
+      allow delete: if isAdmin() || isPageEditor();
+    }
+
     // User permission docs.
     //  - Read: own doc; admins/super and page editors read the list (to manage).
     //  - Super admins: full create/update/delete of any account.

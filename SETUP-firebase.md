@@ -59,11 +59,17 @@ edits/overrides    { stock: {sku: n}, eta: {sku: date}, hqTargets: {key: n},
 challans/{id}      { no, date, mode, dispatch, arrival, fromName, fromAddr,
                      toName, toAddr, declaredValue, items:[{desc,amount}],
                      notes, createdBy, createdAt }
+quotations/{id}    { no, date, validUntil, taxPct, custName, custLoc,
+                     custGstin, custAddr, items:[{desc,hsn,qty,rate}],
+                     terms, notes, createdBy, createdAt }
 ```
 
-The **Delivery Challan** module stores challans in the `challans` collection
-(admins create/edit; everyone reads & downloads). Rules for it are already in
-`firestore.rules`.
+The **Delivery Challan** and **Quotation Maker** modules store their documents
+in the `challans` and `quotations` collections (everyone reads & downloads &
+creates; creators/admins edit/delete). Rules for both are in `firestore.rules`
+— after adding the Quotation Maker you must **re-publish the rules** (Firebase
+Console → Firestore Database → Rules → paste `firestore.rules` → Publish),
+otherwise saving a quotation fails with "Missing or insufficient permissions".
 
 ## Notes / limits
 - Creating a user from the Admin tab uses a temporary secondary Firebase app so
