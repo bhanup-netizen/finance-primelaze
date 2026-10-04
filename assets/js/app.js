@@ -2546,6 +2546,12 @@
       document.querySelectorAll("[data-mkt]").forEach((b) => {
         b.onclick = () => { mkt = b.dataset.mkt; go("prices", true); };
       });
+      const vb = document.getElementById("qvbIn");
+      if (vb) vb.oninput = () => {
+        const v = parseFloat(vb.value) || 0;
+        const out = document.getElementById("qvbOut");
+        if (out) out.textContent = v > 0 ? rupQ(esthVolumeBonus(v)) : "—";
+      };
     }, 0);
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
     const adm = false; // cost / landing is shown only in the Company Price tab
@@ -2573,8 +2579,20 @@
     const policy = `<div class="callout" style="margin-top:10px"><b>💰 Payment &amp; incentive policy</b><br>
       • All Esthemax orders are booked on <b>100% advance payment</b> — dispatch only after payment is received.<br>
       • Your <b>incentive is released only after the customer's payment is realised</b> (credited to the company), <b>not</b> at order booking or dispatch.<br>
-      • Incentive shown is the flat <b>₹ per unit/box sold</b> for that order type.${anyMgr ? " When a manager is involved, it splits <b>2:1</b> — you 66%, manager 33%." : ""}</div>`;
+      • Incentive shown is the flat <b>₹ per unit/box sold</b> for that order type.${anyMgr ? " When a manager is involved, it splits <b>2:1</b> — you 66%, manager 33%." : ""}<br>
+      • <b>Plus a monthly volume bonus</b> on your total Esthemax sales (see the ladder below).</div>`;
     const offersNote = `<div class="muted-note" style="margin-top:8px"><b>How to read:</b> <b>1 unit</b> is the single-box price. <b>5+1 / 10+3</b> are buy-and-free bulk offers (e.g. buy 5 get 1 free) — the figure shown is the <b>price per paid box</b> at that offer. Prices are per box in ₹.</div>`;
+    // Monthly sales-volume bonus ladder (cumulative) + a quick calculator.
+    const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
+    let vbCum = 0;
+    const vbRows = ESTH_VOLUME_BONUS.map((s) => { vbCum += s.bonus; return `<tr><td>Reach ${Lk(s.min)} / month</td><td class="num">${rupQ(s.bonus)}</td><td class="num"><b>${rupQ(vbCum)}</b></td></tr>`; }).join("");
+    const volumeBlock = `<div class="block" style="margin-top:16px"><h2 style="margin:0 0 4px">🎯 Monthly volume bonus <span class="t-muted" style="font-size:12px">(on top of the per-box incentive)</span></h2>
+      <p class="muted-note">Earned on your <b>total Esthemax sales in a month</b>, <b>cumulative</b> — you get the sum of every slab you cross. Released only after the customers' payments are realised (same rule as the per-box incentive).</p>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Monthly sales reached</th><th class="num">Slab bonus</th><th class="num">Cumulative bonus</th></tr></thead><tbody>${vbRows}</tbody></table></div>
+      <div class="controls" style="margin-top:10px">
+        <label class="ord-field"><span>Your monthly Esthemax sales (₹)</span><input id="qvbIn" type="number" min="0" step="10000" placeholder="e.g. 1500000" style="max-width:190px"></label>
+        <div class="ord-field"><span>Volume bonus earned</span><div class="ecalc-out" id="qvbOut">—</div></div>
+      </div></div>`;
     return `
       <div class="section-head">
         <h1>Esthemax Price List — ${esc(mLabel)}</h1>
@@ -2591,7 +2609,8 @@
         </div>
       </div>
       ${policy}${offersNote}
-      ${ESTH_SALES_SECTIONS.map(sectionTable).join("")}`;
+      ${ESTH_SALES_SECTIONS.map(sectionTable).join("")}
+      ${volumeBlock}`;
   }
   // Download the computed Esthemax selling-price list for the current market.
   function downloadEsthemaxSalesPrice() {
@@ -2641,6 +2660,11 @@
         <td class="num">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
       return `<h2>${esc(S.title)} <span style="font-weight:400;font-size:12px">(${esc(S.pack)})</span></h2>${pTable(head, body)}`;
     }).join("");
+    // Monthly volume-bonus ladder (cumulative) for the PDF.
+    const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
+    let vbCum = 0;
+    const vbBody = ESTH_VOLUME_BONUS.map((s) => { vbCum += s.bonus; return `<tr><td>Reach ${Lk(s.min)} / month</td><td class="num">${rup(s.bonus)}</td><td class="num"><b>${rup(vbCum)}</b></td></tr>`; }).join("");
+    const vbTable = pTable([{ label: "Monthly sales reached" }, { label: "Slab bonus", num: 1 }, { label: "Cumulative bonus", num: 1 }], vbBody);
     const html = `
       <div class="p-section">
         <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Price List</h1>
@@ -2648,6 +2672,9 @@
         <p class="p-meta">Generated ${esc(stamp)}</p>
         <p class="p-meta"><b>Payment &amp; incentive:</b> all orders are 100% advance — dispatch only after payment received. Incentive (₹ per box) is released only after the customer's payment is realised, not at booking/dispatch. 1 unit = MRP − discount; 5+1 / 10+3 are buy-and-free bulk offers (price per paid box).</p>
         ${blocks}
+        <h2>Monthly volume bonus <span style="font-weight:400;font-size:12px">(on top of the per-box incentive · cumulative)</span></h2>
+        <p class="p-meta">Earned on total monthly Esthemax sales — you get the sum of every slab you cross. Released only after the customers' payments are realised.</p>
+        ${vbTable}
       </div>`;
     printHtml(html);
   }
@@ -2847,6 +2874,19 @@
   // Sales price list sections — Foot Mask is intentionally excluded here and
   // kept only in the super-admin Company Price tab.
   const ESTH_SALES_SECTIONS = ["hydro", "retail", "acc"];
+  // Monthly Esthemax sales-volume bonus (on TOP of the per-box incentive).
+  // CUMULATIVE: a salesperson earns the sum of every slab whose threshold their
+  // month's sales reached. Released only after the customer's payment is realised.
+  const ESTH_VOLUME_BONUS = [
+    { min: 500000, bonus: 10000 },
+    { min: 1000000, bonus: 25000 },
+    { min: 1500000, bonus: 50000 },
+    { min: 2500000, bonus: 100000 },
+    { min: 5000000, bonus: 250000 },
+  ];
+  function esthVolumeBonus(sales) {
+    return ESTH_VOLUME_BONUS.reduce((a, s) => a + (sales >= s.min ? s.bonus : 0), 0);
+  }
   // Each rendered Esthemax section registers a generator so a single input
   // edit can repaint ONLY that section in place (no full-page re-render → no
   // scroll jump, no lost focus).
@@ -2934,7 +2974,7 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> and its <b>1 unit</b> price per row. Leave <b>1 unit</b> blank and it auto-fills as <b>MRP − %</b> (the % you set, default 10), or type your own base price. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are that 1-unit base price <b>minus the % you set</b> for each (not off MRP). Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing (+ operation cost where it applies) for reference. Operation cost (company expense ÷ <b>boxes sold</b>) is added only in the <b>Hydrojelly jar</b> and <b>Retail</b> sections. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M). <b>Policy:</b> all orders are 100% advance; incentive is released only after the customer's payment is realised.</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> and its <b>1 unit</b> price per row. Leave <b>1 unit</b> blank and it auto-fills as <b>MRP − %</b> (the % you set, default 10), or type your own base price. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are that 1-unit base price <b>minus the % you set</b> for each (not off MRP). Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing (+ operation cost where it applies) for reference. Operation cost (company expense ÷ <b>boxes sold</b>) is added only in the <b>Hydrojelly jar</b> and <b>Retail</b> sections. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M). <b>Policy:</b> all orders are 100% advance; incentive is released only after the customer's payment is realised. A <b>monthly volume bonus</b> (cumulative: ₹5L→₹10k, ₹10L→₹25k, ₹15L→₹50k, ₹25L→₹1L, ₹50L→₹2.5L) is paid on top, shown on the sales <b>Pricing → Esthemax</b> page.</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
