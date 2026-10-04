@@ -10937,7 +10937,27 @@
     return (e && e.message) || "Sign-in failed.";
   }
 
+  // While Firebase restores a persisted session on load, show a "checking…"
+  // state instead of the full login form — so a returning user doesn't see
+  // (and worry about) a login prompt that auto-signs-in a moment later.
+  function showAuthChecking() {
+    const screen = $("#lockScreen"); if (!screen) return;
+    screen.style.display = "flex";
+    screen.classList.add("auth-checking");
+    const card = screen.querySelector(".lock-card");
+    if (card && !card.querySelector(".lock-checking")) {
+      const d = document.createElement("div");
+      d.className = "lock-checking";
+      d.innerHTML = `<div class="lc-spin"></div><div>Checking your sign-in…</div>`;
+      card.appendChild(d);
+    }
+  }
+  function clearAuthChecking() {
+    const screen = $("#lockScreen"); if (screen) screen.classList.remove("auth-checking");
+  }
+
   function showLogin() {
+    clearAuthChecking();
     const s = $("#lockScreen"); if (s) s.style.display = "flex";
     const app = $("#app"); if (app) app.hidden = true;
     ["userPill", "modeToggle", "pwdBtn", "logoutBtn"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = true; });
@@ -10986,6 +11006,11 @@
       errEl.textContent = "Could not load Firebase — check your connection and refresh.";
       return;
     }
+    // Show the "checking sign-in…" state immediately; the auth listener below
+    // reveals the form only if there's genuinely no session. A safety timer
+    // reveals it anyway if auth never resolves (e.g. offline).
+    showAuthChecking();
+    const revealTimer = setTimeout(clearAuthChecking, 8000);
     // Pre-fill the last-used email so people don't retype it (browser fills the
     // saved password). We never store the password ourselves.
     try {
@@ -11035,6 +11060,7 @@
     // conclude the user is signed out.
     authPersistReady.then(() => {
     auth.onAuthStateChanged(async (user) => {
+      clearTimeout(revealTimer);
       if (!user) {
         showLogin();
         // Diagnostic: if the user asked to stay signed in but arrived with no

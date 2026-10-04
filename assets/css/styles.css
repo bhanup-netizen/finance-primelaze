@@ -995,6 +995,23 @@ tr.ind-done .ind-check span { color: var(--good); }
 .lock-forgot:hover { text-decoration: underline; }
 .lock-forgot:disabled { opacity: .6; cursor: default; }
 .lock-error { color: var(--bad); font-size: 13px; min-height: 18px; font-weight: 600; }
+/* "Checking your sign-in…" state — hides the form while a session restores. */
+.lock-checking { display: none; }
+.lock-screen.auth-checking .lock-field,
+.lock-screen.auth-checking .lock-remember,
+.lock-screen.auth-checking .lock-btn,
+.lock-screen.auth-checking .lock-forgot,
+.lock-screen.auth-checking .lock-sub,
+.lock-screen.auth-checking .lock-error { display: none !important; }
+.lock-screen.auth-checking .lock-checking {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin-top: 10px; color: var(--text-2); font-size: 14px;
+}
+.lc-spin {
+  width: 26px; height: 26px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%; animation: lc-rot .8s linear infinite;
+}
+@keyframes lc-rot { to { transform: rotate(360deg); } }
 .lock-foot { color: var(--text-3); font-size: 12px; max-width: 380px; text-align: center; }
 .empty { color: var(--text-3); font-style: italic; padding: 18px; text-align: center; }
 
