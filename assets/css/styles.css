@@ -398,6 +398,21 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 }
 .ch-del { padding: 0; }
 
+/* ---------- Quotation maker ---------- */
+.q-item { display: grid; grid-template-columns: 1fr 90px 70px 130px 36px; gap: 8px; margin-bottom: 8px; }
+.q-head { display: grid; grid-template-columns: 1fr 90px 70px 130px 36px; gap: 8px; font-size: 11px; color: var(--text-2); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; margin: 2px 0 6px; }
+@media (max-width: 680px) {
+  .q-item { grid-template-columns: 1fr 1fr 40px; }
+  .q-item .q-desc { grid-column: 1 / -1; }
+  .q-head { display: none; }
+}
+.q-item input {
+  padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-family: inherit; font-size: 14px; width: 100%;
+}
+.q-totals { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 14px; }
+.q-totals b { color: var(--accent); }
+
 /* ---------- Tabs ---------- */
 .tabs {
   position: sticky; top: 63px; z-index: 20;
@@ -1064,6 +1079,16 @@ tr.ind-done .ind-check span { color: var(--good); }
   #printArea .ch-sign-name { font-weight: 700; color: #2a2ab0; font-size: 11px; }
   #printArea .ch-sign img { display: inline-block; margin: 2px 0; }
   #printArea .ch-sign-role { font-weight: 700; color: #2a2ab0; font-size: 11px; }
+  #printArea .q-items td, #printArea .q-items th { font-size: 10.5px; padding: 5px 6px; }
+  #printArea .q-items .q-sum td, #printArea .q-items .q-grand td { background: #f4f4f8; }
+  #printArea .q-items .q-grand td { background: #fde9ea; font-size: 11.5px; }
+  #printArea .q-cols { display: flex; gap: 18px; margin-top: 12px; break-inside: avoid; }
+  #printArea .q-terms { flex: 1 1 60%; font-size: 10.5px; }
+  #printArea .q-terms ol { margin: 4px 0 0 16px; padding: 0; }
+  #printArea .q-terms li { margin: 2px 0; }
+  #printArea .q-bank { flex: 1 1 36%; font-size: 10.5px; border: 1px solid #ccc; border-radius: 4px; padding: 8px 10px; line-height: 1.6; height: fit-content; }
+  #printArea .q-bank b, #printArea .q-terms b { color: #c0202a; }
+  #printArea .q-thanks { text-align: center; font-weight: 700; color: #2a2ab0; margin-top: 14px; }
 }
 
 /* ============================================================

@@ -127,6 +127,7 @@
     { id: "incentives", label: "Incentives", group: "Finance", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Finance", render: renderPricing },
     { id: "companyprice", label: "💰 Company Price", group: "Finance", render: renderCompanyPrice },
+    { id: "quotation", label: "🧾 Quotation", group: "Finance", render: renderQuotation },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
     { id: "weeklyFin", label: "Duties", group: "Finance", render: () => renderWeekly("Finance") },
     // Sale
@@ -8916,6 +8917,326 @@
     let area = document.getElementById("printArea");
     if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
     area.innerHTML = buildChallanPrint(c);
+    document.body.classList.add("printing");
+    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 40);
+  }
+
+  /* ================= QUOTATION MAKER ================= */
+  // Lets sales/finance build a customer quotation (machines, Celluma, Esthemax
+  // or custom lines), compute IGST + grand total, and print a PDF that matches
+  // the official Primelaze format. Saved in a Firestore `quotations` collection
+  // (same pattern as challans), so there's no shared-doc clobber risk.
+  const QUOTE_LH = {
+    name: "PrimeLaze Private Limited",
+    addr: "#306 Bharatiyar Salai, Ashok Nagar, Lawspet, Puducherry - 605 008",
+    phone: "+91 73395 13001",
+    email: "info@primelaze.com",
+    web: "www.primelaze.com",
+    gstin: COMPANY.gstin,
+  };
+  const QUOTE_BANK = { name: "Primelaze Private Limited", acc: "925020030680962", bank: "AXIS Bank", branch: "CHIDAMBARAM", ifsc: "UTIB0001107" };
+  const QUOTE_TERMS_DEFAULT = [
+    "Warranty: 2 years on full system.",
+    "Validity: 30 days from the date of quotation.",
+    "Delivery: Within 4–6 weeks after receipt of the purchase order.",
+    "Payment: 100% advance payment.",
+  ].join("\n");
+  const QUOTE_HSN_DEVICE = "90189099", QUOTE_HSN_ESTH = "33049990";
+  let localQuotes = [];      // in-memory fallback when Firebase isn't available
+  let quoteListCache = [];   // last loaded list (for the next-number suggestion)
+  function quoteStore() { return db ? db.collection("quotations") : null; }
+  function quoteFY() { const y = (typeof hqYears === "function" ? hqYears()[0] : 2026) || 2026; return y + "-" + (y + 1); }
+  function quoteNextNo() {
+    const fy = quoteFY();
+    const n = quoteListCache.filter((q) => String(q.no || "").indexOf(fy) === 0).length + 1;
+    return fy + "/" + String(n).padStart(3, "0");
+  }
+  const rupQ = (n) => n == null || n === "" || isNaN(+n) ? "—" : "₹" + Math.round(+n).toLocaleString("en-IN");
+  // Catalog of sellable items to quickly add a line (editable after adding).
+  function quoteCatalog() {
+    const out = [];
+    (typeof deviceList === "function" ? deviceList() : []).forEach((d) => {
+      if (!d.device) return;
+      const lakh = d.standard != null ? d.standard : d.quotation; // ₹ Lakhs in the price book
+      out.push({ group: "Devices", name: d.device, price: lakh != null ? Math.round(+lakh * 100000) : "", hsn: QUOTE_HSN_DEVICE });
+    });
+    ((D.costs && D.costs.celluma) || []).forEach((c) => {
+      if (!c.model) return;
+      out.push({ group: "Celluma", name: c.model, price: c.selling != null ? c.selling : c.quotation, hsn: QUOTE_HSN_DEVICE });
+    });
+    if (typeof esthComputeSection === "function") {
+      ["hydro", "retail", "acc"].forEach((gid) => {
+        const S = esthComputeSection("salon", gid);
+        if (S) S.rows.forEach((r) => { if (r.unit != null) out.push({ group: "Esthemax · " + S.title, name: r.name, price: Math.round(r.unit), hsn: QUOTE_HSN_ESTH }); });
+      });
+    }
+    return out;
+  }
+  function quoteCatalogOptions() {
+    const cat = quoteCatalog();
+    const groups = {};
+    cat.forEach((x, i) => { (groups[x.group] = groups[x.group] || []).push({ i, x }); });
+    return `<option value="">＋ Add from catalog…</option>` +
+      Object.keys(groups).map((g) => `<optgroup label="${esc(g)}">${groups[g].map(({ i, x }) => `<option value="${i}">${esc(x.name)}${x.price ? " — " + rupQ(x.price) : ""}</option>`).join("")}</optgroup>`).join("");
+  }
+  function canEditQuote(q) { return roleIsAdmin() || isSuperAdmin() || (q && q.createdBy && sessionUser && q.createdBy === sessionUser.email); }
+
+  function renderQuotation() {
+    setTimeout(initQuotationUI, 0);
+    return `
+      <div class="section-head">
+        <h1>🧾 Quotation Maker</h1>
+        <p>Create a customer quotation (machines, Celluma, Esthemax or custom lines), auto-calculate IGST &amp; the grand total, and download a ready-to-send PDF. Everyone can create &amp; download; you can edit or delete the quotations you created (admins can edit any).</p>
+      </div>
+      <div class="controls"><button id="newQuoteBtn" class="dl-btn" type="button">＋ New quotation</button></div>
+      <div id="quoteForm"></div>
+      <div id="quoteList"><div class="empty">Loading…</div></div>`;
+  }
+
+  function quoteItemRow(it, i) {
+    it = it || {};
+    return `<div class="q-item" data-i="${i}">
+      <input class="q-desc" placeholder="Description (e.g. Vossman Compact Blend)" value="${esc(it.desc || "")}">
+      <input class="q-hsn" placeholder="HSN" value="${esc(it.hsn || "")}" style="max-width:90px">
+      <input class="q-qty" type="number" min="0" step="any" placeholder="Qty" value="${esc(it.qty ?? 1)}" style="max-width:70px">
+      <input class="q-rate" type="number" min="0" step="any" placeholder="Unit price ₹" value="${esc(it.rate ?? "")}" style="max-width:130px">
+      <button type="button" class="ghost-btn q-del" title="Remove">✕</button>
+    </div>`;
+  }
+
+  function quoteFormHtml(q) {
+    q = q || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const valid = q.validUntil || (function () { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); })();
+    const items = (q.items && q.items.length ? q.items : [{ desc: "", hsn: QUOTE_HSN_DEVICE, qty: 1, rate: "" }]);
+    const itemRows = items.map((it, i) => quoteItemRow(it, i)).join("");
+    const taxPct = q.taxPct != null ? q.taxPct : 5;
+    return `
+      <div class="card" style="margin-bottom:20px">
+        <h2 style="margin-top:0">${q.id ? "Edit" : "New"} quotation</h2>
+        <form id="qForm" class="admin-form">
+          <div class="ch-grid">
+            <label class="ord-field"><span>Quotation No.</span><input id="qNo" value="${esc(q.no || quoteNextNo())}"></label>
+            <label class="ord-field"><span>Date</span><input id="qDate" type="date" value="${esc(q.date || today)}"></label>
+            <label class="ord-field"><span>Valid until</span><input id="qValid" type="date" value="${esc(valid)}"></label>
+            <label class="ord-field"><span>IGST %</span><input id="qTax" type="number" min="0" step="any" value="${esc(taxPct)}"></label>
+          </div>
+          <div class="ch-grid">
+            <label class="ord-field"><span>Customer name</span><input id="qCustName" value="${esc(q.custName || "")}" placeholder="Dr. Name / Clinic / Company"></label>
+            <label class="ord-field"><span>Customer location</span><input id="qCustLoc" value="${esc(q.custLoc || "")}" placeholder="City"></label>
+            <label class="ord-field"><span>Customer GSTIN (optional)</span><input id="qCustGstin" value="${esc(q.custGstin || "")}"></label>
+            <label class="ord-field"><span>Customer address (optional)</span><textarea id="qCustAddr" rows="2">${esc(q.custAddr || "")}</textarea></label>
+          </div>
+          <div class="perm-group">
+            <div class="perm-title">Items
+              <select id="qCatalog" class="select" style="max-width:280px;margin-left:8px">${quoteCatalogOptions()}</select>
+              <button type="button" class="linkish" id="qAddItem">+ add blank line</button>
+            </div>
+            <div class="q-head"><span>Description</span><span>HSN</span><span>Qty</span><span>Unit price ₹</span><span></span></div>
+            <div id="qItems">${itemRows}</div>
+            <div id="qTotals" class="q-totals"></div>
+          </div>
+          <label class="ord-field"><span>Terms &amp; conditions</span><textarea id="qTerms" rows="4">${esc(q.terms != null ? q.terms : QUOTE_TERMS_DEFAULT)}</textarea></label>
+          <label class="ord-field"><span>Notes (optional)</span><textarea id="qNotes" rows="2">${esc(q.notes || "")}</textarea></label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" class="dl-btn">${q.id ? "Save changes" : "Create quotation"}</button>
+            <button type="button" class="ghost-btn" id="qCancel">Cancel</button>
+          </div>
+          <div id="qMsg" class="lock-error" style="min-height:16px"></div>
+        </form>
+      </div>`;
+  }
+
+  function readQuoteForm() {
+    const items = Array.from(document.querySelectorAll("#qItems .q-item")).map((r) => ({
+      desc: r.querySelector(".q-desc").value.trim(),
+      hsn: r.querySelector(".q-hsn").value.trim(),
+      qty: r.querySelector(".q-qty").value.trim(),
+      rate: r.querySelector(".q-rate").value.trim(),
+    })).filter((x) => x.desc || x.rate);
+    return {
+      no: $("#qNo").value.trim(), date: $("#qDate").value, validUntil: $("#qValid").value,
+      taxPct: parseFloat($("#qTax").value) || 0,
+      custName: $("#qCustName").value.trim(), custLoc: $("#qCustLoc").value.trim(),
+      custGstin: $("#qCustGstin").value.trim(), custAddr: $("#qCustAddr").value.trim(),
+      items, terms: $("#qTerms").value, notes: $("#qNotes").value.trim(),
+    };
+  }
+
+  function quoteTotals(items, taxPct) {
+    const sub = (items || []).reduce((s, it) => s + (parseFloat(it.rate) || 0) * (parseFloat(it.qty) || 0), 0);
+    const tax = sub * (taxPct || 0) / 100;
+    return { sub, tax, grand: sub + tax };
+  }
+  function refreshQuoteTotals() {
+    const box = document.getElementById("qTotals");
+    if (!box) return;
+    const items = Array.from(document.querySelectorAll("#qItems .q-item")).map((r) => ({
+      qty: r.querySelector(".q-qty").value, rate: r.querySelector(".q-rate").value,
+    }));
+    const t = quoteTotals(items, parseFloat(($("#qTax") || {}).value) || 0);
+    box.innerHTML = `<div>Subtotal: <b>${rupQ(t.sub)}</b></div><div>IGST: <b>${rupQ(t.tax)}</b></div><div>Grand total: <b>${rupQ(t.grand)}</b></div>`;
+  }
+
+  function openQuotationForm(existing) {
+    $("#quoteForm").innerHTML = quoteFormHtml(existing);
+    const wire = () => {
+      document.querySelectorAll(".q-del").forEach((b) => b.onclick = () => { b.closest(".q-item").remove(); refreshQuoteTotals(); });
+      document.querySelectorAll("#qItems .q-qty, #qItems .q-rate").forEach((inp) => inp.oninput = refreshQuoteTotals);
+    };
+    wire();
+    $("#qAddItem").onclick = () => { const box = $("#qItems"); box.insertAdjacentHTML("beforeend", quoteItemRow({ hsn: QUOTE_HSN_DEVICE, qty: 1 }, box.children.length)); wire(); };
+    const cat = document.getElementById("qCatalog");
+    if (cat) cat.onchange = () => {
+      const list = quoteCatalog(); const x = list[+cat.value];
+      if (x) { const box = $("#qItems"); box.insertAdjacentHTML("beforeend", quoteItemRow({ desc: x.name, hsn: x.hsn, qty: 1, rate: x.price }, box.children.length)); wire(); refreshQuoteTotals(); }
+      cat.value = "";
+    };
+    const tax = document.getElementById("qTax"); if (tax) tax.oninput = refreshQuoteTotals;
+    refreshQuoteTotals();
+    $("#qCancel").onclick = () => { $("#quoteForm").innerHTML = ""; };
+    $("#qForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = $("#qMsg"); msg.style.color = ""; msg.textContent = "";
+      const data = readQuoteForm();
+      if (!data.no || !data.custName) { msg.style.color = "var(--bad)"; msg.textContent = "Quotation No. and Customer name are required."; return; }
+      if (!data.items.length) { msg.style.color = "var(--bad)"; msg.textContent = "Add at least one item."; return; }
+      data.createdBy = (sessionUser && sessionUser.email) || "";
+      try {
+        const store = quoteStore();
+        if (store) {
+          if (existing && existing.id) await store.doc(existing.id).set(data, { merge: true });
+          else { data.createdAt = Date.now(); await store.add(data); }
+        } else {
+          if (existing && existing.id) { const idx = localQuotes.findIndex((x) => x.id === existing.id); if (idx >= 0) localQuotes[idx] = { ...data, id: existing.id }; }
+          else localQuotes.unshift({ ...data, id: "local-" + localQuotes.length, createdAt: Date.now() });
+        }
+        $("#quoteForm").innerHTML = "";
+        loadQuotations();
+      } catch (err) { msg.style.color = "var(--bad)"; msg.textContent = "Save failed: " + (err.message || err); }
+    };
+  }
+
+  function initQuotationUI() {
+    const nb = document.getElementById("newQuoteBtn");
+    if (nb) nb.onclick = () => openQuotationForm(null);
+    loadQuotations();
+  }
+
+  async function loadQuotations() {
+    const box = document.getElementById("quoteList");
+    if (!box) return;
+    let list = [];
+    try {
+      const store = quoteStore();
+      if (store) { const snap = await store.orderBy("createdAt", "desc").get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
+      else list = localQuotes.slice();
+    } catch (e) {
+      try { const snap = await quoteStore().get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
+      catch (e2) { box.innerHTML = `<div class="empty">Could not load quotations (${esc(e2.message || "" + e2)}).</div>`; return; }
+    }
+    quoteListCache = list.slice();
+    if (!list.length) { box.innerHTML = `<div class="empty">No quotations yet. Click “New quotation” to create one.</div>`; return; }
+    const rows = list.map((q) => {
+      const t = quoteTotals(q.items, q.taxPct);
+      const mine = canEditQuote(q);
+      const admin = mine ? `<button class="ghost-btn q-edit" data-id="${esc(q.id)}">Edit</button> <button class="ghost-btn q-rm" data-id="${esc(q.id)}">Delete</button>` : "";
+      return `<tr>
+        <td class="t-name">${esc(q.no || "—")}</td>
+        <td>${esc(q.date || "—")}</td>
+        <td>${esc(q.custName || "—")}${q.custLoc ? `<div class="cell-sub">${esc(q.custLoc)}</div>` : ""}</td>
+        <td class="num">${(q.items || []).length}</td>
+        <td class="num">${rupQ(t.grand)}</td>
+        <td><button class="ghost-btn q-pdf" data-id="${esc(q.id)}">⤓ PDF</button> ${admin}</td>
+      </tr>`;
+    }).join("");
+    box.innerHTML = `<div class="block"><h2>Saved quotations</h2>${table(["Quotation No.", "Date", "Customer", "Items", "Grand total", ""].map((h) => `<th>${h}</th>`).join(""), rows)}</div>`;
+    const byId = (id) => list.find((x) => x.id === id);
+    box.querySelectorAll(".q-pdf").forEach((b) => b.onclick = () => downloadQuotationPdf(byId(b.dataset.id)));
+    box.querySelectorAll(".q-edit").forEach((b) => b.onclick = () => openQuotationForm(byId(b.dataset.id)));
+    box.querySelectorAll(".q-rm").forEach((b) => b.onclick = async () => {
+      if (!window.confirm("Delete this quotation?")) return;
+      try { const store = quoteStore(); if (store) await store.doc(b.dataset.id).delete(); else localQuotes = localQuotes.filter((x) => x.id !== b.dataset.id); loadQuotations(); }
+      catch (e) { window.alert("Delete failed: " + (e.message || e)); }
+    });
+  }
+
+  function buildQuotationPrint(q) {
+    const taxPct = q.taxPct || 0;
+    const itemRows = (q.items || []).map((it, i) => {
+      const qty = parseFloat(it.qty) || 0, rate = parseFloat(it.rate) || 0;
+      const taxable = qty * rate, tax = taxable * taxPct / 100, amt = taxable + tax;
+      return `<tr>
+        <td class="num">${i + 1}</td>
+        <td>${esc(it.desc || "")}</td>
+        <td class="num">${esc(it.hsn || "")}</td>
+        <td class="num">${qty || ""}</td>
+        <td class="num">${rate ? rupQ(rate) : ""}</td>
+        <td class="num">${rupQ(tax)}</td>
+        <td class="num">${rupQ(amt)}</td></tr>`;
+    }).join("");
+    const t = quoteTotals(q.items, taxPct);
+    const terms = (q.terms != null ? q.terms : QUOTE_TERMS_DEFAULT).split("\n").filter((x) => x.trim());
+    return `
+      <div class="p-section ch-print q-print">
+        <div class="ch-letterhead">
+          <div class="ch-logo">${challanLogo()}</div>
+          <div class="ch-co">
+            <div class="ch-co-name">${esc(QUOTE_LH.name)}</div>
+            <div class="ch-co-line">${esc(QUOTE_LH.addr)}</div>
+            <div class="ch-co-line">Mobile ${esc(QUOTE_LH.phone)} &nbsp;·&nbsp; ${esc(QUOTE_LH.email)} &nbsp;·&nbsp; ${esc(QUOTE_LH.web)}</div>
+            <div class="ch-co-line">GSTIN ${esc(QUOTE_LH.gstin)}</div>
+          </div>
+        </div>
+        <div class="ch-title">QUOTATION</div>
+
+        <table class="ch-meta"><tbody>
+          <tr><th>Quotation #</th><td>${esc(q.no || "—")}</td><th>Date</th><td>${esc(q.date || "—")}</td></tr>
+          <tr><th>Valid until</th><td>${esc(q.validUntil || "—")}</td><th>GSTIN (customer)</th><td>${esc(q.custGstin || "—")}</td></tr>
+        </tbody></table>
+
+        <table class="ch-fromto"><tbody>
+          <tr><th>Customer</th></tr>
+          <tr><td><b>${esc(q.custName || "")}</b>${q.custLoc ? " · " + esc(q.custLoc) : ""}${q.custAddr ? "<br>" + esc(q.custAddr).replace(/\n/g, "<br>") : ""}</td></tr>
+        </table>
+
+        <table class="ch-items q-items">
+          <thead><tr><th class="num">S.No</th><th>Description</th><th class="num">HSN</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">IGST (${taxPct}%)</th><th class="num">Amount</th></tr></thead>
+          <tbody>${itemRows || `<tr><td colspan="7">—</td></tr>`}
+            <tr class="q-sum"><td></td><td colspan="4" class="num"><b>Subtotal</b></td><td class="num">${rupQ(t.tax)}</td><td class="num"><b>${rupQ(t.sub)}</b></td></tr>
+            <tr class="q-grand"><td></td><td colspan="5" class="num"><b>Grand Total (incl. IGST)</b></td><td class="num"><b>${rupQ(t.grand)}</b></td></tr>
+          </tbody>
+        </table>
+
+        <div class="q-cols">
+          <div class="q-terms">
+            <b>Terms &amp; Conditions</b>
+            <ol>${terms.map((d) => `<li>${esc(d)}</li>`).join("")}</ol>
+            ${q.notes ? `<p>${esc(q.notes).replace(/\n/g, "<br>")}</p>` : ""}
+          </div>
+          <div class="q-bank">
+            <b>Bank Details</b>
+            <div>A/C Name: ${esc(QUOTE_BANK.name)}</div>
+            <div>A/C No: ${esc(QUOTE_BANK.acc)}</div>
+            <div>Bank: ${esc(QUOTE_BANK.bank)} · ${esc(QUOTE_BANK.branch)}</div>
+            <div>IFSC: ${esc(QUOTE_BANK.ifsc)}</div>
+          </div>
+        </div>
+
+        <div class="ch-sign">
+          ${brandSign ? challanSign() : `<div class="ch-sign-name">${esc(COMPANY.signName)}</div>${challanSign()}<div class="ch-sign-role">Authorised Signatory</div>`}
+        </div>
+        <p class="q-thanks">Thank you for your business!</p>
+      </div>`;
+  }
+
+  function downloadQuotationPdf(q) {
+    if (!q) return;
+    let area = document.getElementById("printArea");
+    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
+    area.innerHTML = buildQuotationPrint(q);
     document.body.classList.add("printing");
     const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
