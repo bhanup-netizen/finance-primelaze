@@ -3726,10 +3726,24 @@
     const id = payRowId(r);
     const hist = (payTrack[id] && payTrack[id].history) || [];
     const sv = payNum(r.salesValue);
-    // Received = the payments Finance has recorded in the dashboard (fall back
-    // to the row's own value only if none recorded yet).
+    // Outstanding/pending priority:
+    //   1) payments RECORDED in the dashboard → received = Σ events, pending = sv − received
+    //   2) else the imported Outstanding/Pending column (authoritative — what
+    //      Finance maintains; the Received column is often blank even on settled
+    //      deals, so sv − received over-counts the total outstanding)
+    //   3) else fall back to sv − imported received
     const recEvents = hist.filter((h) => h.kind === "received");
-    const received = recEvents.length ? recEvents.reduce((a, h) => a + (payNum(h.amount) || 0), 0) : payNum(r.received);
+    let received, pending;
+    if (recEvents.length) {
+      received = recEvents.reduce((a, h) => a + (payNum(h.amount) || 0), 0);
+      pending = Math.max(sv - received, 0);
+    } else if (r.hasOutstanding) {
+      pending = Math.max(payNum(r.outstanding), 0);
+      received = Math.max(sv - pending, 0);
+    } else {
+      received = payNum(r.received);
+      pending = Math.max(sv - received, 0);
+    }
     // Next commitment = the latest one Finance set (date + amount for the next
     // installment). Falls back to an imported Committed Date / Committed Value.
     // Nothing is committed until she enters it, so "committed" ≠ total pending.
@@ -3745,7 +3759,6 @@
     const instEvents = hist.filter((h) => h.kind === "install" && h.date);
     const installDate = instEvents.length ? instEvents[instEvents.length - 1].date : (r.installDate || "");
     const committed = sv;                              // total deal value = sale value
-    const pending = Math.max(sv - received, 0);        // balance still to collect
     let status = "grey", daysOverdue = 0;
     if (sv <= 0) status = "grey";
     else if (pending <= 0) status = "green";           // fully collected
@@ -4199,6 +4212,10 @@
     const norm = {};
     Object.keys(o).forEach((k) => { norm[k.toLowerCase().replace(/[^a-z]/g, "")] = o[k]; });
     const g = (...keys) => { for (const k of keys) if (norm[k] != null && norm[k] !== "") return norm[k]; return ""; };
+    // The sheet's Outstanding / Pending column is the authoritative balance
+    // Finance maintains (the Received column is often left blank even when a
+    // deal is settled). Capture it and whether it was present at all.
+    const outRaw = g("outstanding", "balance", "outstandingamount", "pending");
     return {
       // Keep the exported Ref id if present, so re-uploading keeps each record's
       // id (and its commitment / payment history stays attached).
@@ -4215,7 +4232,8 @@
       installDate: payNormDate(g("installdate", "installeddate", "installationdate", "machineinstalleddate", "installedon")),
       product: String(g("productsold", "productname", "product", "item", "description", "itemname") || "").trim(),
       salesValue: payNum(g("salesvalue", "salevalue", "sales", "dealvalue", "ordervalue", "invoicevalue")),
-      outstanding: payNum(g("outstanding", "balance", "outstandingamount")),
+      outstanding: payNum(outRaw),
+      hasOutstanding: (outRaw !== "" && outRaw != null),
       committedAmount: payNum(g("committedamount", "committed", "promisedamount", "amount")),
       committedValue: payNum(g("committedvalue", "commitvalue", "installmentamount", "nextinstallment", "commitamount")),
       received: payNum(g("received", "amountreceived", "collected", "receivedamount")),
