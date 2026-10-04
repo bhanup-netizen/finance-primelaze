@@ -11,7 +11,7 @@
 
   // Session / permissions (populated from Firebase Auth + Firestore after login).
   let appMode = "view";                 // editing on/off (admins can toggle)
-  let currentTab = "overview";
+  let currentTab = "";
   let userRole = "view";                // "admin" | "view" (super maps to admin here)
   let userSuper = false;                // true = Super Admin (everything + user mgmt)
   let perms = { pages: "all", hqs: "all", landing: false, managerInc: false, editPages: [] };
@@ -121,7 +121,6 @@
 
   /* ---------------- tab registry ---------------- */
   const TABS = [
-    { id: "overview", label: "Overview", group: "", render: renderOverview },
     // Finance
     { id: "targets", label: "HQ Targets", group: "Finance", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Finance", render: renderIncentives },
@@ -9974,7 +9973,7 @@
 
   function firstVisibleTab() {
     const t = TABS.find((x) => canSeePage(x.id));
-    return t ? t.id : "overview";
+    return t ? t.id : (TABS[0] && TABS[0].id);
   }
 
   function go(id, keepScroll) {
@@ -10119,6 +10118,14 @@
         catch (e) { window.alert("Could not send the reset email: " + (e.message || e)); }
         finally { pw.disabled = false; }
       };
+    }
+    // Clicking the Primelaze logo goes to the main (first available) page.
+    const brand = document.querySelector(".topbar .brand");
+    if (brand && !brand.dataset.wired) {
+      brand.dataset.wired = "1";
+      brand.style.cursor = "pointer";
+      brand.title = "Go to the main page";
+      brand.onclick = () => go(firstVisibleTab());
     }
     mountTabs();
     initMode();
