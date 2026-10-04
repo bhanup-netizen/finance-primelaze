@@ -4271,6 +4271,28 @@
     payRepaint();
     window.alert(`Imported ${added} new commitment row(s).` + (valid.length - added ? ` ${valid.length - added} already present (skipped).` : ""));
   }
+  // Upsert import: UPDATE the records that changed (matched by Ref id, else by
+  // customer + invoice + product) and ADD new ones — every other existing
+  // record is left untouched. So Finance can upload only the updated rows
+  // instead of the whole sheet. The existing record's id is kept so its
+  // in-dashboard commitment / payment history stays attached.
+  const payFbKey = (r) => [String(r.customer || "").toLowerCase().trim(), String(r.invoiceNo || "").toLowerCase().trim(), String(r.product || "").toLowerCase().trim()].join("|");
+  function payUpsert(mapped) {
+    payHideAll = false; payClearBefore = "";
+    payDirty = true; // this session now owns the payment data — protect it on save
+    const valid = mapped.filter((r) => r.customer || r.committedAmount || r.outstanding || r.received || r.salesValue);
+    const byId = new Map(paymentAdds.map((r) => [String(r.id), r]));
+    const byFb = new Map(paymentAdds.map((r) => [payFbKey(r), r]));
+    let updated = 0, added = 0;
+    valid.forEach((r) => {
+      const ex = (r.id && byId.get(String(r.id))) || byFb.get(payFbKey(r));
+      if (ex) { const keepId = ex.id; Object.keys(ex).forEach((k) => delete ex[k]); Object.assign(ex, r, { id: keepId }); updated++; }
+      else { paymentAdds.push(r); byId.set(String(r.id), r); byFb.set(payFbKey(r), r); added++; }
+    });
+    saveEdits(`Payments · updated ${updated}, added ${added} row(s)`);
+    payRepaint();
+    window.alert(`Updated ${updated} record(s) and added ${added} new one(s).\nAll other records were left unchanged.` + (mapped.length - valid.length ? `\n${mapped.length - valid.length} blank row(s) skipped.` : ""));
+  }
   function payParseCSV(text) {
     const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim() !== "");
     if (!lines.length) return [];
@@ -4278,7 +4300,7 @@
     const heads = split(lines[0]);
     return lines.slice(1).map((l) => { const cells = split(l); const o = {}; heads.forEach((h, i) => (o[h] = cells[i] != null ? cells[i] : "")); return o; });
   }
-  function payImport(file, replace) {
+  function payImport(file) {
     const isCsv = /\.csv$/i.test(file.name) || !window.XLSX;
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -4290,10 +4312,36 @@
           const ws = wb.Sheets[wb.SheetNames[0]];
           rows = window.XLSX.utils.sheet_to_json(ws, { defval: "" });
         }
-        payAppend(rows.map(payMapRow), replace);
+        payImportChoose(rows.map(payMapRow), file.name);
       } catch (err) { window.alert("Could not read the file: " + (err.message || err)); }
     };
     if (isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+  }
+  // Ask how to bring the sheet in: UPDATE only the changed/new rows (default),
+  // or REPLACE the whole dataset with the file.
+  function payImportChoose(mapped, fileName) {
+    const n = mapped.filter((r) => r.customer || r.committedAmount || r.outstanding || r.received || r.salesValue).length;
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>Import payment sheet</h3>
+      <p class="muted-note" style="margin:2px 0 14px">“${esc(fileName)}” — <b>${n}</b> usable row(s) found.<br>How should this be brought in?</p>
+      <div class="lead-modal-actions" style="flex-wrap:wrap">
+        <button type="button" class="ghost-btn" id="payImpCancel">Cancel</button>
+        <button type="button" class="ghost-btn" id="payImpReplace" title="Wipe the current data and show only this sheet">↺ Replace everything</button>
+        <button type="button" class="dl-btn" id="payImpUpdate" title="Update the records in this sheet (matched by Ref / invoice) and add new ones; leave all other records unchanged">✔ Update changed &amp; add new</button>
+      </div>
+      <p class="muted-note" style="margin:10px 0 0">“Update” lets you upload just the rows that changed. “Replace” expects your full current sheet.</p>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("payImpCancel").onclick = close;
+    document.getElementById("payImpUpdate").onclick = () => { close(); payUpsert(mapped); };
+    document.getElementById("payImpReplace").onclick = () => {
+      if (!window.confirm("Replace ALL current payment data with this sheet? Records not in this file will be removed.")) return;
+      close(); payAppend(mapped, true);
+    };
   }
   function payDownloadTemplate() {
     const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, "Pending", "", "6 EMIs", "2026-09-28", 250000];
@@ -4408,11 +4456,8 @@
       const up = document.getElementById("payUpload");
       if (up) up.onchange = (e) => {
         const f = e.target.files[0];
-        if (f) {
-          // Always REPLACE — re-importing refreshes the data instead of stacking
-          // duplicates. Upload your full current sheet each time.
-          if (window.confirm('Import "' + f.name + '"?\n\nThis REPLACES the current payment data with this file. Re-importing will not duplicate rows — always upload your full current sheet.')) payImport(f, true);
-        }
+        // Opens a chooser: Update changed & add new (default) or Replace all.
+        if (f) payImport(f);
         e.target.value = "";
       };
       // Excel-style per-column filters on the detailed report.
@@ -4478,7 +4523,7 @@
           ${admin ? `<button id="payAddBtn" class="dl-btn" type="button" title="Add a new sale / machine directly in the portal">＋ Add sale</button>` : ""}
           <button id="payTplBtn" class="ghost-btn" type="button" title="Download a blank template to fill">⬇ Empty template</button>
           <button id="payExportBtn" class="ghost-btn" type="button" title="Download all current records (with every field) to edit and re-upload">⬇ Export current data</button>
-          ${admin ? `<label class="dl-btn" style="cursor:pointer" title="Import an Excel/CSV — replaces the current data with your sheet (no duplicates)">⬆ Import (Excel/CSV)<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
+          ${admin ? `<label class="dl-btn" style="cursor:pointer" title="Import an Excel/CSV — update only the changed/new rows (or replace everything)">⬆ Import (Excel/CSV)<input id="payUpload" type="file" accept=".xlsx,.xls,.csv" hidden></label>` : ""}
           ${admin ? `<button id="payClearOld" class="ghost-btn danger" type="button" title="Clear commitment data — by date or all">🗑 Clear data</button>` : ""}
         </div>
       </div>
