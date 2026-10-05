@@ -3685,13 +3685,12 @@
     saveEdits("Payment · " + (entry.kind || "update"));
   }
   const PAY_STATUS = {
-    green: { label: "Received", cls: "pay-green" },
+    green: { label: "Paid", cls: "pay-green" },
     yellow: { label: "Partial", cls: "pay-yellow" },
-    red: { label: "Overdue", cls: "pay-red" },
-    blue: { label: "Upcoming", cls: "pay-blue" },
+    blue: { label: "Committed", cls: "pay-blue" },
     grey: { label: "No date", cls: "pay-grey" },
   };
-  const PAY_ORDER = ["red", "yellow", "blue", "grey", "green"];
+  const PAY_ORDER = ["blue", "yellow", "grey", "green"];
   const canEditPayments = () => isAdmin(); // full/page admins can upload
 
   const payToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -3760,15 +3759,13 @@
     const instEvents = hist.filter((h) => h.kind === "install" && h.date);
     const installDate = instEvents.length ? instEvents[instEvents.length - 1].date : (r.installDate || "");
     const committed = sv;                              // total deal value = sale value
-    let status = "grey", daysOverdue = 0;
+    // Simple status (no overdue): Paid / Partial / Committed / No date.
+    let status = "grey";
     if (sv <= 0) status = "grey";
     else if (pending <= 0) status = "green";           // fully collected
     else if (received > 0) status = "yellow";          // partial
-    else if (!committedDate) status = "grey";          // no commitment date yet
-    else {
-      const diff = Math.round((payToday() - new Date(committedDate)) / 86400000);
-      if (diff > 0) { status = "red"; daysOverdue = diff; } else status = "blue";
-    }
+    else if (committedDate) status = "blue";           // committed, awaiting payment
+    else status = "grey";                              // no commitment date yet
     const dueDays = committedDate ? Math.round((payToday() - new Date(committedDate)) / 86400000) : 0;
     // Machine install status → "Installed" / "Pending" / "".
     const ms = String(r.machineStatus || "");
@@ -3776,7 +3773,7 @@
     // Normalize the salesperson to the proper roster name, merging spelling variants.
     let salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
     salesPerson = paySpMerge(salesPerson) || salesPerson;
-    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, daysOverdue, dueDays, machineStatus, history: hist });
+    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -3805,10 +3802,9 @@
       if (payFilter.product && d.product !== payFilter.product) return false;
       // Commitment month: show records whose next-commitment date is in the month.
       if (payFilter.month && payMonthKey(d.committedDate) !== payFilter.month) return false;
-      // Fulfilment: fully collected / still pending / overdue.
+      // Fulfilment: fully collected / still pending.
       if (payFilter.fulfil === "yes" && d.pending > 0) return false;
       if (payFilter.fulfil === "no" && d.pending <= 0) return false;
-      if (payFilter.fulfil === "overdue" && d.status !== "red") return false;
       // 30-day due filter: Consumables & Esthemax by due days; Machines by
       // install status (Pending = below 30 group, Installed = above 30 group).
       if (payFilter.due) {
@@ -3950,7 +3946,7 @@
     const sorted = rows.slice().sort((a, b) => {
       const ra = PAY_ORDER.indexOf(a.status), rb = PAY_ORDER.indexOf(b.status);
       if (ra !== rb) return ra - rb;
-      return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
+      return b.pending - a.pending;
     });
     if (!sorted.length) return `<tr><td colspan="8" class="empty" style="text-align:center;padding:18px">No records match the current filters.</td></tr>`;
     return sorted.map((r) => {
@@ -3966,7 +3962,7 @@
         <td>${inst}</td>
         <td>${comm}</td>
         <td class="num">${r.received ? rupee(r.received) : "<span class='t-muted'>—</span>"}</td>
-        <td class="num${r.status === "red" ? " pay-overdue" : ""}">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}${r.status === "red" ? ` <span class="pay-od">⚠ ${r.daysOverdue}d overdue</span>` : ""}</td></tr>`;
+        <td class="num">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}</td></tr>`;
     }).join("");
   }
 
@@ -4002,7 +3998,7 @@
     };
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
     wrap.innerHTML = `<div class="lead-modal-card lead-detail-card">
-      <div class="lead-tl-topline"><h3>${esc(r.customer || "—")}</h3><span class="pay-badge ${m.cls}">${m.label}${r.status === "red" ? " · " + r.daysOverdue + "d" : ""}</span></div>
+      <div class="lead-tl-topline"><h3>${esc(r.customer || "—")}</h3><span class="pay-badge ${m.cls}">${m.label}</span></div>
       <div class="ld-grid">
         ${info("Product", esc(r.product || ""))}
         ${info("Invoice No.", esc(r.invoiceNo || ""))}
@@ -4169,7 +4165,6 @@
       if (except !== "month" && f.month && payMonthKey(d.committedDate) !== f.month) return false;
       if (except !== "fulfil" && f.fulfil === "yes" && d.pending > 0) return false;
       if (except !== "fulfil" && f.fulfil === "no" && d.pending <= 0) return false;
-      if (except !== "fulfil" && f.fulfil === "overdue" && d.status !== "red") return false;
       return true;
     });
   }
@@ -4539,7 +4534,7 @@
       <div id="payKpis">${payKpis(applyColFilters(payFiltered(rows0)), payFilteredExceptMonth())}</div>
       <div class="controls" style="margin-top:14px">
         <label class="ord-field"><span>Commitment Month</span><select id="payMonth" class="select" title="Show records whose next-commitment date is in this month"><option value="">All</option>${payCommitMonths(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
-        <label class="ord-field"><span>Fulfilment</span><select id="payFulfil" class="select"><option value="">All</option><option value="no"${payFilter.fulfil === "no" ? " selected" : ""}>Not fulfilled</option><option value="overdue"${payFilter.fulfil === "overdue" ? " selected" : ""}>Overdue</option><option value="yes"${payFilter.fulfil === "yes" ? " selected" : ""}>Fulfilled</option></select></label>
+        <label class="ord-field"><span>Fulfilment</span><select id="payFulfil" class="select"><option value="">All</option><option value="no"${payFilter.fulfil === "no" ? " selected" : ""}>Not fulfilled</option><option value="yes"${payFilter.fulfil === "yes" ? " selected" : ""}>Fulfilled</option></select></label>
         <label class="ord-field"><span>Sales Person</span><select id="paySp" class="select"><option value="">All</option>${payUniq(rows0, "salesPerson").map((v) => `<option value="${esc(v)}"${v === payFilter.sp ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Category</span><select id="payCat" class="select"><option value="">All</option>${payUniq(rows0, "category").map((v) => `<option value="${esc(v)}"${v === payFilter.cat ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Product</span><select id="payProduct" class="select"><option value="">All</option>${payUniq(rows0, "product").map((v) => `<option value="${esc(v)}"${v === payFilter.product ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
