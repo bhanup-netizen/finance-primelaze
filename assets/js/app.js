@@ -4279,6 +4279,8 @@
   const payFbKey = (r) => [String(r.customer || "").toLowerCase().trim(), String(r.invoiceNo || "").toLowerCase().trim(), String(r.product || "").toLowerCase().trim()].join("|");
   function payUpsert(mapped) {
     payHideAll = false; payClearBefore = "";
+    payHideBase = true; // Finance's uploaded sheet is the source of truth — hide
+                        // the built-in seed so it can't double-count the same deals
     payDirty = true; // this session now owns the payment data — protect it on save
     const valid = mapped.filter((r) => r.customer || r.committedAmount || r.outstanding || r.received || r.salesValue);
     const byId = new Map(paymentAdds.map((r) => [String(r.id), r]));
