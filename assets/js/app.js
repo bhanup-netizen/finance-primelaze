@@ -3657,7 +3657,7 @@
   // a fresh import (mirrors invDirty / leadDirty). Fixes "import overridden".
   let payDirty = false;
   let paySeq = 0;
-  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "" };
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false };
   let payMonthDefaulted = false; // set the month filter to the current month once, on first open
   // A record is "EMI" when its EMI field has a value that isn't "Non-EMI".
   const payIsEmi = (r) => { const s = String(r.emi || "").trim().toLowerCase(); return !!s && !/non[\s-]?emi/.test(s) && s !== "no"; };
@@ -3691,6 +3691,8 @@
     grey: { label: "No date", cls: "pay-grey" },
   };
   const PAY_ORDER = ["blue", "yellow", "grey", "green"];
+  // Why a commitment wasn't fulfilled — logged into the record's history.
+  const PAY_MISS_REASONS = ["Customer asked to extend", "Cheque / payment delayed", "Awaiting internal approval", "Cheque bounced", "Partial paid, balance pending", "Customer not reachable", "Dispute / complaint", "Financial difficulty", "Other"];
   const canEditPayments = () => isAdmin(); // full/page admins can upload
 
   const payToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -3773,7 +3775,10 @@
     // Normalize the salesperson to the proper roster name, merging spelling variants.
     let salesPerson = paySpMerge(r.salesPerson) || properPersonName(r.salesPerson);
     salesPerson = paySpMerge(salesPerson) || salesPerson;
-    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, history: hist });
+    const missEvents = hist.filter((h) => h.kind === "missed");
+    const hasMissed = missEvents.length > 0;
+    const missedReason = hasMissed ? (missEvents[missEvents.length - 1].text || "") : "";
+    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, hasMissed, missedReason, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -3805,6 +3810,7 @@
       // Fulfilment: fully collected / still pending.
       if (payFilter.fulfil === "yes" && d.pending > 0) return false;
       if (payFilter.fulfil === "no" && d.pending <= 0) return false;
+      if (payFilter.missed && !d.hasMissed) return false; // only records with an unmet commitment
       // 30-day due filter: Consumables & Esthemax by due days; Machines by
       // install status (Pending = below 30 group, Installed = above 30 group).
       if (payFilter.due) {
@@ -3878,10 +3884,12 @@
     };
     const emiN = rows.filter((r) => String(r.emi || "").trim()).length;
     const nonN = rows.length - emiN;
+    const missN = rows.filter((r) => r.hasMissed).length;
     const emiRow = `<div class="pay-chips" style="margin-top:8px">
       <button data-payemi="" class="pay-chip ${payFilter.emi ? "" : "active"}">All<span class="pay-chip-n">${rows.length}</span></button>
       <button data-payemi="emi" class="pay-chip b-accent ${payFilter.emi === "emi" ? "active" : ""}">EMI<span class="pay-chip-n">${emiN}</span></button>
       <button data-payemi="nonemi" class="pay-chip ${payFilter.emi === "nonemi" ? "active" : ""}">Non-EMI<span class="pay-chip-n">${nonN}</span></button>
+      <button data-paymissed="1" class="pay-chip b-bad ${payFilter.missed ? "active" : ""}" title="Records where a commitment was logged as not met">⚠ Not met<span class="pay-chip-n">${missN}</span></button>
     </div>`;
     return `<div class="pay-chips">
       <button data-paystatus="" class="pay-chip ${payFilter.status ? "" : "active"}">All<span class="pay-chip-n">${rows.length}</span></button>
@@ -3954,8 +3962,9 @@
       const comm = r.committedDate
         ? esc(fmtDate(r.committedDate)) + (r.commitAmount ? ` <span class="t-muted">${rupee(r.commitAmount)}</span>` : "")
         : "<span class='t-muted'>—</span>";
+      const missFlag = r.hasMissed ? ` <span class="pay-miss" title="Commitment not met: ${esc(r.missedReason || "")}">⚠</span>` : "";
       return `<tr class="pay-rowlink" data-payid="${esc(payRowId(r))}">
-        <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button></td>
+        <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button>${missFlag}</td>
         <td>${r.product ? esc(r.product) : "<span class='t-muted'>—</span>"}</td>
         <td>${esc(r.salesPerson || "—")}</td>
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
@@ -3995,6 +4004,7 @@
       if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Committed ${payNum(h.amount) ? rupee(payNum(h.amount)) + " " : ""}for ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       if (h.kind === "install") return `<li><span class="peh-when">${when}</span> — <b>Machine installed ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       if (h.kind === "edit") return `<li><span class="peh-when">${when}</span> — ✎ <b>${esc(h.text || "Edited details")}</b>${by}</li>`;
+      if (h.kind === "missed") return `<li style="color:var(--bad)"><span class="peh-when">${when}</span> — ⚠ <b>Commitment not met</b>${h.amount ? " (" + rupee(payNum(h.amount)) + ")" : ""}${h.date ? " for " + esc(fmtDate(h.date)) : ""} — ${esc(h.text || "no reason")}${by}</li>`;
       return `<li><span class="peh-when">${when}</span> — ${esc(h.text || "")}${by}</li>`;
     };
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
@@ -4016,6 +4026,7 @@
         <div class="pay-act"><label>Machine installed date</label><span class="pay-act-row"><input type="date" id="pdInstall" value="${esc(r.installDate || "")}"><button type="button" class="mini-btn" id="pdInstallBtn">Save</button></span></div>
         <div class="pay-act"><label>Next payment commitment (date + amount)</label><span class="pay-act-row"><input type="date" id="pdCommit"><input type="number" id="pdCommitAmt" placeholder="₹ committed"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
         <div class="pay-act"><label>Record payment received</label><span class="pay-act-row"><input type="number" id="pdRecvAmt" placeholder="₹ amount"><input type="date" id="pdRecvDate" value="${esc(leadToday())}"><button type="button" class="mini-btn" id="pdRecvBtn">Add</button></span></div>
+        <div class="pay-act"><label>Commitment not met — log the reason</label><span class="pay-act-row"><select id="pdMissReason" class="select"><option value="">— reason —</option>${PAY_MISS_REASONS.map((x) => `<option>${esc(x)}</option>`).join("")}</select><input type="text" id="pdMissNote" placeholder="extra note (optional)"><button type="button" class="mini-btn" id="pdMissBtn">Log</button></span></div>
         <div class="pay-act"><label>Add remark</label><span class="pay-act-row"><input type="text" id="pdRemark" placeholder="note / follow-up"><button type="button" class="mini-btn" id="pdRemarkBtn">Add</button></span></div>
       </div>` : ""}
       <h4 class="ld-h">History</h4>
@@ -4033,6 +4044,13 @@
       const cb = document.getElementById("pdCommitBtn"); if (cb) cb.onclick = () => { const d = (document.getElementById("pdCommit").value || "").trim(); const amt = parseFloat(String(document.getElementById("pdCommitAmt").value).replace(/[^0-9.]/g, "")) || 0; if (!d) { window.alert("Pick a commitment date."); return; } payTrackAdd(id, { kind: "commit", date: d, amount: amt }); reopen(); };
       const rb = document.getElementById("pdRecvBtn"); if (rb) rb.onclick = () => { const a = parseFloat(String(document.getElementById("pdRecvAmt").value).replace(/[^0-9.]/g, "")) || 0; const d = (document.getElementById("pdRecvDate").value || "").trim(); if (!(a > 0)) { window.alert("Enter the amount received."); return; } payTrackAdd(id, { kind: "received", amount: a, date: d }); reopen(); };
       const rm = document.getElementById("pdRemarkBtn"); if (rm) rm.onclick = () => { const t = (document.getElementById("pdRemark").value || "").trim(); if (!t) { window.alert("Enter a remark."); return; } payTrackAdd(id, { kind: "remark", text: t }); reopen(); };
+      const ms = document.getElementById("pdMissBtn"); if (ms) ms.onclick = () => {
+        const reason = (document.getElementById("pdMissReason").value || "").trim();
+        const note = (document.getElementById("pdMissNote").value || "").trim();
+        if (!reason) { window.alert("Pick a reason."); return; }
+        payTrackAdd(id, { kind: "missed", date: r.committedDate || "", amount: r.commitAmount || 0, text: note ? reason + " — " + note : reason });
+        reopen();
+      };
     }
   }
 
@@ -4267,6 +4285,9 @@
     });
     document.querySelectorAll("[data-payemi]").forEach((b) => {
       b.onclick = () => { payFilter.emi = b.dataset.payemi; payRepaint(); };
+    });
+    document.querySelectorAll("[data-paymissed]").forEach((b) => {
+      b.onclick = () => { payFilter.missed = !payFilter.missed; payRepaint(); };
     });
   }
 
@@ -4558,7 +4579,7 @@
       });
       wirePayRows();
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "" }; payColFilters = {}; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false }; payColFilters = {}; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
