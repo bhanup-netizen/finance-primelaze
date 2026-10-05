@@ -3728,24 +3728,35 @@
     const id = payRowId(r);
     const hist = (payTrack[id] && payTrack[id].history) || [];
     const sv = payNum(r.salesValue);
-    // Outstanding/pending priority:
-    //   1) payments RECORDED in the dashboard → received = Σ events, pending = sv − received
-    //   2) else the imported Outstanding/Pending column (authoritative — what
-    //      Finance maintains; the Received column is often blank even on settled
-    //      deals, so sv − received over-counts the total outstanding)
-    //   3) else fall back to sv − imported received
+    // Received vs. Pending are tracked INDEPENDENTLY (they need not sum to the
+    // sale value — most deals carry future EMI not yet due):
+    //   • Received = only money actually collected (dashboard receipts + an
+    //     imported Received column). Never back-calculated from the balance.
+    //   • Pending  = Finance's authoritative Outstanding column, less any receipt
+    //     we've since logged (or sale − received when the sheet has no balance).
     const recEvents = hist.filter((h) => h.kind === "received");
-    let received, pending;
-    if (recEvents.length) {
-      received = recEvents.reduce((a, h) => a + (payNum(h.amount) || 0), 0);
-      pending = Math.max(sv - received, 0);
-    } else if (r.hasOutstanding) {
-      pending = Math.max(payNum(r.outstanding), 0);
-      received = Math.max(sv - pending, 0);
+    const eventReceived = recEvents.reduce((a, h) => a + (payNum(h.amount) || 0), 0);
+    // RECEIVED = only money we can actually account for: receipts logged in the
+    // dashboard plus the sheet's own Received column. It is NEVER inferred from
+    // the outstanding balance — a committed-but-unpaid deal (nothing collected
+    // yet) must show ₹0 received, not "sale value − balance", which would invent
+    // a collection that never happened (e.g. Dr. Poornima: ₹14L sale, ₹0 in).
+    const received = eventReceived + Math.max(payNum(r.received), 0);
+    // PENDING = Finance's authoritative Outstanding/Pending column when present
+    // (reduced by anything we've since logged as received), else sale − received.
+    let pending;
+    if (r.hasOutstanding) {
+      pending = Math.max(payNum(r.outstanding) - eventReceived, 0);
     } else {
-      received = payNum(r.received);
       pending = Math.max(sv - received, 0);
     }
+    // RECEIVED THIS MONTH — money whose receipt date falls in the selected month
+    // (an imported Received amount counts only when its Received-date is in that
+    // month). Drives the month-scoped "Received" column in the report.
+    const _tm = payFilter.month || new Date().toISOString().slice(0, 7);
+    let receivedMonth = 0;
+    recEvents.forEach((h) => { if (payMonthKey(h.date) === _tm) receivedMonth += payNum(h.amount) || 0; });
+    if (payNum(r.received) > 0 && r.receivedDate && payMonthKey(r.receivedDate) === _tm) receivedMonth += payNum(r.received);
     // Next commitment = the latest one Finance set (date + amount for the next
     // installment). Falls back to an imported Committed Date / Committed Value.
     // Nothing is committed until she enters it, so "committed" ≠ total pending.
@@ -3781,7 +3792,7 @@
     const hasCommitment = !!committedDate && pending > 0; // promised a payment, still owing
     const tk = payTrack[id] || {};
     const followup = !!tk.followup, followNote = tk.followNote || "";
-    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, hasMissed, missedReason, hasCommitment, followup, followNote, history: hist });
+    return Object.assign({}, r, { id, salesPerson, committed, received, receivedMonth, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, hasMissed, missedReason, hasCommitment, followup, followNote, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -3870,20 +3881,21 @@
     // Company totals — do NOT change with the Commitment-Month filter.
     const totalSold = overall.length;
     const saleValue = overall.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
-    const overallPending = overall.reduce((a, r) => a + r.pending, 0);
-    const paid = Math.max(saleValue - overallPending, 0); // collected so far (overall)
+    // "Paid" = money we have actually received (receipts recorded in the dashboard
+    // + the sheet's Received column) — NOT billed − outstanding, which would count
+    // money we never collected. Shows ₹0 until receipts are recorded.
+    const paid = overall.reduce((a, r) => a + (r.received || 0), 0);
     // Money committed to come in this month = the installment amounts Finance
     // has committed (date + value) whose commitment date falls in the month.
     const committedThisMonth = rows.reduce((a, r) => a + (payMonthKey(r.committedDate) === targetMonth ? (r.commitAmount || 0) : 0), 0);
-    // Money already collected this month = payments recorded with a date in the month.
-    let receivedThisMonth = 0;
-    rows.forEach((r) => (r.history || []).forEach((h) => { if (h.kind === "received" && payMonthKey(h.date) === targetMonth) receivedThisMonth += payNum(h.amount) || 0; }));
+    // Money actually received this month (same basis as the report's Received column).
+    const receivedThisMonth = rows.reduce((a, r) => a + (r.receivedMonth || 0), 0);
     const cards = [
       { cls: "", label: "Total sold", value: totalSold, note: "all records" },
       { cls: "k-teal", label: "Total sale value", value: rupeeShort(saleValue), note: "billed (overall)" },
-      { cls: "k-good", label: "Total paid", value: rupeeShort(paid), note: "collected (overall)" },
+      { cls: "k-good", label: "Total paid", value: rupeeShort(paid), note: "received so far (overall)" },
       { cls: "k-bad", label: "Committed in " + label, value: rupeeShort(committedThisMonth), note: "promised to come this month" },
-      { cls: "k-good", label: "Received in " + label, value: rupeeShort(receivedThisMonth), note: "collected this month" },
+      { cls: "k-good", label: "Received in " + label, value: rupeeShort(receivedThisMonth), note: "received this month" },
     ];
     return `<div class="grid kpi-grid pay-kpis">${cards.map((k) => `
       <div class="card kpi ${k.cls}"><div class="kpi-label">${esc(k.label)}</div><div class="kpi-value">${k.value}</div><div class="kpi-sub">${esc(k.note)}</div></div>`).join("")}</div>`;
@@ -3995,7 +4007,7 @@
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
         <td>${inst}</td>
         <td>${comm}</td>
-        <td class="num">${r.received ? rupee(r.received) : "<span class='t-muted'>—</span>"}</td>
+        <td class="num">${r.receivedMonth ? rupee(r.receivedMonth) : "<span class='t-muted'>—</span>"}</td>
         <td class="num">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}</td></tr>`;
     }).join("");
   }
@@ -4003,7 +4015,7 @@
   // Totals footer for the list — count + sale value, received & pending totals.
   function payTotalsRow(rows) {
     const sv = rows.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
-    const rec = rows.reduce((a, r) => a + (r.received || 0), 0);
+    const rec = rows.reduce((a, r) => a + (r.receivedMonth || 0), 0);
     const pen = rows.reduce((a, r) => a + (r.pending || 0), 0);
     const comm = rows.reduce((a, r) => a + (r.commitAmount || 0), 0);
     return `<tr class="pay-totals">
@@ -4707,7 +4719,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table class="pay-report">
-        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Installed on</th><th>Committed</th><th class="num">Received</th><th class="num">Pending</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Installed on</th><th>Committed</th><th class="num" title="Money actually received in the selected month (receipts logged in the dashboard, or an imported Received column dated in the month). It is never inferred from the outstanding balance.">Received (this month)</th><th class="num" title="Outstanding balance from Finance's sheet, less anything received since.">Pending</th></tr></thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
