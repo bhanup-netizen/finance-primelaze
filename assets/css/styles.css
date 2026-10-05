@@ -593,6 +593,14 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 .kpi .kpi-value { font-size: 34px; font-weight: 800; letter-spacing: -1px; margin: 6px 0 2px; }
 .kpi .kpi-note { font-size: 12.5px; color: var(--text-2); }
 .kpi .kpi-sub { font-size: 12.5px; color: var(--text-2); margin-top: 1px; }
+/* Payments KPIs: fit all cards on one compact row. */
+.pay-kpis { grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.pay-kpis .card { padding: 11px 13px; }
+.pay-kpis .kpi-value { font-size: 21px; margin: 3px 0 1px; letter-spacing: -.5px; }
+.pay-kpis .kpi-label { font-size: 10px; letter-spacing: .3px; }
+.pay-kpis .kpi-sub { font-size: 10.5px; }
+@media (max-width: 1000px) { .pay-kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 560px) { .pay-kpis { grid-template-columns: repeat(2, 1fr); } }
 /* Finance summary cards: label on top, big value, sub-note under it. */
 .pay-kpis .kpi { padding: 16px 18px; }
 .pay-kpis .kpi-value { font-size: 30px; margin: 4px 0 2px; }
