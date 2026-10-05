@@ -3658,6 +3658,7 @@
   let payDirty = false;
   let paySeq = 0;
   let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "" };
+  let payMonthDefaulted = false; // set the month filter to the current month once, on first open
   // A record is "EMI" when its EMI field has a value that isn't "Non-EMI".
   const payIsEmi = (r) => { const s = String(r.emi || "").trim().toLowerCase(); return !!s && !/non[\s-]?emi/.test(s) && s !== "no"; };
   // Selecting a month sets the internal from/to bounds the filter runs on.
@@ -4445,6 +4446,14 @@
   function renderPayments() {
     const admin = canEditPayments();
     const rows0 = payAll();
+    // First time the page is opened, default the Commitment Month to the current
+    // month (if the data has commitments then) — so you land on "who should pay
+    // this month". Only once, so it never overrides a month you pick yourself.
+    if (!payMonthDefaulted) {
+      payMonthDefaulted = true;
+      const cur = new Date().toISOString().slice(0, 7);
+      if (payCommitMonths(rows0).includes(cur)) payFilter.month = cur;
+    }
     setTimeout(() => {
       const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onchange = fn; };
       wire("payCat", (e) => { payFilter.cat = e.target.value; payRepaint(); });
