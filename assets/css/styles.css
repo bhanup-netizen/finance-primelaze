@@ -540,6 +540,7 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
 }
 .pay-totals td { border-top: 2px solid var(--border); background: var(--surface-2, rgba(127,127,127,.06)); }
 .pay-miss { color: var(--bad); cursor: help; font-size: 12px; }
+.pay-follow { cursor: help; font-size: 12px; }
 /* Keep the Total row pinned to the bottom of the scrollable report while you
    scroll the rows under it (solid background so rows don't show through). */
 .pay-report tfoot td { position: sticky; bottom: 0; z-index: 3; background: var(--surface); box-shadow: 0 -2px 0 var(--border); }

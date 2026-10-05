@@ -3657,7 +3657,7 @@
   // a fresh import (mirrors invDirty / leadDirty). Fixes "import overridden".
   let payDirty = false;
   let paySeq = 0;
-  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false, committed: false };
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false, committed: false, followup: false };
   let payMonthDefaulted = false; // set the month filter to the current month once, on first open
   // A record is "EMI" when its EMI field has a value that isn't "Non-EMI".
   const payIsEmi = (r) => { const s = String(r.emi || "").trim().toLowerCase(); return !!s && !/non[\s-]?emi/.test(s) && s !== "no"; };
@@ -3779,7 +3779,9 @@
     const hasMissed = missEvents.length > 0;
     const missedReason = hasMissed ? (missEvents[missEvents.length - 1].text || "") : "";
     const hasCommitment = !!committedDate && pending > 0; // promised a payment, still owing
-    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, hasMissed, missedReason, hasCommitment, history: hist });
+    const tk = payTrack[id] || {};
+    const followup = !!tk.followup, followNote = tk.followNote || "";
+    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, hasMissed, missedReason, hasCommitment, followup, followNote, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -3813,6 +3815,7 @@
       if (payFilter.fulfil === "no" && d.pending <= 0) return false;
       if (payFilter.missed && !d.hasMissed) return false; // only records with an unmet commitment
       if (payFilter.committed && !d.hasCommitment) return false; // only records with a commitment set
+      if (payFilter.followup && !d.followup) return false; // only records tagged for follow-up
       // 30-day due filter: Consumables & Esthemax by due days; Machines by
       // install status (Pending = below 30 group, Installed = above 30 group).
       if (payFilter.due) {
@@ -3903,11 +3906,13 @@
     const nonN = rows.length - emiN;
     const missN = rows.filter((r) => r.hasMissed).length;
     const commN = rows.filter((r) => r.hasCommitment).length;
+    const followN = rows.filter((r) => r.followup).length;
     const emiRow = `<div class="pay-chips" style="margin-top:8px">
       <button data-payemi="" class="pay-chip ${payFilter.emi ? "" : "active"}">All<span class="pay-chip-n">${rows.length}</span></button>
       <button data-payemi="emi" class="pay-chip b-accent ${payFilter.emi === "emi" ? "active" : ""}">EMI<span class="pay-chip-n">${emiN}</span></button>
       <button data-payemi="nonemi" class="pay-chip ${payFilter.emi === "nonemi" ? "active" : ""}">Non-EMI<span class="pay-chip-n">${nonN}</span></button>
       <button data-paycommitted="1" class="pay-chip b-info ${payFilter.committed ? "active" : ""}" title="Customers who have committed a payment (a commitment date is set and still owing)">📌 Committed<span class="pay-chip-n">${commN}</span></button>
+      <button data-payfollow="1" class="pay-chip b-warn ${payFilter.followup ? "active" : ""}" title="Records tagged for follow-up (Finance / salesperson chasing)">⭐ Follow-up<span class="pay-chip-n">${followN}</span></button>
       <button data-paymissed="1" class="pay-chip b-bad ${payFilter.missed ? "active" : ""}" title="Records where a commitment was logged as not met">⚠ Not met<span class="pay-chip-n">${missN}</span></button>
     </div>`;
     return `<div class="pay-chips">
@@ -3982,8 +3987,9 @@
         ? esc(fmtDate(r.committedDate)) + (r.commitAmount ? ` <span class="t-muted">${rupee(r.commitAmount)}</span>` : "")
         : "<span class='t-muted'>—</span>";
       const missFlag = r.hasMissed ? ` <span class="pay-miss" title="Commitment not met: ${esc(r.missedReason || "")}">⚠</span>` : "";
+      const followFlag = r.followup ? ` <span class="pay-follow" title="Follow-up: ${esc(r.followNote || "tagged")}">⭐</span>` : "";
       return `<tr class="pay-rowlink" data-payid="${esc(payRowId(r))}">
-        <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button>${missFlag}</td>
+        <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button>${followFlag}${missFlag}</td>
         <td>${r.product ? esc(r.product) : "<span class='t-muted'>—</span>"}</td>
         <td>${esc(r.salesPerson || "—")}</td>
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
@@ -4047,6 +4053,7 @@
         <div class="pay-act"><label>Next payment commitment (date + amount)</label><span class="pay-act-row"><input type="date" id="pdCommit"><input type="number" id="pdCommitAmt" placeholder="₹ committed"><button type="button" class="mini-btn" id="pdCommitBtn">Save</button></span></div>
         <div class="pay-act"><label>Record payment received</label><span class="pay-act-row"><input type="number" id="pdRecvAmt" placeholder="₹ amount"><input type="date" id="pdRecvDate" value="${esc(leadToday())}"><button type="button" class="mini-btn" id="pdRecvBtn">Add</button></span></div>
         <div class="pay-act"><label>Commitment not met — log the reason</label><span class="pay-act-row"><select id="pdMissReason" class="select"><option value="">— reason —</option>${PAY_MISS_REASONS.map((x) => `<option>${esc(x)}</option>`).join("")}</select><input type="text" id="pdMissNote" placeholder="extra note (optional)"><button type="button" class="mini-btn" id="pdMissBtn">Log</button></span></div>
+        <div class="pay-act"><label>⭐ Follow-up (who's chasing &amp; why)</label><span class="pay-act-row"><input type="text" id="pdFollowNote" value="${esc(r.followNote || "")}" placeholder="e.g. Finance + Vamsi chasing cheque"><button type="button" class="mini-btn" id="pdFollowBtn">${r.followup ? "★ Remove tag" : "☆ Tag follow-up"}</button></span></div>
         <div class="pay-act"><label>Add remark</label><span class="pay-act-row"><input type="text" id="pdRemark" placeholder="note / follow-up"><button type="button" class="mini-btn" id="pdRemarkBtn">Add</button></span></div>
       </div>` : ""}
       <h4 class="ld-h">History</h4>
@@ -4069,6 +4076,15 @@
         const note = (document.getElementById("pdMissNote").value || "").trim();
         if (!reason) { window.alert("Pick a reason."); return; }
         payTrackAdd(id, { kind: "missed", date: r.committedDate || "", amount: r.commitAmount || 0, text: note ? reason + " — " + note : reason });
+        reopen();
+      };
+      const fb = document.getElementById("pdFollowBtn"); if (fb) fb.onclick = () => {
+        const note = (document.getElementById("pdFollowNote").value || "").trim();
+        const tk = payTrackOf(id);
+        tk.followup = !tk.followup;            // toggle the tag
+        tk.followNote = tk.followup ? note : "";
+        payDirty = true;
+        saveEdits("Payment · " + (tk.followup ? "tagged follow-up" : "removed follow-up"));
         reopen();
       };
     }
@@ -4313,6 +4329,9 @@
     });
     document.querySelectorAll("[data-paycommitted]").forEach((b) => {
       b.onclick = () => { payFilter.committed = !payFilter.committed; payRepaint(); };
+    });
+    document.querySelectorAll("[data-payfollow]").forEach((b) => {
+      b.onclick = () => { payFilter.followup = !payFilter.followup; payRepaint(); };
     });
   }
 
@@ -4620,7 +4639,7 @@
       });
       wirePayRows();
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false, committed: false }; payColFilters = {}; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false, committed: false, followup: false }; payColFilters = {}; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
