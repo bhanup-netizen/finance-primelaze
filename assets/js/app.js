@@ -4514,10 +4514,9 @@
     const opt = (v, cur) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`;
     const sel = (id, cur, values, allLabel) => `<label class="ord-field"><span>${esc(allLabel)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => opt(v, cur)).join("")}</select></label>`;
     return `
-      <div class="section-head">
-        <h1>Primelaze Sales</h1>
-        <p>Outstanding customer commitments &amp; collection status across Consumables, Machine and Esthemax. Overdue is calculated against today. ${admin ? "Import replaces the data with your uploaded sheet, so re-importing never creates duplicates — always upload your full current sheet." : "Read-only."}</p>
-        <div class="callout" style="margin-top:8px;display:inline-flex;align-items:center;gap:8px;font-size:14px">📅 <span><b>Period of this data:</b> ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records</span></div>
+      <div class="section-head" style="margin-bottom:8px">
+        <h1 style="font-size:20px;margin:0">Primelaze Sales</h1>
+        <div class="muted-note" style="margin-top:3px;font-size:12px">📅 ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records · ${admin ? "editable by Finance" : "read-only"}</div>
       </div>
       <div id="payKpis">${payKpis(rows0)}</div>
       <div class="controls" style="margin-top:14px">
