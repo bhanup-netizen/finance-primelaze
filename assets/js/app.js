@@ -3942,15 +3942,19 @@
       if (ra !== rb) return ra - rb;
       return b.daysOverdue - a.daysOverdue || b.pending - a.pending;
     });
-    if (!sorted.length) return `<tr><td colspan="7" class="empty" style="text-align:center;padding:18px">No records match the current filters.</td></tr>`;
+    if (!sorted.length) return `<tr><td colspan="8" class="empty" style="text-align:center;padding:18px">No records match the current filters.</td></tr>`;
     return sorted.map((r) => {
       const inst = r.installDate ? esc(fmtDate(r.installDate)) : "<span class='t-muted'>NA</span>";
+      const comm = r.committedDate
+        ? esc(fmtDate(r.committedDate)) + (r.commitAmount ? ` <span class="t-muted">${rupee(r.commitAmount)}</span>` : "")
+        : "<span class='t-muted'>—</span>";
       return `<tr class="pay-rowlink" data-payid="${esc(payRowId(r))}">
         <td class="t-name"><button type="button" class="linkish pay-open" data-payid="${esc(payRowId(r))}">${esc(r.customer || "—")}</button></td>
         <td>${r.product ? esc(r.product) : "<span class='t-muted'>—</span>"}</td>
         <td>${esc(r.salesPerson || "—")}</td>
         <td class="num">${r.salesValue ? rupee(r.salesValue) : "—"}</td>
         <td>${inst}</td>
+        <td>${comm}</td>
         <td class="num">${r.received ? rupee(r.received) : "<span class='t-muted'>—</span>"}</td>
         <td class="num${r.status === "red" ? " pay-overdue" : ""}">${r.pending ? rupee(r.pending) : "<span class='t-muted'>—</span>"}${r.status === "red" ? ` <span class="pay-od">⚠ ${r.daysOverdue}d overdue</span>` : ""}</td></tr>`;
     }).join("");
@@ -3961,10 +3965,12 @@
     const sv = rows.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
     const rec = rows.reduce((a, r) => a + (r.received || 0), 0);
     const pen = rows.reduce((a, r) => a + (r.pending || 0), 0);
+    const comm = rows.reduce((a, r) => a + (r.commitAmount || 0), 0);
     return `<tr class="pay-totals">
       <td colspan="3"><b>Total — ${rows.length} record${rows.length === 1 ? "" : "s"}</b></td>
       <td class="num"><b>${sv ? rupee(sv) : "—"}</b></td>
       <td></td>
+      <td class="num"><b>${comm ? rupee(comm) : "—"}</b></td>
       <td class="num"><b>${rec ? rupee(rec) : "—"}</b></td>
       <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td></tr>`;
   }
@@ -4540,7 +4546,7 @@
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
       </div>
       <div class="table-wrap" data-colfilter="1"><table class="pay-report">
-        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Installed on</th><th class="num">Received</th><th class="num">Pending</th></tr></thead>
+        <thead><tr><th>Customer</th><th>Product</th><th>Sales Person</th><th class="num">Sale value</th><th>Installed on</th><th>Committed</th><th class="num">Received</th><th class="num">Pending</th></tr></thead>
         <tbody id="payBody">${payTableRows(applyColFilters(payFiltered(rows0)))}</tbody>
         <tfoot id="payTotals">${payTotalsRow(applyColFilters(payFiltered(rows0)))}</tfoot>
       </table></div>`;
