@@ -4016,6 +4016,7 @@
       <div class="lead-tl-topline"><h3>${esc(r.customer || "—")}</h3><span class="pay-badge ${m.cls}">${m.label}</span>${admin ? `<button type="button" class="mini-btn" id="pdEdit" style="margin-left:auto">✎ Edit details</button>` : ""}</div>
       <div class="ld-grid">
         ${info("Product", esc(r.product || ""))}
+        ${info("Qty / count", r.qty ? esc(String(r.qty)) : "")}
         ${info("Invoice No.", esc(r.invoiceNo || ""))}
         ${info("Invoice date", r.invoiceDate ? esc(fmtDate(r.invoiceDate)) : "")}
         ${info("Category", esc(r.category || ""))}
@@ -4086,6 +4087,7 @@
       <div class="lead-form-grid">
         <label>Customer<input id="peCustomer" list="dlCustomer" value="${esc(dv(r.customer))}"></label>
         <label>Product<input id="peProduct" list="dlProduct" value="${esc(dv(r.product))}"></label>
+        <label>Qty / count<input id="peQty" type="number" min="1" step="1" value="${esc(dv(r.qty))}" placeholder="1"></label>
         <label>Invoice No.<input id="peInv" value="${esc(dv(r.invoiceNo))}"></label>
         <label>Invoice date<input id="peInvDate" type="date" value="${esc(dv(r.invoiceDate))}"></label>
         <label>Category<input id="peCat" list="dlCat" value="${esc(dv(r.category))}" placeholder="Machine / Consumables / Esthemax"></label>
@@ -4113,7 +4115,7 @@
       const cust = gv("peCustomer");
       if (!cust) { window.alert("Customer is required."); return; }
       payUpdateRecord(id, {
-        customer: cust, product: gv("peProduct"), invoiceNo: gv("peInv"), invoiceDate: payNormDate(gv("peInvDate")),
+        customer: cust, product: gv("peProduct"), qty: payNum(gv("peQty")), invoiceNo: gv("peInv"), invoiceDate: payNormDate(gv("peInvDate")),
         category: gv("peCat"), hq: gv("peHq"), salesPerson: gv("peSp"), salesValue: payNum(gv("peSv")),
         outstanding: payNum(gv("pePend")), hasOutstanding: true,
         committedDate: payNormDate(gv("peCd")), committedValue: payNum(gv("peCv")),
@@ -4351,6 +4353,7 @@
       emi: String(g("emi", "emidetails", "emiplan", "installment") || "").trim(),
       remark: String(g("remark", "remarks", "note", "notes", "comment") || "").trim(),
       lineItems: payNum(g("lineitems", "items", "noofitems")),
+      qty: payNum(g("qty", "quantity", "count", "nos", "units", "noofunits")),
     };
   }
   // Broad key: only rows identical across ALL these fields count as duplicates,
@@ -4512,6 +4515,7 @@
       <div class="lead-form-grid">
         <label>Customer<input id="psCustomer" type="text" list="dlCustomer" placeholder="pick or type new…"></label>
         <label>Product<input id="psProduct" type="text" list="dlProduct" placeholder="pick or type new…"></label>
+        <label>Qty / count<input id="psQty" type="number" min="1" step="1" placeholder="1"></label>
         <label>Invoice No.<input id="psInv" type="text"></label>
         <label>Invoice date<input id="psInvDate" type="date"></label>
         <label>Category<input id="psCat" type="text" list="dlCat" placeholder="pick or type new…"></label>
@@ -4538,7 +4542,7 @@
         id: "u" + (paySeq++), customer, product: gv("psProduct"), invoiceNo: gv("psInv"),
         invoiceDate: payNormDate(gv("psInvDate")), category: gv("psCat"), hq: gv("psHq"),
         salesPerson: gv("psSp"), salesValue: payNum(gv("psSv")), machineStatus: gv("psMachine"),
-        installDate: payNormDate(gv("psInstall")), emi: gv("psEmi"),
+        installDate: payNormDate(gv("psInstall")), emi: gv("psEmi"), qty: payNum(gv("psQty")),
       });
       // A manually-added sale should always be visible.
       payHideAll = false; payClearBefore = "";
@@ -4663,6 +4667,7 @@
       ${payHideAll ? `<div class="muted-note" style="margin:2px 0 8px">⚠ All commitment data is cleared (hidden).${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>`
         : payClearBefore ? `<div class="muted-note" style="margin:2px 0 8px">Old data hidden — showing commitments committed on/after <b>${esc(payClearBefore)}</b>.${admin ? ` <button id="payShowAll" class="linkish" type="button">Show all again</button>` : ""}</div>` : ""}
       ${(!payHideAll && payHideBase) ? `<div class="muted-note" style="margin:2px 0 8px">Showing <b>imported data only</b> — the built-in sample rows are hidden.${admin ? ` <button id="payShowBase" class="linkish" type="button">Show built-in data too</button>` : ""}</div>` : ""}
+      <div id="payChips" style="margin:10px 0 2px">${payStatusChips(applyColFilters(payFiltered(rows0)))}</div>
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
         <h2 style="margin:0">Detailed commitment report</h2>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="t-muted" id="payDateRange" style="font-size:13px">${payDateRangeNote(payFiltered(rows0))}</span><span class="tag" id="payDrillCount">${rows0.length} records</span></div>
