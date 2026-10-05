@@ -3657,7 +3657,7 @@
   // a fresh import (mirrors invDirty / leadDirty). Fixes "import overridden".
   let payDirty = false;
   let paySeq = 0;
-  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false };
+  let payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false, committed: false };
   let payMonthDefaulted = false; // set the month filter to the current month once, on first open
   // A record is "EMI" when its EMI field has a value that isn't "Non-EMI".
   const payIsEmi = (r) => { const s = String(r.emi || "").trim().toLowerCase(); return !!s && !/non[\s-]?emi/.test(s) && s !== "no"; };
@@ -3778,7 +3778,8 @@
     const missEvents = hist.filter((h) => h.kind === "missed");
     const hasMissed = missEvents.length > 0;
     const missedReason = hasMissed ? (missEvents[missEvents.length - 1].text || "") : "";
-    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, hasMissed, missedReason, history: hist });
+    const hasCommitment = !!committedDate && pending > 0; // promised a payment, still owing
+    return Object.assign({}, r, { id, salesPerson, committed, received, pending, committedDate, commitAmount, remark, installDate, status, dueDays, machineStatus, hasMissed, missedReason, hasCommitment, history: hist });
   }
   const payAll = () => {
     if (payHideAll) return [];
@@ -3811,6 +3812,7 @@
       if (payFilter.fulfil === "yes" && d.pending > 0) return false;
       if (payFilter.fulfil === "no" && d.pending <= 0) return false;
       if (payFilter.missed && !d.hasMissed) return false; // only records with an unmet commitment
+      if (payFilter.committed && !d.hasCommitment) return false; // only records with a commitment set
       // 30-day due filter: Consumables & Esthemax by due days; Machines by
       // install status (Pending = below 30 group, Installed = above 30 group).
       if (payFilter.due) {
@@ -3885,10 +3887,12 @@
     const emiN = rows.filter((r) => String(r.emi || "").trim()).length;
     const nonN = rows.length - emiN;
     const missN = rows.filter((r) => r.hasMissed).length;
+    const commN = rows.filter((r) => r.hasCommitment).length;
     const emiRow = `<div class="pay-chips" style="margin-top:8px">
       <button data-payemi="" class="pay-chip ${payFilter.emi ? "" : "active"}">All<span class="pay-chip-n">${rows.length}</span></button>
       <button data-payemi="emi" class="pay-chip b-accent ${payFilter.emi === "emi" ? "active" : ""}">EMI<span class="pay-chip-n">${emiN}</span></button>
       <button data-payemi="nonemi" class="pay-chip ${payFilter.emi === "nonemi" ? "active" : ""}">Non-EMI<span class="pay-chip-n">${nonN}</span></button>
+      <button data-paycommitted="1" class="pay-chip b-info ${payFilter.committed ? "active" : ""}" title="Customers who have committed a payment (a commitment date is set and still owing)">📌 Committed<span class="pay-chip-n">${commN}</span></button>
       <button data-paymissed="1" class="pay-chip b-bad ${payFilter.missed ? "active" : ""}" title="Records where a commitment was logged as not met">⚠ Not met<span class="pay-chip-n">${missN}</span></button>
     </div>`;
     return `<div class="pay-chips">
@@ -4289,6 +4293,9 @@
     document.querySelectorAll("[data-paymissed]").forEach((b) => {
       b.onclick = () => { payFilter.missed = !payFilter.missed; payRepaint(); };
     });
+    document.querySelectorAll("[data-paycommitted]").forEach((b) => {
+      b.onclick = () => { payFilter.committed = !payFilter.committed; payRepaint(); };
+    });
   }
 
   // ---- Excel / CSV import (append) + template ----
@@ -4579,7 +4586,7 @@
       });
       wirePayRows();
       const clr = document.getElementById("payClearFilters");
-      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false }; payColFilters = {}; renderTab("payments"); };
+      if (clr) clr.onclick = () => { payFilter = { cat: "", hq: "", sp: "", status: "", q: "", month: "", from: "", to: "", due: "", emi: "", product: "", fulfil: "", missed: false, committed: false }; payColFilters = {}; renderTab("payments"); };
       const clearOld = document.getElementById("payClearOld");
       if (clearOld) clearOld.onclick = () => {
         const ans = window.prompt(
