@@ -2560,7 +2560,7 @@
       const S = esthComputeSection(mkt, gid);
       if (!S || !S.rows.length) return "";
       const cols = ["#", "Product", "MRP"].concat(adm ? ["Cost"] : [])
-        .concat(["1 unit", S.lbl1, S.lbl2, "Incentive ₹"]);
+        .concat(["1 unit", S.lbl1]).concat(S.hasOffer2 ? [S.lbl2] : []).concat(["Incentive ₹"]);
       const head = cols.map((x, i) => `<th class="${i >= 2 ? "num" : (i === 0 ? "num" : "")}">${esc(x)}</th>`).join("");
       const body = S.rows.map((r) => `<tr>
         <td class="num t-muted">${r.sr}</td>
@@ -2569,7 +2569,7 @@
         ${adm ? `<td class="num t-muted">${rup(r.cost)}</td>` : ""}
         <td class="num"><b>${rup(r.unit)}</b></td>
         <td class="num">${rup(r.p5)}</td>
-        <td class="num">${rup(r.p10)}</td>
+        ${S.hasOffer2 ? `<td class="num">${rup(r.p10)}</td>` : ""}
         <td class="num cpx-inc">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
       return `<div class="block" style="margin-top:14px"><h2 style="margin:0 0 4px">${esc(S.title)} <span class="t-muted" style="font-size:12px">(${esc(S.pack)})</span></h2>
         <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
@@ -2622,10 +2622,10 @@
       if (!S || !S.rows.length) return;
       aoa.push([]);
       aoa.push([S.title + " (" + S.pack + ")"]);
-      aoa.push(["#", "Product", "MRP"].concat(adm ? ["Cost"] : []).concat(["1 unit", S.lbl1, S.lbl2, "Incentive (per box)"]));
+      aoa.push(["#", "Product", "MRP"].concat(adm ? ["Cost"] : []).concat(["1 unit", S.lbl1]).concat(S.hasOffer2 ? [S.lbl2] : []).concat(["Incentive (per box)"]));
       S.rows.forEach((r) => {
         aoa.push([r.sr, r.name, r0(r.mrp)].concat(adm ? [r0(r.cost)] : [])
-          .concat([r0(r.unit), r0(r.p5), r0(r.p10), r.unit != null ? r0(r.inc) : ""]));
+          .concat([r0(r.unit), r0(r.p5)]).concat(S.hasOffer2 ? [r0(r.p10)] : []).concat([r.unit != null ? r0(r.inc) : ""]));
       });
     });
     const fname = ("Esthemax_" + mLabel + "_price_list").replace(/[^\w]+/g, "_") + ".xlsx";
@@ -2652,10 +2652,12 @@
       const S = esthComputeSection(mkt, gid);
       if (!S || !S.rows.length) return "";
       const head = [{ label: "#", num: 1 }, { label: "Product" }, { label: "MRP", num: 1 },
-        { label: "1 unit", num: 1 }, { label: S.lbl1, num: 1 }, { label: S.lbl2, num: 1 }, { label: "Incentive ₹", num: 1 }];
+        { label: "1 unit", num: 1 }, { label: S.lbl1, num: 1 }]
+        .concat(S.hasOffer2 ? [{ label: S.lbl2, num: 1 }] : [])
+        .concat([{ label: "Incentive ₹", num: 1 }]);
       const body = S.rows.map((r) => `<tr><td class="num">${r.sr}</td><td>${esc(r.name)}</td>
         <td class="num">${rup(r.mrp)}</td><td class="num"><b>${rup(r.unit)}</b></td>
-        <td class="num">${rup(r.p5)}</td><td class="num">${rup(r.p10)}</td>
+        <td class="num">${rup(r.p5)}</td>${S.hasOffer2 ? `<td class="num">${rup(r.p10)}</td>` : ""}
         <td class="num">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
       return `<h2>${esc(S.title)} <span style="font-weight:400;font-size:12px">(${esc(S.pack)})</span></h2>${pTable(head, body)}`;
     }).join("");
@@ -2798,6 +2800,12 @@
   // { salon: { hydro:{…}, retail:{…}, foot:{…}, acc:{…} }, doctor:{…} }.
   // Each section has its own incentive, other cost, bulk tiers and 3 target margins.
   const esthPricingOv = {};
+  // Per-section starting defaults (over the base, under any saved override).
+  // Retail boxes go out as a single 5+2 bulk offer — there is NO second (10+3)
+  // tier, so its free-box count is 0 (which hides the second-offer column).
+  const ESTH_SECTION_DEFAULTS = {
+    retail: { o1p: 5, o1f: 2, o2p: 0, o2f: 0, off2: 0 },
+  };
   function esthCalc(mid, gid) {
     const base = {
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
@@ -2809,7 +2817,7 @@
       off2: 10,      // 10+3 price = 1-unit base price − this %
     };
     const mv = esthPricingOv[esthStoreMid(mid, gid)];
-    return Object.assign(base, (mv && mv[gid]) || {});
+    return Object.assign(base, ESTH_SECTION_DEFAULTS[gid] || {}, (mv && mv[gid]) || {});
   }
   // Accessories are the same products at the same price in every market, so
   // their calculator settings are stored once (under "salon") and shared by
@@ -2851,6 +2859,9 @@
     const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
     const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
     const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
+    // A section has a SECOND bulk offer only when its tier-2 free-box count > 0.
+    // Retail is set to 0 (5+2 only), so its second-offer column is dropped.
+    const hasOffer2 = (+c.o2f > 0);
     const rows = g.rows.map((r, idx) => {
       const land = landingOf(r[1]);
       const cost = land != null ? land + opCostFor(land) : null;
@@ -2867,7 +2878,7 @@
         inc: rowInc, typed: u1typed > 0,
       };
     });
-    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, u1off, off1, off2, mgr, opCost, lbl1, lbl2, rows };
+    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, u1off, off1, off2, mgr, opCost, lbl1, lbl2, hasOffer2, rows };
   }
   // Sales price list sections — Foot Mask is intentionally excluded here and
   // kept only in the super-admin Company Price tab.
@@ -2994,6 +3005,9 @@
         const u1off = +c.u1off || 0;   // 1 unit = MRP − this % (auto-fill)
         const off1 = +c.off1 || 0;     // 5+1 = base − this %
         const off2 = +c.off2 || 0;     // 10+3 = base − this %
+        // Second bulk tier exists only when it has free boxes (retail = 5+2 only,
+        // so its tier-2 free count is 0 and the 10+3 column/controls drop out).
+        const hasOffer2 = (+c.o2f > 0);
         const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${gid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
         // Cost (landing + weighted operation cost) — shown for reference only.
         const baseOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land)) : null; };
@@ -3005,7 +3019,8 @@
           if (!(price > 0)) return `<td class="num t-muted">—</td>`;
           return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px" class="t-muted">−${(+offPct).toFixed(0)}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
         };
-        const head = ["Product", "MRP", "Cost", "1 unit", lbl1 + " · −" + off1 + "%", lbl2 + " · −" + off2 + "%"]
+        const head = ["Product", "MRP", "Cost", "1 unit", lbl1 + " · −" + off1 + "%"]
+          .concat(hasOffer2 ? [lbl2 + " · −" + off2 + "%"] : [])
           .concat(isAcc ? ["Incentive ₹"] : [])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
@@ -3028,7 +3043,7 @@
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${mrpIn}</td><td class="num t-muted">${rup(cost)}</td>${unitCell}${cell5}${cell10}${incCell}</tr>`;
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${mrpIn}</td><td class="num t-muted">${rup(cost)}</td>${unitCell}${cell5}${hasOffer2 ? cell10 : ""}${incCell}</tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
           ${useBoxes ? `<label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
@@ -3038,9 +3053,9 @@
           <label class="ord-field"><span>1 unit = MRP − %</span>${num("u1off", c.u1off)}</label>
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
-          <label class="ord-field"><span>Bulk tier 2 (buy + free)</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
+          <label class="ord-field"><span>Bulk tier 2 (buy + free)${hasOffer2 ? "" : " — off (set free > 0 to add)"}</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
           <label class="ord-field"><span>${esc(lbl1)} = base − %</span>${num("off1", c.off1)}</label>
-          <label class="ord-field"><span>${esc(lbl2)} = base − %</span>${num("off2", c.off2)}</label>
+          ${hasOffer2 ? `<label class="ord-field"><span>${esc(lbl2)} = base − %</span>${num("off2", c.off2)}</label>` : ""}
         </div>`;
         // Register a generator so an edit repaints only this section in place.
         esthSecGen[mid + ":" + gid] = () => section(g);
