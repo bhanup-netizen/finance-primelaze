@@ -3849,8 +3849,6 @@
     const saleValue = overall.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
     const overallPending = overall.reduce((a, r) => a + r.pending, 0);
     const paid = Math.max(saleValue - overallPending, 0); // collected so far (overall)
-    // Pending reflects the current filter (incl. the selected month).
-    const pending = rows.reduce((a, r) => a + r.pending, 0);
     // Money committed to come in this month = the installment amounts Finance
     // has committed (date + value) whose commitment date falls in the month.
     const committedThisMonth = rows.reduce((a, r) => a + (payMonthKey(r.committedDate) === targetMonth ? (r.commitAmount || 0) : 0), 0);
@@ -3861,8 +3859,7 @@
       { cls: "", label: "Total sold", value: totalSold, note: "all records" },
       { cls: "k-teal", label: "Total sale value", value: rupeeShort(saleValue), note: "billed (overall)" },
       { cls: "k-good", label: "Total paid", value: rupeeShort(paid), note: "collected (overall)" },
-      { cls: "k-warn", label: payFilter.month ? "Pending · " + label : "Total pending", value: rupeeShort(pending), note: payFilter.month ? "for this month" : "yet to collect" },
-      { cls: "k-bad", label: "Committed in " + label, value: rupeeShort(committedThisMonth), note: "due to come this month" },
+      { cls: "k-bad", label: "Committed in " + label, value: rupeeShort(committedThisMonth), note: "promised to come this month" },
       { cls: "k-good", label: "Received in " + label, value: rupeeShort(receivedThisMonth), note: "collected this month" },
     ];
     return `<div class="grid kpi-grid pay-kpis">${cards.map((k) => `
