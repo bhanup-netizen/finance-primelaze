@@ -3844,6 +3844,21 @@
     payFilter.month = saved;
     return r;
   }
+  // The dataset for the "company total" cards (Total Sold / Sale Value / Paid).
+  // Respects only the DATA filters (salesperson, category, product, HQ, search)
+  // — NOT the view toggles (month, status/EMI/Committed/Not-met chips, fulfilment)
+  // — so clicking a chip never changes the headline company totals.
+  function payOverallRows() {
+    const f = payFilter;
+    return payAll().filter((d) => {
+      if (f.cat && d.category !== f.cat) return false;
+      if (f.hq && d.hq !== f.hq) return false;
+      if (f.sp && d.salesPerson !== f.sp) return false;
+      if (f.product && d.product !== f.product) return false;
+      if (f.q) { const hay = `${d.customer} ${d.product || ""} ${d.hq} ${d.salesPerson} ${d.category} ${d.invoiceNo || ""} ${d.remark}`.toLowerCase(); if (!hay.includes(f.q)) return false; }
+      return true;
+    });
+  }
   function payKpis(rows, overall) {
     overall = overall || rows; // overall = all records (ignores the month filter)
     // "This month" = the month picked in the filter, else the current month.
@@ -4231,7 +4246,7 @@
     // filters, so totals (Committed/Received/Pending) always match the report.
     const rep = applyColFilters(payFiltered(payAll()));
     const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
-    setHtml("payKpis", payKpis(rep, payFilteredExceptMonth()));
+    setHtml("payKpis", payKpis(rep, payOverallRows()));
     setHtml("payChips", payStatusChips(rep));
     setHtml("payBody", payTableRows(rep));
     setHtml("payTotals", payTotalsRow(rep));
@@ -4645,7 +4660,7 @@
         <h1 style="font-size:20px;margin:0">Primelaze Sales</h1>
         <div class="muted-note" style="margin-top:3px;font-size:12px">📅 ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records · ${admin ? "editable by Finance" : "read-only"}</div>
       </div>
-      <div id="payKpis">${payKpis(applyColFilters(payFiltered(rows0)), payFilteredExceptMonth())}</div>
+      <div id="payKpis">${payKpis(applyColFilters(payFiltered(rows0)), payOverallRows())}</div>
       <div class="controls" style="margin-top:14px">
         <label class="ord-field"><span>Commitment Month</span><select id="payMonth" class="select" title="Show records whose next-commitment date is in this month"><option value="">All</option>${payCommitMonths(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Fulfilment</span><select id="payFulfil" class="select"><option value="">All</option><option value="no"${payFilter.fulfil === "no" ? " selected" : ""}>Not fulfilled</option><option value="yes"${payFilter.fulfil === "yes" ? " selected" : ""}>Fulfilled</option></select></label>
