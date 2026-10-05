@@ -3830,15 +3830,27 @@
     });
   }
 
-  function payKpis(rows) {
+  // The same rows the report shows, but ignoring the Commitment-Month filter —
+  // used so the company totals (Sold / Sale value / Paid) don't change when you
+  // pick a month (only Pending / Committed / Received reflect the month).
+  function payFilteredExceptMonth() {
+    const saved = payFilter.month; payFilter.month = "";
+    const r = applyColFilters(payFiltered(payAll()));
+    payFilter.month = saved;
+    return r;
+  }
+  function payKpis(rows, overall) {
+    overall = overall || rows; // overall = all records (ignores the month filter)
     // "This month" = the month picked in the filter, else the current month.
     const targetMonth = payFilter.month || new Date().toISOString().slice(0, 7);
     const label = payMonthLabel(targetMonth);
-    const totalSold = rows.length;
-    const saleValue = rows.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
+    // Company totals — do NOT change with the Commitment-Month filter.
+    const totalSold = overall.length;
+    const saleValue = overall.reduce((a, r) => a + (payNum(r.salesValue) || 0), 0);
+    const overallPending = overall.reduce((a, r) => a + r.pending, 0);
+    const paid = Math.max(saleValue - overallPending, 0); // collected so far (overall)
+    // Pending reflects the current filter (incl. the selected month).
     const pending = rows.reduce((a, r) => a + r.pending, 0);
-    // Paid = billed − still-pending, so Paid + Pending reconcile to Sale Value.
-    const paid = Math.max(saleValue - pending, 0);
     // Money committed to come in this month = the installment amounts Finance
     // has committed (date + value) whose commitment date falls in the month.
     const committedThisMonth = rows.reduce((a, r) => a + (payMonthKey(r.committedDate) === targetMonth ? (r.commitAmount || 0) : 0), 0);
@@ -3846,10 +3858,10 @@
     let receivedThisMonth = 0;
     rows.forEach((r) => (r.history || []).forEach((h) => { if (h.kind === "received" && payMonthKey(h.date) === targetMonth) receivedThisMonth += payNum(h.amount) || 0; }));
     const cards = [
-      { cls: "", label: "Total sold", value: totalSold, note: "machines / items" },
-      { cls: "k-teal", label: "Total sale value", value: rupeeShort(saleValue), note: "billed value" },
-      { cls: "k-good", label: "Total paid", value: rupeeShort(paid), note: "collected so far" },
-      { cls: "k-warn", label: "Total pending", value: rupeeShort(pending), note: "yet to collect" },
+      { cls: "", label: "Total sold", value: totalSold, note: "all records" },
+      { cls: "k-teal", label: "Total sale value", value: rupeeShort(saleValue), note: "billed (overall)" },
+      { cls: "k-good", label: "Total paid", value: rupeeShort(paid), note: "collected (overall)" },
+      { cls: "k-warn", label: payFilter.month ? "Pending · " + label : "Total pending", value: rupeeShort(pending), note: payFilter.month ? "for this month" : "yet to collect" },
       { cls: "k-bad", label: "Committed in " + label, value: rupeeShort(committedThisMonth), note: "due to come this month" },
       { cls: "k-good", label: "Received in " + label, value: rupeeShort(receivedThisMonth), note: "collected this month" },
     ];
@@ -4133,7 +4145,7 @@
     // filters, so totals (Committed/Received/Pending) always match the report.
     const rep = applyColFilters(payFiltered(payAll()));
     const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
-    setHtml("payKpis", payKpis(rep));
+    setHtml("payKpis", payKpis(rep, payFilteredExceptMonth()));
     setHtml("payChips", payStatusChips(rep));
     setHtml("payBody", payTableRows(rep));
     setHtml("payTotals", payTotalsRow(rep));
@@ -4518,7 +4530,7 @@
         <h1 style="font-size:20px;margin:0">Primelaze Sales</h1>
         <div class="muted-note" style="margin-top:3px;font-size:12px">📅 ${payDateRangeNote(rows0)} · <b>${rows0.length}</b> records · ${admin ? "editable by Finance" : "read-only"}</div>
       </div>
-      <div id="payKpis">${payKpis(rows0)}</div>
+      <div id="payKpis">${payKpis(applyColFilters(payFiltered(rows0)), payFilteredExceptMonth())}</div>
       <div class="controls" style="margin-top:14px">
         <label class="ord-field"><span>Commitment Month</span><select id="payMonth" class="select" title="Show records whose next-commitment date is in this month"><option value="">All</option>${payCommitMonths(rows0).map((m) => `<option value="${m}"${payFilter.month === m ? " selected" : ""}>${esc(payMonthLabel(m))}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Fulfilment</span><select id="payFulfil" class="select"><option value="">All</option><option value="no"${payFilter.fulfil === "no" ? " selected" : ""}>Not fulfilled</option><option value="overdue"${payFilter.fulfil === "overdue" ? " selected" : ""}>Overdue</option><option value="yes"${payFilter.fulfil === "yes" ? " selected" : ""}>Fulfilled</option></select></label>
