@@ -539,6 +539,9 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
   font-size: 11px; font-weight: 700; white-space: nowrap;
 }
 .pay-totals td { border-top: 2px solid var(--border); background: var(--surface-2, rgba(127,127,127,.06)); }
+/* Keep the Total row pinned to the bottom of the scrollable report while you
+   scroll the rows under it (solid background so rows don't show through). */
+.pay-report tfoot td { position: sticky; bottom: 0; z-index: 3; background: var(--surface); box-shadow: 0 -2px 0 var(--border); }
 .pay-cf-row th { padding: 4px 6px; background: rgba(127,127,127,.06); }
 .pay-cf { font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: inherit; }
 .pay-badge.pay-green { color: var(--pay-green); background: var(--pay-green-soft); }
