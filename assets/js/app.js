@@ -3994,11 +3994,12 @@
       if (h.kind === "received") return `<li><span class="peh-when">${when}</span> — <b>Received ${rupee(payNum(h.amount))}</b>${h.date ? " on " + esc(fmtDate(h.date)) : ""}${by}</li>`;
       if (h.kind === "commit") return `<li><span class="peh-when">${when}</span> — <b>Committed ${payNum(h.amount) ? rupee(payNum(h.amount)) + " " : ""}for ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
       if (h.kind === "install") return `<li><span class="peh-when">${when}</span> — <b>Machine installed ${h.date ? esc(fmtDate(h.date)) : ""}</b>${by}</li>`;
+      if (h.kind === "edit") return `<li><span class="peh-when">${when}</span> — ✎ <b>${esc(h.text || "Edited details")}</b>${by}</li>`;
       return `<li><span class="peh-when">${when}</span> — ${esc(h.text || "")}${by}</li>`;
     };
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
     wrap.innerHTML = `<div class="lead-modal-card lead-detail-card">
-      <div class="lead-tl-topline"><h3>${esc(r.customer || "—")}</h3><span class="pay-badge ${m.cls}">${m.label}</span></div>
+      <div class="lead-tl-topline"><h3>${esc(r.customer || "—")}</h3><span class="pay-badge ${m.cls}">${m.label}</span>${admin ? `<button type="button" class="mini-btn" id="pdEdit" style="margin-left:auto">✎ Edit details</button>` : ""}</div>
       <div class="ld-grid">
         ${info("Product", esc(r.product || ""))}
         ${info("Invoice No.", esc(r.invoiceNo || ""))}
@@ -4027,11 +4028,77 @@
     document.getElementById("pdClose").onclick = close;
     const reopen = () => { close(); payDetailDialog(id); payRepaint(); };
     if (admin) {
+      const eb = document.getElementById("pdEdit"); if (eb) eb.onclick = () => { close(); payEditDialog(id); };
       const ib = document.getElementById("pdInstallBtn"); if (ib) ib.onclick = () => { const d = (document.getElementById("pdInstall").value || "").trim(); if (!d) { window.alert("Pick the install date."); return; } payTrackAdd(id, { kind: "install", date: d }); reopen(); };
       const cb = document.getElementById("pdCommitBtn"); if (cb) cb.onclick = () => { const d = (document.getElementById("pdCommit").value || "").trim(); const amt = parseFloat(String(document.getElementById("pdCommitAmt").value).replace(/[^0-9.]/g, "")) || 0; if (!d) { window.alert("Pick a commitment date."); return; } payTrackAdd(id, { kind: "commit", date: d, amount: amt }); reopen(); };
       const rb = document.getElementById("pdRecvBtn"); if (rb) rb.onclick = () => { const a = parseFloat(String(document.getElementById("pdRecvAmt").value).replace(/[^0-9.]/g, "")) || 0; const d = (document.getElementById("pdRecvDate").value || "").trim(); if (!(a > 0)) { window.alert("Enter the amount received."); return; } payTrackAdd(id, { kind: "received", amount: a, date: d }); reopen(); };
       const rm = document.getElementById("pdRemarkBtn"); if (rm) rm.onclick = () => { const t = (document.getElementById("pdRemark").value || "").trim(); if (!t) { window.alert("Enter a remark."); return; } payTrackAdd(id, { kind: "remark", text: t }); reopen(); };
     }
+  }
+
+  // Update a record's core fields in the editable layer (paymentAdds), so edits
+  // persist and are shared. If the record came from the built-in seed, a copy is
+  // brought into the editable layer (and the seed is hidden to avoid duplicates).
+  function payUpdateRecord(id, fields) {
+    let row = paymentAdds.find((x) => payRowId(x) === id);
+    if (!row) {
+      const src = payAll().find((x) => payRowId(x) === id) || {};
+      row = { id: src.id || id, customer: src.customer, product: src.product, invoiceNo: src.invoiceNo, invoiceDate: src.invoiceDate, category: src.category, hq: src.hq, salesPerson: src.salesPerson, salesValue: src.salesValue, machineStatus: src.machineStatus, installDate: src.installDate, emi: src.emi, committedDate: src.committedDate, committedValue: src.commitAmount, received: src.received, outstanding: src.pending, hasOutstanding: true };
+      paymentAdds.push(row);
+      payHideBase = true;
+    }
+    Object.assign(row, fields);
+    payHideAll = false;
+    payDirty = true;
+    saveEdits("Payment · edited " + (row.customer || id));
+  }
+  // Full edit of an existing record — all details in one popup (persisted +
+  // logged in history), so everything can be maintained in the dashboard.
+  function payEditDialog(id) {
+    const r = payAll().find((x) => payRowId(x) === id); if (!r) return;
+    const dv = (v) => v == null ? "" : v;
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>Edit record — ${esc(r.customer || "")}</h3>
+      <div class="lead-form-grid">
+        <label>Customer<input id="peCustomer" value="${esc(dv(r.customer))}"></label>
+        <label>Product<input id="peProduct" value="${esc(dv(r.product))}"></label>
+        <label>Invoice No.<input id="peInv" value="${esc(dv(r.invoiceNo))}"></label>
+        <label>Invoice date<input id="peInvDate" type="date" value="${esc(dv(r.invoiceDate))}"></label>
+        <label>Category<input id="peCat" value="${esc(dv(r.category))}" placeholder="Machine / Consumables / Esthemax"></label>
+        <label>HQ<input id="peHq" value="${esc(dv(r.hq))}"></label>
+        <label>Sales person<input id="peSp" value="${esc(dv(r.salesPerson))}"></label>
+        <label>Sale value ₹<input id="peSv" type="number" value="${esc(dv(r.salesValue))}"></label>
+        <label>Pending ₹ (outstanding)<input id="pePend" type="number" value="${esc(dv(r.pending))}"></label>
+        <label>Committed date<input id="peCd" type="date" value="${esc(dv(r.committedDate))}"></label>
+        <label>Committed value ₹<input id="peCv" type="number" value="${esc(dv(r.commitAmount))}"></label>
+        <label>Machine<select id="peMachine" class="select"><option value="">—</option><option${r.machineStatus === "Pending" ? " selected" : ""}>Pending</option><option${r.machineStatus === "Installed" ? " selected" : ""}>Installed</option></select></label>
+        <label>Install date<input id="peInstall" type="date" value="${esc(dv(r.installDate))}"></label>
+        <label>EMI<input id="peEmi" value="${esc(dv(r.emi))}" placeholder="EMI / Non-EMI"></label>
+        <label class="lead-form-wide">Remark<input id="peRemark" value="${esc(dv(r.remark))}"></label>
+      </div>
+      <div class="lead-modal-actions">
+        <button type="button" class="ghost-btn" id="peCancel">Cancel</button>
+        <button type="button" class="dl-btn" id="peSave">Save changes</button>
+      </div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("peCancel").onclick = close;
+    document.getElementById("peSave").onclick = () => {
+      const gv = (i) => { const el = document.getElementById(i); return el ? String(el.value).trim() : ""; };
+      const cust = gv("peCustomer");
+      if (!cust) { window.alert("Customer is required."); return; }
+      payUpdateRecord(id, {
+        customer: cust, product: gv("peProduct"), invoiceNo: gv("peInv"), invoiceDate: payNormDate(gv("peInvDate")),
+        category: gv("peCat"), hq: gv("peHq"), salesPerson: gv("peSp"), salesValue: payNum(gv("peSv")),
+        outstanding: payNum(gv("pePend")), hasOutstanding: true,
+        committedDate: payNormDate(gv("peCd")), committedValue: payNum(gv("peCv")),
+        machineStatus: gv("peMachine"), installDate: payNormDate(gv("peInstall")), emi: gv("peEmi"), remark: gv("peRemark"),
+      });
+      payTrackAdd(id, { kind: "edit", text: "Updated record details" });
+      close(); payDetailDialog(id); payRepaint();
+    };
   }
 
   // Record the just-imported data as a dated snapshot: total outstanding + a
@@ -4206,7 +4273,7 @@
   // ---- Excel / CSV import (append) + template ----
   // Import = only the basic install record. Commitment dates, received amounts
   // and remarks are added in the dashboard afterwards (kept as history).
-  const PAY_HEADERS = ["Customer", "Product", "Invoice No.", "Invoice Date", "Category", "HQ", "Sales Person", "Sales Value", "Machine", "Install Date", "EMI", "Committed Date", "Committed Value"];
+  const PAY_HEADERS = ["Customer", "Product", "Invoice No.", "Invoice Date", "Category", "HQ", "Sales Person", "Sales Value", "Pending", "Install Status", "Install Date", "EMI", "Committed Date", "Committed Value"];
   function payNormDate(v) {
     if (!v) return "";
     if (v instanceof Date && !isNaN(v)) {
@@ -4360,8 +4427,8 @@
     };
   }
   function payDownloadTemplate() {
-    const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, "Pending", "", "6 EMIs", "2026-09-28", 250000];
-    const sample2 = ["Sample Hospital (delete this row)", "Celluma Pro", "INV-002", "2026-09-10", "Machine", "Karnataka", "Vamshi Krishna", 4500000, "Installed", "2026-09-12", "Non-EMI", "2026-09-30", 4500000];
+    const sample = ["Sample Clinic (delete this row)", "Cellina PR", "INV-001", "2026-09-15", "Machine", "North", "Ambika Anand", 1500000, 1250000, "Pending", "", "6 EMIs", "2026-09-28", 250000];
+    const sample2 = ["Sample Hospital (delete this row)", "Celluma Pro", "INV-002", "2026-09-10", "Machine", "Karnataka", "Vamshi Krishna", 4500000, 0, "Installed", "2026-09-12", "Non-EMI", "", 0];
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet([PAY_HEADERS, sample, sample2]);
       ws["!cols"] = PAY_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
