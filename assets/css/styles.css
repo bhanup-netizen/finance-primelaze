@@ -1232,9 +1232,18 @@ tr.ind-done .ind-check span { color: var(--good); }
 
 /* ---- Whole-page mobile pass (phones ≤ 640px) ---- */
 @media (max-width: 640px) {
-  /* Wide tables scroll inside their own box (keeps the page from scrolling
-     sideways without overflow-x:hidden, which would break the sticky header). */
-  .table-wrap { max-height: none; overflow-x: auto; }
+  /* Tables keep their own scroll box on phones too. This is what makes the
+     frozen column header actually stay visible: if the box has no max-height
+     it isn't a scroll container, so the header scrolls up with the page and
+     hides behind the sticky top bar. With an inner scroll, the sticky header
+     pins to the top of the (still on-screen) box while the rows scroll under
+     it — so you can always see which column is which. (dvh keeps it right as
+     the mobile address bar shows/hides; vh is the fallback.) */
+  .table-wrap {
+    max-height: calc(100vh - 160px);
+    max-height: calc(100dvh - 160px);
+    overflow: auto;
+  }
 
   /* Any multi-column grid declared inline in markup collapses to one column
      (e.g. the Expense tab's payees / week / bank split). Class grids like
