@@ -4082,21 +4082,22 @@
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
     wrap.innerHTML = `<div class="lead-modal-card">
       <h3>Edit record — ${esc(r.customer || "")}</h3>
+      ${payListsHtml()}
       <div class="lead-form-grid">
-        <label>Customer<input id="peCustomer" value="${esc(dv(r.customer))}"></label>
-        <label>Product<input id="peProduct" value="${esc(dv(r.product))}"></label>
+        <label>Customer<input id="peCustomer" list="dlCustomer" value="${esc(dv(r.customer))}"></label>
+        <label>Product<input id="peProduct" list="dlProduct" value="${esc(dv(r.product))}"></label>
         <label>Invoice No.<input id="peInv" value="${esc(dv(r.invoiceNo))}"></label>
         <label>Invoice date<input id="peInvDate" type="date" value="${esc(dv(r.invoiceDate))}"></label>
-        <label>Category<input id="peCat" value="${esc(dv(r.category))}" placeholder="Machine / Consumables / Esthemax"></label>
-        <label>HQ<input id="peHq" value="${esc(dv(r.hq))}"></label>
-        <label>Sales person<input id="peSp" value="${esc(dv(r.salesPerson))}"></label>
+        <label>Category<input id="peCat" list="dlCat" value="${esc(dv(r.category))}" placeholder="Machine / Consumables / Esthemax"></label>
+        <label>HQ<input id="peHq" list="dlHq" value="${esc(dv(r.hq))}"></label>
+        <label>Sales person<input id="peSp" list="dlSp" value="${esc(dv(r.salesPerson))}"></label>
         <label>Sale value ₹<input id="peSv" type="number" value="${esc(dv(r.salesValue))}"></label>
         <label>Pending ₹ (outstanding)<input id="pePend" type="number" value="${esc(dv(r.pending))}"></label>
         <label>Committed date<input id="peCd" type="date" value="${esc(dv(r.committedDate))}"></label>
         <label>Committed value ₹<input id="peCv" type="number" value="${esc(dv(r.commitAmount))}"></label>
         <label>Machine<select id="peMachine" class="select"><option value="">—</option><option${r.machineStatus === "Pending" ? " selected" : ""}>Pending</option><option${r.machineStatus === "Installed" ? " selected" : ""}>Installed</option></select></label>
         <label>Install date<input id="peInstall" type="date" value="${esc(dv(r.installDate))}"></label>
-        <label>EMI<input id="peEmi" value="${esc(dv(r.emi))}" placeholder="EMI / Non-EMI"></label>
+        <label>EMI<input id="peEmi" list="dlEmi" value="${esc(dv(r.emi))}" placeholder="EMI / Non-EMI"></label>
         <label class="lead-form-wide">Remark<input id="peRemark" value="${esc(dv(r.remark))}"></label>
       </div>
       <div class="lead-modal-actions">
@@ -4490,22 +4491,36 @@
     XLSX.writeFile(wb, "primelaze_payments_" + leadToday() + ".xlsx");
   }
   // Add a new sale / machine directly in the portal (no import needed).
+  // Datalists built from the existing records so every text field is a "pick an
+  // existing value, or type a new one" dropdown.
+  function payListsHtml() {
+    const rows = payAll();
+    const uniq = (key, extra) => Array.from(new Set((extra || []).concat(payUniq(rows, key)))).filter(Boolean);
+    const dl = (id, vals) => `<datalist id="${id}">${vals.map((v) => `<option value="${esc(v)}"></option>`).join("")}</datalist>`;
+    return dl("dlCustomer", uniq("customer"))
+      + dl("dlProduct", uniq("product"))
+      + dl("dlCat", uniq("category", ["Machine", "Consumables", "Esthemax", "Celluma"]))
+      + dl("dlHq", uniq("hq"))
+      + dl("dlSp", uniq("salesPerson"))
+      + dl("dlEmi", uniq("emi", ["EMI", "Non-EMI"]));
+  }
   function payAddDialog() {
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
     wrap.innerHTML = `<div class="lead-modal-card">
       <h3>Add a new sale</h3>
+      ${payListsHtml()}
       <div class="lead-form-grid">
-        <label>Customer<input id="psCustomer" type="text" placeholder="Doctor / clinic"></label>
-        <label>Product<input id="psProduct" type="text"></label>
+        <label>Customer<input id="psCustomer" type="text" list="dlCustomer" placeholder="pick or type new…"></label>
+        <label>Product<input id="psProduct" type="text" list="dlProduct" placeholder="pick or type new…"></label>
         <label>Invoice No.<input id="psInv" type="text"></label>
         <label>Invoice date<input id="psInvDate" type="date"></label>
-        <label>Category<input id="psCat" type="text" placeholder="Machine / Consumables / Esthemax"></label>
-        <label>HQ<input id="psHq" type="text"></label>
-        <label>Sales person<input id="psSp" type="text"></label>
+        <label>Category<input id="psCat" type="text" list="dlCat" placeholder="pick or type new…"></label>
+        <label>HQ<input id="psHq" type="text" list="dlHq" placeholder="pick or type new…"></label>
+        <label>Sales person<input id="psSp" type="text" list="dlSp" placeholder="pick or type new…"></label>
         <label>Sale value ₹<input id="psSv" type="number" placeholder="0"></label>
         <label>Machine<select id="psMachine" class="select"><option value="">—</option><option>Pending</option><option>Installed</option></select></label>
         <label>Install date<input id="psInstall" type="date"></label>
-        <label>EMI<input id="psEmi" type="text" placeholder="EMI / Non-EMI"></label>
+        <label>EMI<input id="psEmi" type="text" list="dlEmi" placeholder="EMI / Non-EMI"></label>
       </div>
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="psCancel">Cancel</button>
