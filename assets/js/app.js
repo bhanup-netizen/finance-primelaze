@@ -2946,17 +2946,18 @@
   // Manager (Area Sales Manager) incentive — a TEAM plan, separate from the rep
   // plan and on TOP of the per-box 2:1 co-sold split. Earned on the TEAM's total
   // monthly Esthemax sales — INCLUDING the manager's own sales — (HIGHEST slab
-  // reached, not cumulative), gated on team breadth. Every order is 100% advance,
-  // so "sales" is money already received (no collection-lag adjustment needed).
+  // reached, not cumulative), gated on team breadth (every non-new rep ≥ 70%;
+  // new joinees are exempt for their first 3 months). Every order is 100%
+  // advance, so "sales" is money already received (no collection-lag needed).
   const ESTH_MGR_LADDER = [
-    { min: 2000000, bonus: 8000 },
-    { min: 2500000, bonus: 12000 },
-    { min: 3500000, bonus: 22000 },
-    { min: 5000000, bonus: 40000 },
-    { min: 7500000, bonus: 65000 },
-    { min: 10000000, bonus: 100000 },
+    { min: 2000000, bonus: 15000 },
+    { min: 2500000, bonus: 25000 },
+    { min: 3500000, bonus: 45000 },
+    { min: 5000000, bonus: 75000 },
+    { min: 7500000, bonus: 125000 },
+    { min: 10000000, bonus: 200000 },
   ];
-  const ESTH_MGR_GATE = "Pays only if EVERY rep in the team reaches at least 70% of their monthly target. If even one rep is below 70%, the manager earns no team bonus that month (so the manager must lift the whole team, not just the top performers).";
+  const ESTH_MGR_GATE = "Pays only if every rep reaches at least 70% of their monthly target — EXCEPT new joinees, who are exempt for their first 3 months (their ramp-up doesn't block the manager's bonus, and their sales still count toward the team total). If any non-new rep is below 70%, the manager earns no team bonus that month.";
   function esthMgrLadder(sales) {
     let b = 0;
     ESTH_MGR_LADDER.forEach((s) => { if (sales >= s.min) b = s.bonus; });
