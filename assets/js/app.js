@@ -2604,17 +2604,14 @@
     // privileged viewers (canSeeLanding) so the rep-facing price list doesn't
     // expose manager compensation. The manager PDF is gated the same way.
     const mgrLadderRows = ESTH_MGR_LADDER.map((s) => `<tr><td>Team reaches ${Lk(s.min)} / month</td><td class="num"><b>${rupQ(s.bonus)}</b></td></tr>`).join("");
-    const mgrModRows = ESTH_MGR_MODIFIER.map((m) => `<tr><td>${esc(m.label)}</td><td class="num">${esc(m.effect)}</td></tr>`).join("");
     const managerBlock = canSeeLanding() ? `<div class="block" style="margin-top:20px">
       <h2 style="margin:0 0 4px">👔 Manager Incentive Plan <span class="t-muted" style="font-size:12px">(Area Sales Manager — team plan)</span></h2>
-      <p class="muted-note">A <b>team</b> incentive, on top of the per-box 2:1 co-sold split. Earned on the <b>team's realised collections</b> in a month — the manager gets the bonus for the <b>highest slab the team reaches</b> (not added up). Released only after customers' payments are realised.</p>
-      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team monthly collections</th><th class="num">Manager bonus</th></tr></thead><tbody>${mgrLadderRows}</tbody></table></div>
+      <p class="muted-note">A <b>team</b> incentive, on top of the per-box 2:1 co-sold split. Earned on the <b>whole team's Esthemax sales</b> in a month — <b>including the manager's own sales</b> — and since every order is <b>100% advance</b>, that sales figure is money already in. The manager gets the bonus for the <b>highest slab the team reaches</b> (not added up).</p>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team monthly sales (advance)</th><th class="num">Manager bonus</th></tr></thead><tbody>${mgrLadderRows}</tbody></table></div>
       <p class="muted-note" style="margin-top:10px"><b>Gate:</b> ${esc(ESTH_MGR_GATE)}</p>
-      <h3 style="margin:14px 0 4px">Collection-speed adjustment <span class="t-muted" style="font-size:12px">(applied to the slab bonus above)</span></h3>
-      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team average time to collect</th><th class="num">Effect</th></tr></thead><tbody>${mgrModRows}</tbody></table></div>
-      <div class="callout" style="margin-top:12px"><b>Plus the co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits <b>2:1</b> — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</div>
+      <div class="callout" style="margin-top:12px"><b>Plus the co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits <b>2:1</b> — rep 66%, manager 33% (the "Manager involved" tick in Company Price). The manager's own sales also count in the team total above.</div>
       <div class="controls" style="margin-top:10px">
-        <label class="ord-field"><span>Team monthly collections (₹)</span><input id="qmgrIn" type="number" min="0" step="100000" placeholder="e.g. 2500000" style="max-width:190px"></label>
+        <label class="ord-field"><span>Team monthly sales (₹)</span><input id="qmgrIn" type="number" min="0" step="100000" placeholder="e.g. 2500000" style="max-width:190px"></label>
         <div class="ord-field"><span>Manager slab bonus</span><div class="ecalc-out" id="qmgrOut">—</div></div>
       </div></div>` : "";
     return `
@@ -2706,26 +2703,23 @@
     printHtml(html);
   }
 
-  // Separate PDF: the Manager (ASM) incentive plan — team ladder, gate,
-  // collection-speed adjustment and the co-sold split.
+  // Separate PDF: the Manager (ASM) incentive plan — team sales ladder, gate
+  // and the co-sold split (all orders are 100% advance, so no collection lag).
   function downloadEsthemaxManagerPdf() {
     const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
     const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
     const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
     const ladderBody = ESTH_MGR_LADDER.map((s) => `<tr><td>Team reaches ${Lk(s.min)} / month</td><td class="num"><b>${rup(s.bonus)}</b></td></tr>`).join("");
-    const modBody = ESTH_MGR_MODIFIER.map((m) => `<tr><td>${esc(m.label)}</td><td class="num">${esc(m.effect)}</td></tr>`).join("");
     const html = `
       <div class="p-section">
         <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Manager Incentive Plan</h1>
         <div class="p-sub">Area Sales Manager · team plan (₹)</div>
         <p class="p-meta">Generated ${esc(stamp)}</p>
-        <p class="p-meta"><b>How it works:</b> a team incentive on top of the per-box 2:1 co-sold split. Earned on the team's <b>realised collections</b> in a month — the manager gets the bonus for the <b>highest slab the team reaches</b> (not added up). Released only after customers' payments are realised, not at booking/dispatch.</p>
-        <h2>Team collection ladder <span style="font-weight:400;font-size:12px">(highest slab reached)</span></h2>
-        ${pTable([{ label: "Team monthly collections" }, { label: "Manager bonus", num: 1 }], ladderBody)}
+        <p class="p-meta"><b>How it works:</b> a team incentive on top of the per-box 2:1 co-sold split. Earned on the <b>whole team's Esthemax sales</b> in a month — <b>including the manager's own sales</b>. Every order is 100% advance, so the sales figure is money already received. The manager gets the bonus for the <b>highest slab the team reaches</b> (not added up).</p>
+        <h2>Team sales ladder <span style="font-weight:400;font-size:12px">(highest slab reached · advance)</span></h2>
+        ${pTable([{ label: "Team monthly sales (advance)" }, { label: "Manager bonus", num: 1 }], ladderBody)}
         <p class="p-meta"><b>Gate:</b> ${esc(ESTH_MGR_GATE)}</p>
-        <h2>Collection-speed adjustment <span style="font-weight:400;font-size:12px">(applied to the slab bonus)</span></h2>
-        ${pTable([{ label: "Team average time to collect" }, { label: "Effect", num: 1 }], modBody)}
-        <p class="p-meta"><b>Co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits 2:1 — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</p>
+        <p class="p-meta"><b>Co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits 2:1 — rep 66%, manager 33% (the "Manager involved" tick in Company Price). The manager's own sales also count in the team total.</p>
       </div>`;
     printHtml(html);
   }
@@ -2950,10 +2944,10 @@
     return b;
   }
   // Manager (Area Sales Manager) incentive — a TEAM plan, separate from the rep
-  // plan and on TOP of the per-box 2:1 co-sold split. Earned on the TEAM's
-  // realised collections in a month (HIGHEST slab reached, not cumulative),
-  // gated on team breadth, then adjusted for collection speed. Released only
-  // after customers' payments are realised (same rule as the rep plan).
+  // plan and on TOP of the per-box 2:1 co-sold split. Earned on the TEAM's total
+  // monthly Esthemax sales — INCLUDING the manager's own sales — (HIGHEST slab
+  // reached, not cumulative), gated on team breadth. Every order is 100% advance,
+  // so "sales" is money already received (no collection-lag adjustment needed).
   const ESTH_MGR_LADDER = [
     { min: 2000000, bonus: 8000 },
     { min: 2500000, bonus: 12000 },
@@ -2963,11 +2957,6 @@
     { min: 10000000, bonus: 100000 },
   ];
   const ESTH_MGR_GATE = "Pays only if at least 3 of every 5 reps individually reach ≥ 80% of their monthly target (so the manager is paid to lift the whole team, not ride one star).";
-  const ESTH_MGR_MODIFIER = [
-    { label: "≤ 30 days", effect: "+15%" },
-    { label: "31–45 days", effect: "+0%" },
-    { label: "> 45 days (or too many committed-but-missed)", effect: "−15%" },
-  ];
   function esthMgrLadder(sales) {
     let b = 0;
     ESTH_MGR_LADDER.forEach((s) => { if (sales >= s.min) b = s.bonus; });
