@@ -2558,7 +2558,7 @@
       if (mgb) mgb.oninput = () => {
         const v = parseFloat(mgb.value) || 0;
         const out = document.getElementById("qmgrOut");
-        if (out) out.textContent = v > 0 ? rupQ(esthMgrLadder(v)) : "—";
+        if (out) out.textContent = v > 0 ? rupQ(esthMgrBonus(v)) : "—";
       };
     }, 0);
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
@@ -2601,18 +2601,29 @@
         <div class="ord-field"><span>Volume bonus earned</span><div class="ecalc-out" id="qvbOut">—</div></div>
       </div></div>`;
     // Manager (ASM) incentive plan — a SEPARATE team plan, shown only to
-    // privileged viewers (canSeeLanding) so the rep-facing price list doesn't
-    // expose manager compensation. The manager PDF is gated the same way.
-    const mgrLadderRows = ESTH_MGR_LADDER.map((s) => `<tr><td>Team reaches ${Lk(s.min)} / month</td><td class="num"><b>${rupQ(s.bonus)}</b></td></tr>`).join("");
+    // privileged viewers (canSeeLanding). Team bonus = 1% of team monthly sales,
+    // with the new-joinee ramp, the 70% gate and the retention rule documented.
+    const mgrPctRows = [500000, 1000000, 1500000, 2500000, 5000000, 10000000]
+      .map((s) => `<tr><td>${Lk(s)} / month</td><td class="num"><b>${rupQ(esthMgrBonus(s))}</b></td></tr>`).join("");
+    const rampRows = ESTH_RAMP.map((r) => `<tr><td>${esc(r.when)}</td><td class="num">${r.pct == null ? "<span class='t-muted'>Onboarding — exempt</span>" : rupQ(ESTH_REP_TARGET * r.pct / 100) + " <span class='t-muted'>(" + r.pct + "%)</span>" }</td><td class="num">${r.pct == null ? "—" : rupQ(ESTH_REP_TARGET * r.pct / 100 * ESTH_GATE_PCT / 100)}</td></tr>`).join("");
+    const mgrExamples = [{ n: 1, team: 750000 }, { n: 2, team: 1250000 }, { n: 3, team: 1500000 }]
+      .map((e) => `<tr><td>${e.n} rep${e.n > 1 ? "s" : ""} + manager</td><td class="num">${Lk(e.team)}</td><td class="num"><b>${rupQ(esthMgrBonus(e.team))}</b></td></tr>`).join("");
     const managerBlock = canSeeLanding() ? `<div class="block" style="margin-top:20px">
       <h2 style="margin:0 0 4px">👔 Manager Incentive Plan <span class="t-muted" style="font-size:12px">(Area Sales Manager — team plan)</span></h2>
-      <p class="muted-note">A <b>team</b> incentive, on top of the per-box 2:1 co-sold split. Earned on the <b>whole team's Esthemax sales</b> in a month — <b>including the manager's own sales</b> — and since every order is <b>100% advance</b>, that sales figure is money already in. The manager gets the bonus for the <b>highest slab the team reaches</b> (not added up).</p>
-      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team monthly sales (advance)</th><th class="num">Manager bonus</th></tr></thead><tbody>${mgrLadderRows}</tbody></table></div>
+      <p class="muted-note">A <b>team</b> incentive on top of the per-box 2:1 co-sold split. The manager earns <b>${ESTH_MGR_PCT}% of the team's total monthly Esthemax sales</b> (jar + retail + accessories) — <b>including the manager's own sales</b>. It's a <b>percentage</b>, so it scales to any team size (1 person or 10). Every order is <b>100% advance</b>, so this is money already in.</p>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team monthly sales (advance)</th><th class="num">Manager bonus (${ESTH_MGR_PCT}%)</th></tr></thead><tbody>${mgrPctRows}</tbody></table></div>
       <p class="muted-note" style="margin-top:10px"><b>Gate:</b> ${esc(ESTH_MGR_GATE)}</p>
-      <div class="callout" style="margin-top:12px"><b>Plus the co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits <b>2:1</b> — rep 66%, manager 33% (the "Manager involved" tick in Company Price). The manager's own sales also count in the team total above.</div>
+      <h3 style="margin:16px 0 4px">Rep target &amp; new-joinee ramp</h3>
+      <p class="muted-note">Minimum target is <b>${rupQ(ESTH_REP_TARGET)}/month</b> (jar + retail + accessories combined). New associates ramp up:</p>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Tenure</th><th class="num">Minimum target</th><th class="num">${ESTH_GATE_PCT}% retain bar</th></tr></thead><tbody>${rampRows}</tbody></table></div>
+      <div class="callout" style="margin-top:12px"><b>Retention:</b> ${esc(ESTH_RETENTION)}</div>
+      <h3 style="margin:16px 0 4px">Examples — manager with 1 / 2 / 3 reps</h3>
+      <p class="muted-note">Gate passed; manager also sells ₹3 L, which counts in the team total.</p>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team</th><th class="num">Team monthly sales</th><th class="num">Manager bonus (${ESTH_MGR_PCT}%)</th></tr></thead><tbody>${mgrExamples}</tbody></table></div>
+      <div class="callout" style="margin-top:12px"><b>Plus the co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits <b>2:1</b> — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</div>
       <div class="controls" style="margin-top:10px">
-        <label class="ord-field"><span>Team monthly sales (₹)</span><input id="qmgrIn" type="number" min="0" step="100000" placeholder="e.g. 2500000" style="max-width:190px"></label>
-        <div class="ord-field"><span>Manager slab bonus</span><div class="ecalc-out" id="qmgrOut">—</div></div>
+        <label class="ord-field"><span>Team monthly sales (₹)</span><input id="qmgrIn" type="number" min="0" step="100000" placeholder="e.g. 1500000" style="max-width:190px"></label>
+        <div class="ord-field"><span>Manager bonus (${ESTH_MGR_PCT}%)</span><div class="ecalc-out" id="qmgrOut">—</div></div>
       </div></div>` : "";
     return `
       <div class="section-head">
@@ -2703,23 +2714,34 @@
     printHtml(html);
   }
 
-  // Separate PDF: the Manager (ASM) incentive plan — team sales ladder, gate
-  // and the co-sold split (all orders are 100% advance, so no collection lag).
+  // Separate PDF: the Manager (ASM) incentive plan — 1% team bonus, ramp, 70%
+  // gate, retention and the co-sold split (all orders 100% advance).
   function downloadEsthemaxManagerPdf() {
     const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
     const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
     const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
-    const ladderBody = ESTH_MGR_LADDER.map((s) => `<tr><td>Team reaches ${Lk(s.min)} / month</td><td class="num"><b>${rup(s.bonus)}</b></td></tr>`).join("");
+    const pctBody = [500000, 1000000, 1500000, 2500000, 5000000, 10000000]
+      .map((s) => `<tr><td>${Lk(s)} / month</td><td class="num"><b>${rup(esthMgrBonus(s))}</b></td></tr>`).join("");
+    const rampBody = ESTH_RAMP.map((r) => `<tr><td>${esc(r.when)}</td><td class="num">${r.pct == null ? "Onboarding — exempt" : rup(ESTH_REP_TARGET * r.pct / 100) + " (" + r.pct + "%)"}</td><td class="num">${r.pct == null ? "—" : rup(ESTH_REP_TARGET * r.pct / 100 * ESTH_GATE_PCT / 100)}</td></tr>`).join("");
+    const exBody = [{ n: 1, team: 750000 }, { n: 2, team: 1250000 }, { n: 3, team: 1500000 }]
+      .map((e) => `<tr><td>${e.n} rep${e.n > 1 ? "s" : ""} + manager</td><td class="num">${Lk(e.team)}</td><td class="num"><b>${rup(esthMgrBonus(e.team))}</b></td></tr>`).join("");
     const html = `
       <div class="p-section">
         <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Manager Incentive Plan</h1>
         <div class="p-sub">Area Sales Manager · team plan (₹)</div>
         <p class="p-meta">Generated ${esc(stamp)}</p>
-        <p class="p-meta"><b>How it works:</b> a team incentive on top of the per-box 2:1 co-sold split. Earned on the <b>whole team's Esthemax sales</b> in a month — <b>including the manager's own sales</b>. Every order is 100% advance, so the sales figure is money already received. The manager gets the bonus for the <b>highest slab the team reaches</b> (not added up).</p>
-        <h2>Team sales ladder <span style="font-weight:400;font-size:12px">(highest slab reached · advance)</span></h2>
-        ${pTable([{ label: "Team monthly sales (advance)" }, { label: "Manager bonus", num: 1 }], ladderBody)}
+        <p class="p-meta"><b>How it works:</b> a team incentive on top of the per-box 2:1 co-sold split. The manager earns <b>${ESTH_MGR_PCT}% of the team's total monthly Esthemax sales</b> (jar + retail + accessories), <b>including the manager's own sales</b>. A percentage, so it scales to any team size. Every order is 100% advance — money already received.</p>
+        <h2>Manager bonus = ${ESTH_MGR_PCT}% of team monthly sales</h2>
+        ${pTable([{ label: "Team monthly sales (advance)" }, { label: "Manager bonus", num: 1 }], pctBody)}
         <p class="p-meta"><b>Gate:</b> ${esc(ESTH_MGR_GATE)}</p>
-        <p class="p-meta"><b>Co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits 2:1 — rep 66%, manager 33% (the "Manager involved" tick in Company Price). The manager's own sales also count in the team total.</p>
+        <h2>Rep target &amp; new-joinee ramp</h2>
+        <p class="p-meta">Minimum target ${rup(ESTH_REP_TARGET)}/month (jar + retail + accessories combined). New associates ramp up:</p>
+        ${pTable([{ label: "Tenure" }, { label: "Minimum target", num: 1 }, { label: ESTH_GATE_PCT + "% retain bar", num: 1 }], rampBody)}
+        <p class="p-meta"><b>Retention:</b> ${esc(ESTH_RETENTION)}</p>
+        <h2>Examples — manager with 1 / 2 / 3 reps</h2>
+        <p class="p-meta">Gate passed; manager also sells ₹3 L (counts in the team total).</p>
+        ${pTable([{ label: "Team" }, { label: "Team monthly sales", num: 1 }, { label: "Manager bonus", num: 1 }], exBody)}
+        <p class="p-meta"><b>Co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits 2:1 — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</p>
       </div>`;
     printHtml(html);
   }
@@ -2944,25 +2966,26 @@
     return b;
   }
   // Manager (Area Sales Manager) incentive — a TEAM plan, separate from the rep
-  // plan and on TOP of the per-box 2:1 co-sold split. Earned on the TEAM's total
-  // monthly Esthemax sales — INCLUDING the manager's own sales — (HIGHEST slab
-  // reached, not cumulative), gated on team breadth (every non-new rep ≥ 70%;
-  // new joinees are exempt for their first 3 months). Every order is 100%
-  // advance, so "sales" is money already received (no collection-lag needed).
-  const ESTH_MGR_LADDER = [
-    { min: 2000000, bonus: 15000 },
-    { min: 2500000, bonus: 25000 },
-    { min: 3500000, bonus: 45000 },
-    { min: 5000000, bonus: 75000 },
-    { min: 7500000, bonus: 125000 },
-    { min: 10000000, bonus: 200000 },
+  // plan and on TOP of the per-box 2:1 co-sold split. Earned as a flat PERCENT
+  // of the team's total monthly Esthemax sales (jar + retail + accessories) —
+  // INCLUDING the manager's own sales. A % (not fixed slabs) so it scales to any
+  // team size, 1 person or 10. Every order is 100% advance, so "sales" = money
+  // already received. Gated: every rep must reach 70% of target (new joinees
+  // exempt for their first 3 months).
+  const ESTH_REP_TARGET = 500000;   // minimum monthly target per rep (₹5 L — jar + retail + accessories combined)
+  const ESTH_MGR_PCT = 1;           // manager team bonus = this % of the team's monthly sales
+  const ESTH_GATE_PCT = 70;         // a rep must hit this % of target to count / be retained
+  // New-associate ramp: first 3 months are onboarding (exempt from the target);
+  // then the minimum target steps up as a % of the full ₹5 L target.
+  const ESTH_RAMP = [
+    { when: "Months 1–3", pct: null },   // onboarding — exempt (learning)
+    { when: "Month 4", pct: 50 },
+    { when: "Month 5", pct: 75 },
+    { when: "Month 6 onward", pct: 100 },
   ];
-  const ESTH_MGR_GATE = "Pays only if every rep reaches at least 70% of their monthly target — EXCEPT new joinees, who are exempt for their first 3 months (their ramp-up doesn't block the manager's bonus, and their sales still count toward the team total). If any non-new rep is below 70%, the manager earns no team bonus that month.";
-  function esthMgrLadder(sales) {
-    let b = 0;
-    ESTH_MGR_LADDER.forEach((s) => { if (sales >= s.min) b = s.bonus; });
-    return b;
-  }
+  const ESTH_MGR_GATE = "The manager earns the 1% team bonus only if EVERY rep reaches at least 70% of their monthly target. New joinees are exempt for their first 3 months (their sales still count toward the team total). If any non-new rep is below 70%, the manager gets no team bonus that month.";
+  const ESTH_RETENTION = "A rep who cannot reach 70% of their target is at risk: the manager must either lift them above 70% or relieve them — continued shortfall impacts employment. Keeping an under-70% rep also zeroes the manager's own team bonus, so it is in the manager's interest to act.";
+  function esthMgrBonus(teamSales) { return Math.max(+teamSales || 0, 0) * ESTH_MGR_PCT / 100; }
   // Each rendered Esthemax section registers a generator so a single input
   // edit can repaint ONLY that section in place (no full-page re-render → no
   // scroll jump, no lost focus).
