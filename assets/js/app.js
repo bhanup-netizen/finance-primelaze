@@ -2956,7 +2956,7 @@
     { min: 7500000, bonus: 65000 },
     { min: 10000000, bonus: 100000 },
   ];
-  const ESTH_MGR_GATE = "Pays only if at least 3 of every 5 reps individually reach ≥ 80% of their monthly target (so the manager is paid to lift the whole team, not ride one star).";
+  const ESTH_MGR_GATE = "Pays only if EVERY rep in the team reaches at least 70% of their monthly target. If even one rep is below 70%, the manager earns no team bonus that month (so the manager must lift the whole team, not just the top performers).";
   function esthMgrLadder(sales) {
     let b = 0;
     ESTH_MGR_LADDER.forEach((s) => { if (sales >= s.min) b = s.bonus; });
