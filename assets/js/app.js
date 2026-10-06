@@ -2543,6 +2543,8 @@
       if (edl) edl.onclick = () => downloadEsthemaxSalesPrice();
       const epdf = document.getElementById("esthPricePdf");
       if (epdf) epdf.onclick = () => downloadEsthemaxPdf();
+      const mpdf = document.getElementById("esthMgrPdf");
+      if (mpdf) mpdf.onclick = () => downloadEsthemaxManagerPdf();
       document.querySelectorAll("[data-mkt]").forEach((b) => {
         b.onclick = () => { mkt = b.dataset.mkt; go("prices", true); };
       });
@@ -2551,6 +2553,12 @@
         const v = parseFloat(vb.value) || 0;
         const out = document.getElementById("qvbOut");
         if (out) out.textContent = v > 0 ? rupQ(esthVolumeBonus(v)) : "—";
+      };
+      const mgb = document.getElementById("qmgrIn");
+      if (mgb) mgb.oninput = () => {
+        const v = parseFloat(mgb.value) || 0;
+        const out = document.getElementById("qmgrOut");
+        if (out) out.textContent = v > 0 ? rupQ(esthMgrLadder(v)) : "—";
       };
     }, 0);
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
@@ -2592,6 +2600,23 @@
         <label class="ord-field"><span>Your monthly Esthemax sales (₹)</span><input id="qvbIn" type="number" min="0" step="10000" placeholder="e.g. 1500000" style="max-width:190px"></label>
         <div class="ord-field"><span>Volume bonus earned</span><div class="ecalc-out" id="qvbOut">—</div></div>
       </div></div>`;
+    // Manager (ASM) incentive plan — a SEPARATE team plan, shown only to
+    // privileged viewers (canSeeLanding) so the rep-facing price list doesn't
+    // expose manager compensation. The manager PDF is gated the same way.
+    const mgrLadderRows = ESTH_MGR_LADDER.map((s) => `<tr><td>Team reaches ${Lk(s.min)} / month</td><td class="num"><b>${rupQ(s.bonus)}</b></td></tr>`).join("");
+    const mgrModRows = ESTH_MGR_MODIFIER.map((m) => `<tr><td>${esc(m.label)}</td><td class="num">${esc(m.effect)}</td></tr>`).join("");
+    const managerBlock = canSeeLanding() ? `<div class="block" style="margin-top:20px">
+      <h2 style="margin:0 0 4px">👔 Manager Incentive Plan <span class="t-muted" style="font-size:12px">(Area Sales Manager — team plan)</span></h2>
+      <p class="muted-note">A <b>team</b> incentive, on top of the per-box 2:1 co-sold split. Earned on the <b>team's realised collections</b> in a month — the manager gets the bonus for the <b>highest slab the team reaches</b> (not added up). Released only after customers' payments are realised.</p>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team monthly collections</th><th class="num">Manager bonus</th></tr></thead><tbody>${mgrLadderRows}</tbody></table></div>
+      <p class="muted-note" style="margin-top:10px"><b>Gate:</b> ${esc(ESTH_MGR_GATE)}</p>
+      <h3 style="margin:14px 0 4px">Collection-speed adjustment <span class="t-muted" style="font-size:12px">(applied to the slab bonus above)</span></h3>
+      <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team average time to collect</th><th class="num">Effect</th></tr></thead><tbody>${mgrModRows}</tbody></table></div>
+      <div class="callout" style="margin-top:12px"><b>Plus the co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits <b>2:1</b> — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</div>
+      <div class="controls" style="margin-top:10px">
+        <label class="ord-field"><span>Team monthly collections (₹)</span><input id="qmgrIn" type="number" min="0" step="100000" placeholder="e.g. 2500000" style="max-width:190px"></label>
+        <div class="ord-field"><span>Manager slab bonus</span><div class="ecalc-out" id="qmgrOut">—</div></div>
+      </div></div>` : "";
     return `
       <div class="section-head">
         <h1>Esthemax Price List — ${esc(mLabel)}</h1>
@@ -2603,13 +2628,15 @@
           <button data-mkt="doctor" class="${mkt === "doctor" ? "active" : ""}">Derma (Doctor)</button>
         </div>
         <div class="hq-actions">
-          <button id="esthPriceDl" class="dl-btn" type="button" title="Download this Esthemax price list (Excel)">⬇ Excel</button>
-          <button id="esthPricePdf" class="dl-btn" type="button" title="Download this Esthemax price list (PDF)">⬇ PDF</button>
+          <button id="esthPriceDl" class="dl-btn" type="button" title="Download the salesperson price list (Excel)">⬇ Excel</button>
+          <button id="esthPricePdf" class="dl-btn" type="button" title="Download the salesperson price list + incentive (PDF)">⬇ Salesperson PDF</button>
+          ${canSeeLanding() ? `<button id="esthMgrPdf" class="dl-btn" type="button" title="Download the Manager incentive plan (PDF)">⬇ Manager PDF</button>` : ""}
         </div>
       </div>
       ${policy}${offersNote}
       ${ESTH_SALES_SECTIONS.map(sectionTable).join("")}
-      ${volumeBlock}`;
+      ${volumeBlock}
+      ${managerBlock}`;
   }
   // Download the computed Esthemax selling-price list for the current market.
   function downloadEsthemaxSalesPrice() {
@@ -2675,6 +2702,30 @@
         <h2>Monthly volume bonus <span style="font-weight:400;font-size:12px">(on top of the per-box incentive)</span></h2>
         <p class="p-meta">Earned on total monthly Esthemax sales — you get the bonus for the highest slab you reach (not added up). Released only after the customers' payments are realised.</p>
         ${vbTable}
+      </div>`;
+    printHtml(html);
+  }
+
+  // Separate PDF: the Manager (ASM) incentive plan — team ladder, gate,
+  // collection-speed adjustment and the co-sold split.
+  function downloadEsthemaxManagerPdf() {
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+    const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+    const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
+    const ladderBody = ESTH_MGR_LADDER.map((s) => `<tr><td>Team reaches ${Lk(s.min)} / month</td><td class="num"><b>${rup(s.bonus)}</b></td></tr>`).join("");
+    const modBody = ESTH_MGR_MODIFIER.map((m) => `<tr><td>${esc(m.label)}</td><td class="num">${esc(m.effect)}</td></tr>`).join("");
+    const html = `
+      <div class="p-section">
+        <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Manager Incentive Plan</h1>
+        <div class="p-sub">Area Sales Manager · team plan (₹)</div>
+        <p class="p-meta">Generated ${esc(stamp)}</p>
+        <p class="p-meta"><b>How it works:</b> a team incentive on top of the per-box 2:1 co-sold split. Earned on the team's <b>realised collections</b> in a month — the manager gets the bonus for the <b>highest slab the team reaches</b> (not added up). Released only after customers' payments are realised, not at booking/dispatch.</p>
+        <h2>Team collection ladder <span style="font-weight:400;font-size:12px">(highest slab reached)</span></h2>
+        ${pTable([{ label: "Team monthly collections" }, { label: "Manager bonus", num: 1 }], ladderBody)}
+        <p class="p-meta"><b>Gate:</b> ${esc(ESTH_MGR_GATE)}</p>
+        <h2>Collection-speed adjustment <span style="font-weight:400;font-size:12px">(applied to the slab bonus)</span></h2>
+        ${pTable([{ label: "Team average time to collect" }, { label: "Effect", num: 1 }], modBody)}
+        <p class="p-meta"><b>Co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits 2:1 — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</p>
       </div>`;
     printHtml(html);
   }
@@ -2896,6 +2947,30 @@
   function esthVolumeBonus(sales) {
     let b = 0;
     ESTH_VOLUME_BONUS.forEach((s) => { if (sales >= s.min) b = s.bonus; });
+    return b;
+  }
+  // Manager (Area Sales Manager) incentive — a TEAM plan, separate from the rep
+  // plan and on TOP of the per-box 2:1 co-sold split. Earned on the TEAM's
+  // realised collections in a month (HIGHEST slab reached, not cumulative),
+  // gated on team breadth, then adjusted for collection speed. Released only
+  // after customers' payments are realised (same rule as the rep plan).
+  const ESTH_MGR_LADDER = [
+    { min: 2000000, bonus: 8000 },
+    { min: 2500000, bonus: 12000 },
+    { min: 3500000, bonus: 22000 },
+    { min: 5000000, bonus: 40000 },
+    { min: 7500000, bonus: 65000 },
+    { min: 10000000, bonus: 100000 },
+  ];
+  const ESTH_MGR_GATE = "Pays only if at least 3 of every 5 reps individually reach ≥ 80% of their monthly target (so the manager is paid to lift the whole team, not ride one star).";
+  const ESTH_MGR_MODIFIER = [
+    { label: "≤ 30 days", effect: "+15%" },
+    { label: "31–45 days", effect: "+0%" },
+    { label: "> 45 days (or too many committed-but-missed)", effect: "−15%" },
+  ];
+  function esthMgrLadder(sales) {
+    let b = 0;
+    ESTH_MGR_LADDER.forEach((s) => { if (sales >= s.min) b = s.bonus; });
     return b;
   }
   // Each rendered Esthemax section registers a generator so a single input
