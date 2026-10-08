@@ -78,6 +78,15 @@ service cloud.firestore {
       allow delete: if isAdmin() || isPageEditor();
     }
 
+    // Outgoing email queue for the Firebase "Trigger Email" extension. The
+    // dashboard queues post-sale lead notifications here by CREATING a doc; the
+    // extension reads/updates them server-side (admin privileges bypass rules).
+    // Without this rule those writes are denied and no post-sale email is sent.
+    match /mail/{doc} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if false;
+    }
+
     // User permission docs.
     //  - Read: own doc; admins/super and page editors read the list (to manage).
     //  - Super admins: full create/update/delete of any account.

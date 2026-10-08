@@ -5581,6 +5581,7 @@
   };
   let leadNotifyPending = new Map(); // leadId -> Set(changed field labels)
   let leadNotifySoldMove = new Set(); // leadIds whose batch includes a move → Sold
+  let leadSoldToasted = new Set();    // sold-moves already confirmed on screen (dedupe within a batch)
   let leadNotifyTimer = null;
   function leadNoteChange(id, field) {
     if (!Object.prototype.hasOwnProperty.call(LEAD_NOTIFY_FIELDS, field)) return;
@@ -5589,8 +5590,14 @@
     const set = leadNotifyPending.get(id) || new Set();
     set.add(LEAD_NOTIFY_FIELDS[field]);
     leadNotifyPending.set(id, set);
-    // A fresh move into the Sold stage also copies IT Support.
-    if (field === "stage" && (r.stage || "") === "sold") leadNotifySoldMove.add(id);
+    // A fresh move into the Sold stage also copies IT Support — and shows the
+    // on-screen confirmation IMMEDIATELY (not after the debounce), so the user
+    // always sees it the moment they mark a sale. The actual email is still
+    // queued by leadFlushNotify below.
+    if (field === "stage" && (r.stage || "") === "sold") {
+      leadNotifySoldMove.add(id);
+      if (!leadSoldToasted.has(id)) { leadSoldToasted.add(id); toast("📧 Sale update sent to PO / Admin / Calls / IT Support"); }
+    }
     if (leadNotifyTimer) clearTimeout(leadNotifyTimer);
     leadNotifyTimer = setTimeout(leadFlushNotify, 3000);
   }
@@ -5598,14 +5605,17 @@
     leadNotifyTimer = null;
     const pend = leadNotifyPending; leadNotifyPending = new Map();
     const moves = leadNotifySoldMove; leadNotifySoldMove = new Set();
-    let sent = 0, itSent = false;
+    const toasted = leadSoldToasted; leadSoldToasted = new Set();
+    let nonSoldSent = 0;
     pend.forEach((fields, id) => {
       const r = leadAll().find((x) => x.id === id);
       if (!r || LEAD_WON.indexOf(r.stage || "") < 0) return;
       const soldMove = moves.has(id);
-      if (leadSendSoldEmail(r, Array.from(fields), soldMove)) { sent++; if (soldMove) itSent = true; }
+      // Queue the email. The sold-move toast already showed instantly above, so
+      // only post-sale updates (dispatch / AWB / etc.) raise a toast here.
+      if (leadSendSoldEmail(r, Array.from(fields), soldMove) && !toasted.has(id)) nonSoldSent++;
     });
-    if (sent) toast("📧 Sale update sent to PO / Admin / Calls" + (itSent ? " / IT Support" : ""));
+    if (nonSoldSent) toast("📧 Sale update sent to PO / Admin / Calls");
   }
   function leadSendSoldEmail(r, changed, soldMove) {
     try {
