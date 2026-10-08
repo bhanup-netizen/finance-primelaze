@@ -6368,10 +6368,16 @@
   // ---- Excel import / export ----
   const LEAD_TPL_HEADERS = ["Name", "Mobile", "Company", "City", "State", "Source", "Product", "Owner", "Stage", "Remark", "Attachment link"];
   function leadDownloadTemplate() {
+    // Example row lives on its OWN sheet, clearly marked "do not import", so the
+    // blank "Leads" sheet is the one people fill — nobody accidentally uploads
+    // the sample "Priya Sharma" lead (reported: "template was not blank").
     const sample = ["Priya Sharma", "9876543210", "Glow Salon", "Pune", "Maharashtra", "Instagram", "Esthemax", "Lubdha", "new", "Enquired on Instagram — wants pricing", ""];
     if (window.XLSX) {
       const wb = window.XLSX.utils.book_new();
-      window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet([LEAD_TPL_HEADERS, sample]), "Leads");
+      // Sheet 1: blank template — headers only, ready to fill.
+      window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet([LEAD_TPL_HEADERS]), "Leads");
+      // Sheet 2: a filled-in example for reference (NOT imported).
+      window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet([["⚠ EXAMPLE ONLY — do not upload this sheet; fill the 'Leads' sheet"], LEAD_TPL_HEADERS, sample]), "Example (do not import)");
       // Reference sheet: valid Sources, States and Cities to copy from.
       const srcs = allLeadSources(), states = INDIAN_STATES.slice();
       const cityRows = [];
@@ -6384,7 +6390,9 @@
       window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.aoa_to_sheet(ref), "Valid values");
       window.XLSX.writeFile(wb, "lead_import_template.xlsx");
     } else {
-      const csv = LEAD_TPL_HEADERS.join(",") + "\n" + sample.join(",");
+      // CSV fallback: headers only (blank), with the example on a trailing
+      // comment line the importer ignores.
+      const csv = LEAD_TPL_HEADERS.join(",") + "\n";
       const a = document.createElement("a");
       a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
       a.download = "lead_import_template.csv"; a.click();
@@ -6450,10 +6458,15 @@
           rows = lines.map((l) => { const cells = l.split(","); const o = {}; hdr.forEach((h, i) => (o[h] = (cells[i] || "").trim())); return o; });
         } else {
           const wb = window.XLSX.read(e.target.result, { type: "array", cellDates: true });
-          wb.SheetNames.forEach((sn) => {
-            const ws = wb.Sheets[sn];
-            window.XLSX.utils.sheet_to_json(ws, { defval: "" }).forEach((r) => rows.push(r));
-          });
+          // Read ONLY the primary data sheet — one named "Leads" if present, else
+          // the first sheet that is not a reference/example sheet. This stops the
+          // template's "Example (do not import)" and "Valid values" sheets (and
+          // any stray tabs) from being imported as leads.
+          const pick = wb.SheetNames.find((n) => /^leads?$/i.test(String(n).trim()))
+            || wb.SheetNames.find((n) => !/example|valid\s*values|do\s*not\s*import|reference/i.test(String(n)))
+            || wb.SheetNames[0];
+          const ws = wb.Sheets[pick];
+          if (ws) rows = window.XLSX.utils.sheet_to_json(ws, { defval: "" });
         }
       } catch (err) { window.alert("Could not read that file: " + err.message); return; }
       // Upsert: a row that matches an existing lead (by Lead ID, else by mobile)
@@ -11020,6 +11033,9 @@
   }
   // Build the protected value for one passive field given the freshly re-read
   // server doc. serverData null → keep local (a failed re-read must not lose data).
+  // Returned by passiveVal when a field must be OMITTED from the write (so the
+  // {merge:true} save leaves the server's current value untouched).
+  const PV_OMIT = { __omit: true };
   function passiveVal(serverData, key, local, forceDirty) {
     if (!serverData) return local;
     if (forceDirty && forceDirty()) return local; // explicit "we changed it"
@@ -11027,8 +11043,10 @@
     try { curStr = JSON.stringify(local); } catch (e) { return local; }
     const snap = loadedFieldSnap[key];
     if (snap !== undefined && curStr === snap) {
-      // unchanged by us since load → prefer the server's current value.
-      return (key in serverData) ? serverData[key] : local;
+      // Unchanged by us since load → OMIT this field entirely. Writing our copy
+      // back (even the server's, read a moment ago) risks clobbering a change
+      // another person made in the meantime; omitting lets merge keep theirs.
+      return PV_OMIT;
     }
     return local; // we changed it → write ours
   }
@@ -11059,7 +11077,10 @@
       // clobber concurrent changes to the shared weekly-duties rule book or the
       // activity log made by other people since we loaded.
       let serverData = null;
-      try { const cur = await db.collection("edits").doc("overrides").get(); serverData = cur.exists ? (cur.data() || {}) : {}; } catch (e) { serverData = null; }
+      // Read from the SERVER (not the local cache) so a merge never starts from a
+      // stale snapshot that is missing leads/records another person just added.
+      try { const cur = await db.collection("edits").doc("overrides").get({ source: "server" }); serverData = cur.exists ? (cur.data() || {}) : {}; }
+      catch (e) { try { const c2 = await db.collection("edits").doc("overrides").get(); serverData = c2.exists ? (c2.data() || {}) : {}; } catch (e2) { serverData = null; } }
       let mergedLog;
       if (serverData) {
         // Weekly duties are NO LONGER written here — they are saved on their own
@@ -11216,12 +11237,23 @@
       }
       // Generic protection for every other shared field (see PASSIVE_FIELDS).
       const P = {};
-      PASSIVE_FIELDS.forEach(([k, get, dirty]) => { P[k] = passiveVal(serverData, k, get(), dirty); });
+      PASSIVE_FIELDS.forEach(([k, get, dirty]) => { const v = passiveVal(serverData, k, get(), dirty); if (v !== PV_OMIT) P[k] = v; });
       updateLastUpdatedUI();
       refreshPageEditNote(); // keep the per-page activity log live
       try {
-        await db.collection("edits").doc("overrides").set(
-          { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, seedVersion, hqTargetSeedVersion, weeklyDeptVersion, brochures: wBrochures, brochureVersion: wBrochureVersion, paymentAdds: wPaymentAdds, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase, paySnapshots: wPaySnapshots, payTrack: wPayTrack, leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved, updatedBy: by, updatedAt: at, log: mergedLog, ...P }, { merge: true });
+        // Build the write so a module's fields are included ONLY when THIS
+        // session actually changed them. Untouched modules are omitted: with
+        // {merge:true} the server keeps its own current value, so a save from an
+        // untouched area can never overwrite another person's data with our
+        // (possibly stale) snapshot. This is the real fix for "leads / payments /
+        // registration deleting automatically".
+        const payload = { seedVersion, hqTargetSeedVersion, weeklyDeptVersion, updatedBy: by, updatedAt: at, log: mergedLog, ...P };
+        if (invDirty) Object.assign(payload, { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
+        if (leadDirty) Object.assign(payload, { leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners });
+        if (payDirty) Object.assign(payload, { paymentAdds: wPaymentAdds, paySnapshots: wPaySnapshots, payTrack: wPayTrack, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase });
+        if (brochureDirty) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
+        if (regDirty) Object.assign(payload, { regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved });
+        await db.collection("edits").doc("overrides").set(payload, { merge: true });
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
