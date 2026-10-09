@@ -4122,7 +4122,7 @@
     const pen = rows.reduce((a, r) => a + (r.pending || 0), 0);
     const comm = rows.reduce((a, r) => a + (r.commitAmount || 0), 0);
     return `<tr class="pay-totals">
-      <td colspan="3"><b>Total — ${rows.length} record${rows.length === 1 ? "" : "s"}</b></td>
+      <td colspan="3"><b>${payFilter.month ? "Committed in " + esc(payMonthLabel(payFilter.month)) + " — " : "Total — "}${rows.length} record${rows.length === 1 ? "" : "s"}</b></td>
       <td class="num"><b>${sv ? rupee(sv) : "—"}</b></td>
       <td></td>
       <td><b>${comm ? rupee(comm) : "—"}</b></td>
