@@ -4125,7 +4125,7 @@
       <td colspan="3"><b>Total — ${rows.length} record${rows.length === 1 ? "" : "s"}</b></td>
       <td class="num"><b>${sv ? rupee(sv) : "—"}</b></td>
       <td></td>
-      <td class="num"><b>${comm ? rupee(comm) : "—"}</b></td>
+      <td><b>${comm ? rupee(comm) : "—"}</b></td>
       <td class="num"><b>${rec ? rupee(rec) : "—"}</b></td>
       <td class="num"><b>${pen ? rupee(pen) : "—"}</b></td></tr>`;
   }
