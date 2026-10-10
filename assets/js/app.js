@@ -2990,6 +2990,25 @@
   // edit can repaint ONLY that section in place (no full-page re-render → no
   // scroll jump, no lost focus).
   const esthSecGen = {};
+  // Company Price is edited as a DRAFT: changing a value updates the page in
+  // place but does NOT save to the database until the admin clicks "Update
+  // prices". esthPendingSave tracks whether there are unsaved price changes.
+  let esthPendingSave = false;
+  function esthMarkPriceDirty() { esthPendingSave = true; esthUpdateSaveBar(); }
+  function esthUpdateSaveBar() { const bar = document.getElementById("cprSaveBar"); if (bar) bar.hidden = !esthPendingSave; }
+  function esthSavePrices() {
+    saveEdits("Company prices updated");
+    esthPendingSave = false; esthUpdateSaveBar();
+    toast("✓ Prices updated & saved — now live for the team");
+  }
+  function esthDiscardPrices() {
+    if (!window.confirm("Discard your unsaved price changes and reload the last saved prices?")) return;
+    esthPendingSave = false;
+    loadEdits().then(() => { go("companyprice", true); toast("Reverted to the saved prices"); })
+      .catch(() => { esthUpdateSaveBar(); });
+  }
+  // Warn before leaving (refresh / close tab) with unsaved price changes.
+  window.addEventListener("beforeunload", (e) => { if (esthPendingSave) { e.preventDefault(); e.returnValue = ""; return ""; } });
   function wireEsthInputs() {
     document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
       const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
@@ -3008,7 +3027,8 @@
       const sm = esthStoreMid(mid, gid); // accessories share one store across markets
       const mv = (esthPricingOv[sm] = esthPricingOv[sm] || {});
       (mv[gid] = mv[gid] || {})[f] = v;
-      saveEdits("Esthemax " + sm + " " + gid + " pricing"); esthRepaintSection(mid, gid);
+      // DRAFT: update the page in place, but don't save until "Update prices".
+      esthMarkPriceDirty(); esthRepaintSection(mid, gid);
     }));
   }
   function esthRepaintSection(mid, gid) {
@@ -3052,9 +3072,14 @@
         if (/^(o1p|o2p)$/.test(el.dataset.f)) v = Math.max(1, Math.round(v));
         if (/^(o1f|o2f)$/.test(el.dataset.f)) v = Math.round(v);
         costing[el.dataset.f] = v;
-        saveEdits("Costing assumptions"); go("companyprice", true);
+        // DRAFT: re-render with the new assumption, but defer saving until
+        // "Update prices" is clicked (the bar is restored after the re-render).
+        esthPendingSave = true; go("companyprice", true);
       }));
       wireEsthInputs();
+      const sb = document.getElementById("cprSaveBtn"); if (sb) sb.onclick = esthSavePrices;
+      const dsb = document.getElementById("cprDiscardBtn"); if (dsb) dsb.onclick = esthDiscardPrices;
+      esthUpdateSaveBar();
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) — MRP-driven ------------
     // MRP is the LISTED price, the SAME for Saloon & Derma (not hiked). 1 box =
@@ -3337,7 +3362,12 @@
         <p><b>Super admin only — confidential.</b> Esthemax: <b>Landing Cost</b> (shared) and the <b>Saloon</b> &amp; <b>Derma</b> selling price lists (each with its own calculator), plus Machines &amp; Celluma.</p></div>
       ${seg}
       ${showFx ? `<div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines in <b>₹ Lakhs</b> (Quotation incl. 5% GST); Esthemax cost <b>₹ per box</b>.</div>` : ""}
-      ${body}`;
+      ${body}
+      <div id="cprSaveBar" class="cpr-savebar" hidden>
+        <span class="cpr-sb-txt">● Unsaved price changes</span>
+        <button type="button" id="cprDiscardBtn" class="cpr-sb-discard">Discard</button>
+        <button type="button" id="cprSaveBtn" class="cpr-sb-btn">✓ Update prices</button>
+      </div>`;
   }
 
   /* ================= DEMO MACHINES ================= */
@@ -10811,8 +10841,10 @@
           covNeedsReseed = true;
         }
       }
-      if (e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "allocEsth", "profitPct", "unitsMonth", "o1p", "o1f", "o2p", "o2f"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
-      if (e.esthPricing && typeof e.esthPricing === "object") { Object.keys(esthPricingOv).forEach((k) => delete esthPricingOv[k]); Object.assign(esthPricingOv, e.esthPricing); }
+      // Skip overwriting the price fields while the admin has an unsaved Company
+      // Price draft, so a background reload / remote sync can't wipe it.
+      if (!esthPendingSave && e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "allocEsth", "profitPct", "unitsMonth", "o1p", "o1f", "o2p", "o2f"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
+      if (!esthPendingSave && e.esthPricing && typeof e.esthPricing === "object") { Object.keys(esthPricingOv).forEach((k) => delete esthPricingOv[k]); Object.assign(esthPricingOv, e.esthPricing); }
       if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.

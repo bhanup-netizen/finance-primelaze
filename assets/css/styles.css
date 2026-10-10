@@ -1588,3 +1588,19 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lch-dispatched .lead-chip-dot { background: var(--lst-dispatched); } .lch-delivered .lead-chip-dot { background: var(--lst-delivered); }
 .ld-attach { margin: 6px 0 10px; }
 .ld-file { font-size: 13px; padding: 2px 0; }
+
+/* Company Price — draft "Update prices" save bar (explicit save, not auto-save) */
+.cpr-savebar {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 140; display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-left: 5px solid #e0a206; border-radius: 12px;
+  padding: 11px 16px; box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  max-width: calc(100vw - 28px);
+}
+.cpr-savebar[hidden] { display: none; }
+.cpr-sb-txt { font-weight: 800; font-size: 13.5px; color: var(--text); white-space: nowrap; }
+.cpr-sb-btn { background: var(--accent); color: #fff; border: none; border-radius: 9px; padding: 9px 16px; font-weight: 800; font-size: 13.5px; cursor: pointer; font-family: inherit; }
+.cpr-sb-btn:hover { filter: brightness(1.07); }
+.cpr-sb-discard { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 12.5px; text-decoration: underline; font-family: inherit; padding: 4px; }
+.cpr-sb-discard:hover { color: var(--text); }
