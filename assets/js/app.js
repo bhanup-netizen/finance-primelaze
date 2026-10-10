@@ -125,7 +125,7 @@
     { id: "targets", label: "HQ Targets", group: "Finance", render: renderTargets },
     { id: "incentives", label: "Incentives", group: "Finance", render: renderIncentives },
     { id: "prices", label: "Pricing", group: "Finance", render: renderPricing },
-    { id: "companyprice", label: "💰 Company Price", group: "Finance", render: renderCompanyPrice },
+    { id: "companyprice", label: "🧮 Price Calculator", group: "Finance", render: renderCompanyPrice },
     { id: "quotation", label: "🧾 Quotation", group: "Finance", render: renderQuotation },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
     { id: "weeklyFin", label: "Duties", group: "Finance", render: () => renderWeekly("Finance") },
@@ -2620,7 +2620,7 @@
       <h3 style="margin:16px 0 4px">Examples — manager with 1 / 2 / 3 reps</h3>
       <p class="muted-note">Gate passed; manager also sells ₹3 L, which counts in the team total.</p>
       <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Team</th><th class="num">Team monthly sales</th><th class="num">Manager bonus (${ESTH_MGR_PCT}%)</th></tr></thead><tbody>${mgrExamples}</tbody></table></div>
-      <div class="callout" style="margin-top:12px"><b>Plus the co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits <b>2:1</b> — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</div>
+      <div class="callout" style="margin-top:12px"><b>Plus the co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits <b>2:1</b> — rep 66%, manager 33% (the "Manager involved" tick in Price Calculator).</div>
       <div class="controls" style="margin-top:10px">
         <label class="ord-field"><span>Team monthly sales (₹)</span><input id="qmgrIn" type="number" min="0" step="100000" placeholder="e.g. 1500000" style="max-width:190px"></label>
         <div class="ord-field"><span>Manager bonus (${ESTH_MGR_PCT}%)</span><div class="ecalc-out" id="qmgrOut">—</div></div>
@@ -2628,7 +2628,7 @@
     return `
       <div class="section-head">
         <h1>Esthemax Price List — ${esc(mLabel)}</h1>
-        <p>Selling prices for the sales team. 1 unit = MRP − discount; 5+1 &amp; 10+3 are bulk offers. Incentive is the ₹ you earn per box. ${canSeeLanding() ? "(Cost/landing is in the Company Price tab.)" : ""}</p>
+        <p>Selling prices for the sales team. 1 unit = MRP − discount; 5+1 &amp; 10+3 are bulk offers. Incentive is the ₹ you earn per box. ${canSeeLanding() ? "(Cost/landing is in the Price Calculator tab.)" : ""}</p>
       </div>
       <div class="controls">
         <div class="seg">
@@ -2741,7 +2741,7 @@
         <h2>Examples — manager with 1 / 2 / 3 reps</h2>
         <p class="p-meta">Gate passed; manager also sells ₹3 L (counts in the team total).</p>
         ${pTable([{ label: "Team" }, { label: "Team monthly sales", num: 1 }, { label: "Manager bonus", num: 1 }], exBody)}
-        <p class="p-meta"><b>Co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits 2:1 — rep 66%, manager 33% (the "Manager involved" tick in Company Price).</p>
+        <p class="p-meta"><b>Co-sold split:</b> on any deal the manager personally helps close, that deal's per-box incentive splits 2:1 — rep 66%, manager 33% (the "Manager involved" tick in Price Calculator).</p>
       </div>`;
     printHtml(html);
   }
@@ -2890,7 +2890,10 @@
   // Accessories are the same products at the same price in every market, so
   // their calculator settings are stored once (under "salon") and shared by
   // Saloon & Derma — set them in either market and both show the same.
-  function esthStoreMid(mid, gid) { return gid === "acc" ? "salon" : mid; }
+  // Saloon & Derma share ONE Esthemax price rule — every market (and the shared
+  // accessories) reads/writes the same "salon" store, so both lists are always
+  // identical. Set a Derma-specific rule later by splitting this if ever needed.
+  function esthStoreMid(mid, gid) { return "salon"; }
   // Single source of truth for Esthemax selling prices. Both the super-admin
   // Company Price calculator (section()) and the salesperson Pricing view read
   // from this so the numbers always match. Returns per-row computed prices:
@@ -2998,7 +3001,7 @@
   // "Update prices" button. Saloon, Derma and Landing/cost are tracked and saved
   // SEPARATELY, so one market can be published without the others.
   const esthPending = { salon: false, doctor: false, cost: false };
-  const ESTH_STORE_LABEL = { salon: "Saloon", doctor: "Derma", cost: "Landing / cost" };
+  const ESTH_STORE_LABEL = { salon: "Esthemax", doctor: "Derma", cost: "Landing / cost" };
   const esthAnyPending = () => esthPending.salon || esthPending.doctor || esthPending.cost;
   function esthMarkPriceDirty(store) { if (store in esthPending) esthPending[store] = true; esthUpdateSaveBar(); }
   function esthUpdateSaveBar() {
@@ -3083,7 +3086,7 @@
     }
   }
   function renderCompanyPrice() {
-    if (!isSuperAdmin()) return `<div class="section-head"><h1>💰 Company Price</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
+    if (!isSuperAdmin()) return `<div class="section-head"><h1>🧮 Price Calculator</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
     if (typeof orderInit === "function") orderInit();
     const usd = (orderState && orderState.usdInr) || "—";
     const custPct = orderState && orderState.customs != null ? Math.round(orderState.customs * 100) + "%" : "—";
@@ -3203,7 +3206,7 @@
         ? { id: "acc", title: "Accessories", pack: "per unit", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
         : null;
       const allGroups = M.groups.concat(accG ? [accG] : []);
-      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · 1 unit from MRP, offers off base)</span></h2>
+      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">🧴 Esthemax price list <span class="t-muted" style="font-size:13px">(Saloon &amp; Derma — same prices · ₹ per box · 1 unit from MRP)</span></h2>
         <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${intro}
         ${allGroups.map(section).join("")}`;
     };
@@ -3369,21 +3372,21 @@
     // cost. Shared by both markets. The profit/operation-cost calculator lives in
     // each market tab (Saloon / Derma). No factory PO here.
     const landingCostBlock = () => costStructureBlock({ accessories: true, po: false });
+    // Saloon & Derma share ONE price rule now, so there is a single Esthemax
+    // Prices tab (it applies to both markets).
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="landing" class="${cprTab === "landing" ? "active" : ""}">🧴 Landing Cost</button>
-      <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
-      <button data-cprtab="derma" class="${cprTab === "derma" ? "active" : ""}">💉 Derma</button>
+      <button data-cprtab="saloon" class="${(cprTab === "saloon" || cprTab === "derma") ? "active" : ""}">🧴 Esthemax Prices</button>
       <button data-cprtab="machines" class="${cprTab === "machines" ? "active" : ""}">🔧 Machines</button>
       <button data-cprtab="celluma" class="${cprTab === "celluma" ? "active" : ""}">💡 Celluma</button>
     </div>`;
     const body = cprTab === "machines" ? machinesBlock()
       : cprTab === "celluma" ? cellumaBlock()
       : cprTab === "landing" ? landingCostBlock()
-      : cprTab === "derma" ? marketBlock("doctor")
-      : marketBlock("salon");
+      : marketBlock("salon"); // single Esthemax price list (Saloon = Derma)
     const showFx = cprTab !== "celluma"; // markets show landing/profit which use FX
     return `
-      <div class="section-head"><h1>💰 Company Price</h1>
+      <div class="section-head"><h1>🧮 Price Calculator</h1>
         <p><b>Super admin only — confidential.</b> Esthemax: <b>Landing Cost</b> (shared) and the <b>Saloon</b> &amp; <b>Derma</b> selling price lists (each with its own calculator), plus Machines &amp; Celluma.</p></div>
       ${seg}
       ${showFx ? `<div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines in <b>₹ Lakhs</b> (Quotation incl. 5% GST); Esthemax cost <b>₹ per box</b>.</div>` : ""}
