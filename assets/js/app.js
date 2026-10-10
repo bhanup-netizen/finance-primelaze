@@ -2861,6 +2861,7 @@
   // with factory (EXW), customs, landing and every selling price. Read-only view
   // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
   let cprTab = "saloon"; // Company Price sub-tab: landing | saloon | derma | machines | celluma
+  let cprEditMode = false; // Price Calculator is read-only until Edit is turned on
   // Costing assumptions (editable, saved to the shared doc; super admin only).
   const costing = { empExpMonth: 3000000, allocMachine: 60, allocCelluma: 10, allocEsth: 30, profitPct: 30, unitsMonth: 0, o1p: 10, o1f: 4, o2p: 10, o2f: 2 };
   // Per-market, PER-SECTION Esthemax pricing calculator — saved overrides:
@@ -2890,10 +2891,10 @@
   // Accessories are the same products at the same price in every market, so
   // their calculator settings are stored once (under "salon") and shared by
   // Saloon & Derma — set them in either market and both show the same.
-  // Saloon & Derma share ONE Esthemax price rule — every market (and the shared
-  // accessories) reads/writes the same "salon" store, so both lists are always
-  // identical. Set a Derma-specific rule later by splitting this if ever needed.
-  function esthStoreMid(mid, gid) { return "salon"; }
+  // Saloon & Derma have SEPARATE price rules (each market has its own store);
+  // accessories are shared (kept under "salon") as they're the same product in
+  // both markets.
+  function esthStoreMid(mid, gid) { return gid === "acc" ? "salon" : mid; }
   // Single source of truth for Esthemax selling prices. Both the super-admin
   // Company Price calculator (section()) and the salesperson Pricing view read
   // from this so the numbers always match. Returns per-row computed prices:
@@ -3001,7 +3002,7 @@
   // "Update prices" button. Saloon, Derma and Landing/cost are tracked and saved
   // SEPARATELY, so one market can be published without the others.
   const esthPending = { salon: false, doctor: false, cost: false };
-  const ESTH_STORE_LABEL = { salon: "Esthemax", doctor: "Derma", cost: "Landing / cost" };
+  const ESTH_STORE_LABEL = { salon: "Saloon", doctor: "Derma", cost: "Landing / cost" };
   const esthAnyPending = () => esthPending.salon || esthPending.doctor || esthPending.cost;
   function esthMarkPriceDirty(store) { if (store in esthPending) esthPending[store] = true; esthUpdateSaveBar(); }
   function esthUpdateSaveBar() {
@@ -3034,6 +3035,11 @@
   }
   // Warn before leaving (refresh / close tab) with unsaved price changes.
   window.addEventListener("beforeunload", (e) => { if (esthAnyPending()) { e.preventDefault(); e.returnValue = ""; return ""; } });
+  // Edit lock: Price Calculator inputs are editable only when cprEditMode is on.
+  function esthApplyEditLock() {
+    const dis = !cprEditMode;
+    document.querySelectorAll("#view .ecalc-in, #view .cost-in").forEach((el) => { el.disabled = dis; });
+  }
   function wireEsthInputs() {
     document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
       const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
@@ -3078,6 +3084,7 @@
     host.replaceWith(fresh);
     enhanceTables();      // adds sort/filter to the fresh table only
     wireEsthInputs();     // re-attach handlers (idempotent across the page)
+    esthApplyEditLock();  // keep inputs locked/unlocked per edit mode
     const wrap2 = fresh.querySelector(".table-wrap");
     if (wrap2) { wrap2.scrollLeft = sl; wrap2.scrollTop = st; }
     if (fsel) {
@@ -3103,6 +3110,9 @@
         esthPending.cost = true; go("companyprice", true);
       }));
       wireEsthInputs();
+      const et = document.getElementById("cprEditToggle");
+      if (et) et.onclick = () => { cprEditMode = !cprEditMode; go("companyprice", true); };
+      esthApplyEditLock();
       esthUpdateSaveBar();
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) — MRP-driven ------------
@@ -3206,7 +3216,7 @@
         ? { id: "acc", title: "Accessories", pack: "per unit", rows: EP.accessories.map((a, i) => [i + 1, a[0], a[1]]) }
         : null;
       const allGroups = M.groups.concat(accG ? [accG] : []);
-      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">🧴 Esthemax price list <span class="t-muted" style="font-size:13px">(Saloon &amp; Derma — same prices · ₹ per box · 1 unit from MRP)</span></h2>
+      return `<div style="margin-top:6px"><h2 style="margin:0 0 4px">${esc(M.icon || "🧴")} Esthemax — ${esc(M.label)} price list <span class="t-muted" style="font-size:13px">(₹ per box · 1 unit from MRP)</span></h2>
         <div class="callout" style="margin-top:6px">${esc(M.note || "")}</div></div>${intro}
         ${allGroups.map(section).join("")}`;
     };
@@ -3372,23 +3382,30 @@
     // cost. Shared by both markets. The profit/operation-cost calculator lives in
     // each market tab (Saloon / Derma). No factory PO here.
     const landingCostBlock = () => costStructureBlock({ accessories: true, po: false });
-    // Saloon & Derma share ONE price rule now, so there is a single Esthemax
-    // Prices tab (it applies to both markets).
+    // Saloon & Derma are SEPARATE price calculators (each its own tab + save).
     const seg = `<div class="seg" style="margin:14px 0 2px">
       <button data-cprtab="landing" class="${cprTab === "landing" ? "active" : ""}">🧴 Landing Cost</button>
-      <button data-cprtab="saloon" class="${(cprTab === "saloon" || cprTab === "derma") ? "active" : ""}">🧴 Esthemax Prices</button>
+      <button data-cprtab="saloon" class="${cprTab === "saloon" ? "active" : ""}">🧖 Saloon</button>
+      <button data-cprtab="derma" class="${cprTab === "derma" ? "active" : ""}">💉 Derma</button>
       <button data-cprtab="machines" class="${cprTab === "machines" ? "active" : ""}">🔧 Machines</button>
       <button data-cprtab="celluma" class="${cprTab === "celluma" ? "active" : ""}">💡 Celluma</button>
+    </div>`;
+    // Edit lock: prices are read-only until the admin turns on Edit mode.
+    const editBar = `<div class="controls" style="margin:4px 0 2px;align-items:center">
+      <button id="cprEditToggle" class="${cprEditMode ? "dl-btn" : "ghost-btn"}" type="button">${cprEditMode ? "✓ Done editing" : "✏ Edit prices"}</button>
+      <span class="t-muted" style="font-size:12px">${cprEditMode ? "Editing — change values, then Update (Saloon / Derma / Landing) at the bottom to save." : "View mode — click <b>Edit prices</b> to make changes."}</span>
     </div>`;
     const body = cprTab === "machines" ? machinesBlock()
       : cprTab === "celluma" ? cellumaBlock()
       : cprTab === "landing" ? landingCostBlock()
-      : marketBlock("salon"); // single Esthemax price list (Saloon = Derma)
+      : cprTab === "derma" ? marketBlock("doctor")
+      : marketBlock("salon");
     const showFx = cprTab !== "celluma"; // markets show landing/profit which use FX
     return `
       <div class="section-head"><h1>🧮 Price Calculator</h1>
         <p><b>Super admin only — confidential.</b> Esthemax: <b>Landing Cost</b> (shared) and the <b>Saloon</b> &amp; <b>Derma</b> selling price lists (each with its own calculator), plus Machines &amp; Celluma.</p></div>
       ${seg}
+      ${(cprTab === "saloon" || cprTab === "derma" || cprTab === "landing") ? editBar : ""}
       ${showFx ? `<div class="callout">FX: USD→INR <b>${esc(String(usd))}</b> · Customs <b>${esc(custPct)}</b>. &nbsp;Landing = EXW × USD→INR × (1 + customs) + transport. Machines in <b>₹ Lakhs</b> (Quotation incl. 5% GST); Esthemax cost <b>₹ per box</b>.</div>` : ""}
       ${body}
       <div id="cprSaveBar" class="cpr-savebar" hidden>
