@@ -1596,7 +1596,7 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
   background: var(--surface); border: 1px solid var(--border-strong);
   border-left: 5px solid #e0a206; border-radius: 12px;
   padding: 11px 16px; box-shadow: 0 8px 28px rgba(0,0,0,.22);
-  max-width: calc(100vw - 28px);
+  max-width: calc(100vw - 28px); flex-wrap: wrap; justify-content: center;
 }
 .cpr-savebar[hidden] { display: none; }
 .cpr-sb-txt { font-weight: 800; font-size: 13.5px; color: var(--text); white-space: nowrap; }

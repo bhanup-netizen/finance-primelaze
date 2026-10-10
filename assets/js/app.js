@@ -2880,8 +2880,9 @@
       boxes: 0,      // boxes sold per month (section-level) — jar & retail only
       incRs: 300,    // incentive = flat ₹ per sale
       u1off: 10,     // 1 unit price = MRP − this % (auto-fill when 1 unit left blank)
-      off1: 5,       // 5+1 price = 1-unit base price − this %
-      off2: 10,      // 10+3 price = 1-unit base price − this %
+      off1: 5,       // 5+1 price = (base OR MRP) − this %
+      off2: 10,      // 10+3 price = (base OR MRP) − this %
+      offFrom: "base", // offers computed off the 1-unit "base" price, or off "mrp"
     };
     const mv = esthPricingOv[esthStoreMid(mid, gid)];
     return Object.assign(base, ESTH_SECTION_DEFAULTS[gid] || {}, (mv && mv[gid]) || {});
@@ -2919,6 +2920,7 @@
     const isAcc = gid === "acc";
     const useBoxes = (gid === "hydro" || gid === "retail");
     const incRs = +c.incRs || 0, u1off = +c.u1off || 0, off1 = +c.off1 || 0, off2 = +c.off2 || 0;
+    const offFrom = c.offFrom === "mrp" ? "mrp" : "base"; // offers off base (1-unit) or MRP
     const mgr = !!(+c.mgr);
     const sExp = +c.expMo || 0, sBoxes = +c.boxes || 0;
     const opCost = useBoxes && sBoxes > 0 ? sExp / sBoxes : 0;
@@ -2937,15 +2939,16 @@
       const auto1 = mrpEff > 0 ? mrpEff * (1 - u1off / 100) : 0;
       const base1 = u1typed > 0 ? u1typed : auto1;
       const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
+      const offBaseVal = offFrom === "mrp" ? mrpEff : base1; // offers off MRP or the 1-unit base
       return {
         idx, sr: r[0], name: r[1], mrp: mrpEff || null, cost,
         unit: base1 > 0 ? base1 : null,
-        p5: base1 > 0 ? base1 * (1 - off1 / 100) : null,
-        p10: base1 > 0 ? base1 * (1 - off2 / 100) : null,
+        p5: offBaseVal > 0 ? offBaseVal * (1 - off1 / 100) : null,
+        p10: offBaseVal > 0 ? offBaseVal * (1 - off2 / 100) : null,
         inc: rowInc, typed: u1typed > 0,
       };
     });
-    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, u1off, off1, off2, mgr, opCost, lbl1, lbl2, hasOffer2, rows };
+    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, u1off, off1, off2, offFrom, mgr, opCost, lbl1, lbl2, hasOffer2, rows };
   }
   // Sales price list sections — Foot Mask is intentionally excluded here and
   // kept only in the super-admin Company Price tab.
@@ -2991,29 +2994,49 @@
   // scroll jump, no lost focus).
   const esthSecGen = {};
   // Company Price is edited as a DRAFT: changing a value updates the page in
-  // place but does NOT save to the database until the admin clicks "Update
-  // prices". esthPendingSave tracks whether there are unsaved price changes.
-  let esthPendingSave = false;
-  function esthMarkPriceDirty() { esthPendingSave = true; esthUpdateSaveBar(); }
-  function esthUpdateSaveBar() { const bar = document.getElementById("cprSaveBar"); if (bar) bar.hidden = !esthPendingSave; }
-  function esthSavePrices() {
-    saveEdits("Company prices updated");
-    esthPendingSave = false; esthUpdateSaveBar();
-    toast("✓ Prices updated & saved — now live for the team");
+  // place but does NOT save to the database until the admin clicks that market's
+  // "Update prices" button. Saloon, Derma and Landing/cost are tracked and saved
+  // SEPARATELY, so one market can be published without the others.
+  const esthPending = { salon: false, doctor: false, cost: false };
+  const ESTH_STORE_LABEL = { salon: "Saloon", doctor: "Derma", cost: "Landing / cost" };
+  const esthAnyPending = () => esthPending.salon || esthPending.doctor || esthPending.cost;
+  function esthMarkPriceDirty(store) { if (store in esthPending) esthPending[store] = true; esthUpdateSaveBar(); }
+  function esthUpdateSaveBar() {
+    const bar = document.getElementById("cprSaveBar"); if (!bar) return;
+    const btns = Object.keys(esthPending).filter((s) => esthPending[s])
+      .map((s) => `<button type="button" class="cpr-sb-btn" data-cprsave="${s}">✓ Update ${esc(ESTH_STORE_LABEL[s])} prices</button>`);
+    if (!btns.length) { bar.hidden = true; bar.innerHTML = ""; return; }
+    bar.innerHTML = `<span class="cpr-sb-txt">● Unsaved changes</span>${btns.join("")}<button type="button" class="cpr-sb-discard" id="cprDiscardBtn">Discard all</button>`;
+    bar.hidden = false;
+    bar.querySelectorAll("[data-cprsave]").forEach((b) => (b.onclick = () => esthSaveMarket(b.dataset.cprsave)));
+    const d = document.getElementById("cprDiscardBtn"); if (d) d.onclick = esthDiscardPrices;
+  }
+  async function esthSaveMarket(store) {
+    if (!db) { toast("✕ Not signed in", "bad"); return; }
+    try {
+      const payload = { updatedBy: (sessionUser && sessionUser.email) || "", updatedAt: Date.now() };
+      // Merge ONLY this market's subtree, so saving Saloon never touches Derma.
+      if (store === "cost") payload.costingAssump = Object.assign({}, costing);
+      else payload.esthPricing = { [store]: esthPricingOv[store] || {} };
+      await db.collection("edits").doc("overrides").set(payload, { merge: true });
+      esthPending[store] = false; esthUpdateSaveBar();
+      toast("✓ " + (ESTH_STORE_LABEL[store] || "Prices") + " updated & saved — now live for the team");
+    } catch (e) { toast("✕ NOT saved: " + ((e && (e.code || e.message)) || e), "bad"); }
   }
   function esthDiscardPrices() {
-    if (!window.confirm("Discard your unsaved price changes and reload the last saved prices?")) return;
-    esthPendingSave = false;
+    if (!window.confirm("Discard ALL unsaved price changes and reload the last saved prices?")) return;
+    esthPending.salon = esthPending.doctor = esthPending.cost = false;
     loadEdits().then(() => { go("companyprice", true); toast("Reverted to the saved prices"); })
       .catch(() => { esthUpdateSaveBar(); });
   }
   // Warn before leaving (refresh / close tab) with unsaved price changes.
-  window.addEventListener("beforeunload", (e) => { if (esthPendingSave) { e.preventDefault(); e.returnValue = ""; return ""; } });
+  window.addEventListener("beforeunload", (e) => { if (esthAnyPending()) { e.preventDefault(); e.returnValue = ""; return ""; } });
   function wireEsthInputs() {
     document.querySelectorAll(".ecalc-in[data-ecalc]").forEach((el) => (el.onchange = () => {
       const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
       let v;
       if (el.type === "checkbox") { v = el.checked ? 1 : 0; }
+      else if (f === "offFrom") { v = el.value === "mrp" ? "mrp" : "base"; } // string setting (offers off base/MRP)
       else {
         v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
         if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
@@ -3024,11 +3047,11 @@
         else if (/^u1\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row 1-unit base price ≥ 0
         else if (/^(off1|off2|u1off)$/.test(f)) v = Math.max(0, Math.min(100, v)); // discount % 0–100
       }
-      const sm = esthStoreMid(mid, gid); // accessories share one store across markets
+      const sm = esthStoreMid(mid, gid); // accessories share one store across markets (→ Saloon)
       const mv = (esthPricingOv[sm] = esthPricingOv[sm] || {});
       (mv[gid] = mv[gid] || {})[f] = v;
-      // DRAFT: update the page in place, but don't save until "Update prices".
-      esthMarkPriceDirty(); esthRepaintSection(mid, gid);
+      // DRAFT: update the page in place; mark THIS market dirty; save on its button.
+      esthMarkPriceDirty(sm); esthRepaintSection(mid, gid);
     }));
   }
   function esthRepaintSection(mid, gid) {
@@ -3072,13 +3095,11 @@
         if (/^(o1p|o2p)$/.test(el.dataset.f)) v = Math.max(1, Math.round(v));
         if (/^(o1f|o2f)$/.test(el.dataset.f)) v = Math.round(v);
         costing[el.dataset.f] = v;
-        // DRAFT: re-render with the new assumption, but defer saving until
-        // "Update prices" is clicked (the bar is restored after the re-render).
-        esthPendingSave = true; go("companyprice", true);
+        // DRAFT: re-render with the new assumption, but defer saving until the
+        // "Update Landing / cost prices" button is clicked (bar restored after).
+        esthPending.cost = true; go("companyprice", true);
       }));
       wireEsthInputs();
-      const sb = document.getElementById("cprSaveBtn"); if (sb) sb.onclick = esthSavePrices;
-      const dsb = document.getElementById("cprDiscardBtn"); if (dsb) dsb.onclick = esthDiscardPrices;
       esthUpdateSaveBar();
     }, 0);
     // ---- Esthemax market price list (Saloon / Derma) — MRP-driven ------------
@@ -3116,8 +3137,10 @@
         const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
         const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
         const u1off = +c.u1off || 0;   // 1 unit = MRP − this % (auto-fill)
-        const off1 = +c.off1 || 0;     // 5+1 = base − this %
-        const off2 = +c.off2 || 0;     // 10+3 = base − this %
+        const off1 = +c.off1 || 0;     // 5+1 = (base or MRP) − this %
+        const off2 = +c.off2 || 0;     // 10+3 = (base or MRP) − this %
+        const offFrom = c.offFrom === "mrp" ? "mrp" : "base"; // offers off base (1-unit) or MRP
+        const offLbl = offFrom === "mrp" ? "MRP" : "base";
         // Second bulk tier exists only when it has free boxes (retail = 5+2 only,
         // so its tier-2 free count is 0 and the 10+3 column/controls drop out).
         const hasOffer2 = (+c.o2f > 0);
@@ -3151,8 +3174,9 @@
           const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
           const u1Hint = base1 > 0 ? `<div style="font-size:11px" class="t-muted">${u1typed > 0 ? "typed" : "MRP −" + u1off + "%"}</div><div class="cpx-inc">${incLineOf(rowInc)}</div>` : "";
           const unitCell = `<td class="num">${u1In}${u1Hint}</td>`;
-          const cell5 = offerCell(base1 > 0 ? base1 * (1 - off1 / 100) : 0, off1, rowInc);
-          const cell10 = offerCell(base1 > 0 ? base1 * (1 - off2 / 100) : 0, off2, rowInc);
+          const offBaseVal = offFrom === "mrp" ? mrpEff : base1; // offers off MRP or the 1-unit base
+          const cell5 = offerCell(offBaseVal > 0 ? offBaseVal * (1 - off1 / 100) : 0, off1, rowInc);
+          const cell10 = offerCell(offBaseVal > 0 ? offBaseVal * (1 - off2 / 100) : 0, off2, rowInc);
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
@@ -3167,8 +3191,9 @@
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)${hasOffer2 ? "" : " — off (set free > 0 to add)"}</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
-          <label class="ord-field"><span>${esc(lbl1)} = base − %</span>${num("off1", c.off1)}</label>
-          ${hasOffer2 ? `<label class="ord-field"><span>${esc(lbl2)} = base − %</span>${num("off2", c.off2)}</label>` : ""}
+          <label class="ord-field"><span>Offers calculated off</span><select class="ecalc-in" data-ecalc="${mid}:${gid}:offFrom"><option value="base"${offFrom === "base" ? " selected" : ""}>1-unit base price</option><option value="mrp"${offFrom === "mrp" ? " selected" : ""}>MRP</option></select></label>
+          <label class="ord-field"><span>${esc(lbl1)} = ${offLbl} − %</span>${num("off1", c.off1)}</label>
+          ${hasOffer2 ? `<label class="ord-field"><span>${esc(lbl2)} = ${offLbl} − %</span>${num("off2", c.off2)}</label>` : ""}
         </div>`;
         // Register a generator so an edit repaints only this section in place.
         esthSecGen[mid + ":" + gid] = () => section(g);
@@ -10843,8 +10868,8 @@
       }
       // Skip overwriting the price fields while the admin has an unsaved Company
       // Price draft, so a background reload / remote sync can't wipe it.
-      if (!esthPendingSave && e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "allocEsth", "profitPct", "unitsMonth", "o1p", "o1f", "o2p", "o2f"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
-      if (!esthPendingSave && e.esthPricing && typeof e.esthPricing === "object") { Object.keys(esthPricingOv).forEach((k) => delete esthPricingOv[k]); Object.assign(esthPricingOv, e.esthPricing); }
+      if (!(esthPending.cost) && e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "allocEsth", "profitPct", "unitsMonth", "o1p", "o1f", "o2p", "o2f"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
+      if (!(esthPending.salon || esthPending.doctor) && e.esthPricing && typeof e.esthPricing === "object") { Object.keys(esthPricingOv).forEach((k) => delete esthPricingOv[k]); Object.assign(esthPricingOv, e.esthPricing); }
       if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.
@@ -11067,8 +11092,9 @@
     ["socPageAdds", () => socPageAdds], ["socPageHidden", () => socPageHidden],
     ["mktDoc", () => mktDoc], ["induction", () => induction], ["attendance", () => attendance],
     ["coverage", () => coverage, () => covDirty],
-    ["costingAssump", () => costing],
-    ["esthPricing", () => esthPricingOv],
+    // NOTE: costingAssump & esthPricing are intentionally NOT here — Company
+    // Price is a draft saved explicitly per market via esthSaveMarket(), so a
+    // generic save from another module must never auto-publish an unsaved draft.
   ];
   function snapshotPassiveFields() {
     PASSIVE_FIELDS.forEach(([k, get]) => { try { loadedFieldSnap[k] = JSON.stringify(get()); } catch (e) { loadedFieldSnap[k] = undefined; } });
