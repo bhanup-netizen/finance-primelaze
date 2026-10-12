@@ -2543,6 +2543,8 @@
       if (edl) edl.onclick = () => downloadEsthemaxSalesPrice();
       const epdf = document.getElementById("esthPricePdf");
       if (epdf) epdf.onclick = () => downloadEsthemaxPdf();
+      const ipdf = document.getElementById("esthIncPdf");
+      if (ipdf) ipdf.onclick = () => downloadEsthemaxIncentivePdf();
       const mpdf = document.getElementById("esthMgrPdf");
       if (mpdf) mpdf.onclick = () => downloadEsthemaxManagerPdf();
       document.querySelectorAll("[data-mkt]").forEach((b) => {
@@ -2564,21 +2566,26 @@
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
     const adm = false; // cost / landing is shown only in the Company Price tab
     const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+    // Prices are GST-inclusive (18%). Show the price excl. GST (÷ 1.18) too.
+    const exGst = (n) => n == null ? null : n / (1 + ESTH_GST_RATE);
+    const gcell = (n, bold) => n == null
+      ? `<td class="num t-muted">—</td>`
+      : `<td class="num">${bold ? `<b>${rup(n)}</b>` : rup(n)}<div class="t-muted" style="font-size:11px">excl GST ${rup(exGst(n))}</div></td>`;
     const sectionTable = (gid) => {
       const S = esthComputeSection(mkt, gid);
       if (!S || !S.rows.length) return "";
       const cols = ["#", "Product", "MRP"].concat(adm ? ["Cost"] : [])
-        .concat(["1 unit", S.lbl1]).concat(S.hasOffer2 ? [S.lbl2] : []).concat(["Incentive ₹"]);
+        .concat(["1 unit", S.lbl1]).concat(S.hasOffer2 ? [S.lbl2] : []).concat(S.hasOffer3 ? [S.lbl3] : []);
       const head = cols.map((x, i) => `<th class="${i >= 2 ? "num" : (i === 0 ? "num" : "")}">${esc(x)}</th>`).join("");
       const body = S.rows.map((r) => `<tr>
         <td class="num t-muted">${r.sr}</td>
         <td class="t-name">${esc(r.name)}</td>
-        <td class="num t-muted">${rup(r.mrp)}</td>
+        ${gcell(r.mrp)}
         ${adm ? `<td class="num t-muted">${rup(r.cost)}</td>` : ""}
-        <td class="num"><b>${rup(r.unit)}</b></td>
-        <td class="num">${rup(r.p5)}</td>
-        ${S.hasOffer2 ? `<td class="num">${rup(r.p10)}</td>` : ""}
-        <td class="num cpx-inc">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
+        ${gcell(r.unit, true)}
+        ${gcell(r.p5)}
+        ${S.hasOffer2 ? gcell(r.p10) : ""}
+        ${S.hasOffer3 ? gcell(r.p15) : ""}</tr>`).join("");
       return `<div class="block" style="margin-top:14px"><h2 style="margin:0 0 4px">${esc(S.title)} <span class="t-muted" style="font-size:12px">(${esc(S.pack)})</span></h2>
         <div class="table-wrap"><table class="cprice-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
     };
@@ -2589,7 +2596,7 @@
       • Your <b>incentive is released only after the customer's payment is realised</b> (credited to the company), <b>not</b> at order booking or dispatch.<br>
       • Incentive shown is the flat <b>₹ per unit/box sold</b> for that order type.${anyMgr ? " When a manager is involved, it splits <b>2:1</b> — you 66%, manager 33%." : ""}<br>
       • <b>Plus a monthly volume bonus</b> on your total Esthemax sales (see the ladder below).</div>`;
-    const offersNote = `<div class="muted-note" style="margin-top:8px"><b>How to read:</b> <b>1 unit</b> is the single-box price (MRP − 10%). <b>5+1 / 10+3</b> are buy-and-free bulk offers off MRP (e.g. buy 5 get 1 free) — the figure shown is the <b>effective price per box</b>, with the free box already included (so 5+1 = MRP × 5⁄6). Prices are per box in ₹.</div>`;
+    const offersNote = `<div class="muted-note" style="margin-top:8px"><b>How to read:</b> <b>1 unit</b> = MRP − 10%; <b>5+1 / 10+3</b> are buy-and-free bulk offers off MRP (the figure is the <b>effective price per box</b> with the free box already included, so 5+1 = MRP × 5⁄6). All prices are <b>per box, incl. 18% GST</b>; the small grey figure under each is the price <b>excl. GST</b>. <b>Incentive &amp; bonus are in the separate Incentive &amp; Bonus PDF.</b></div>`;
     // Monthly sales-volume bonus ladder (cumulative) + a quick calculator.
     const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
     const vbRows = ESTH_VOLUME_BONUS.map((s) => `<tr><td>Reach ${Lk(s.min)} / month</td><td class="num"><b>${rupQ(s.bonus)}</b></td></tr>`).join("");
@@ -2628,7 +2635,7 @@
     return `
       <div class="section-head">
         <h1>Esthemax Price List — ${esc(mLabel)}</h1>
-        <p>Selling prices for the sales team. 1 unit = MRP − 10%; 5+1 &amp; 10+3 are bulk offers off MRP (price reflects the free box). Incentive is the ₹ you earn per box. ${canSeeLanding() ? "(Cost/landing is in the Price Calculator tab.)" : ""}</p>
+        <p>Selling prices (per box, ₹). 1 unit = MRP − 10%; 5+1 &amp; 10+3 are bulk offers off MRP (price reflects the free box). <b>Prices are incl. 18% GST; the grey figure under each is the price excl. GST.</b> Incentive &amp; bonus are in the separate Incentive &amp; Bonus PDF. ${canSeeLanding() ? "(Cost/landing is in the Price Calculator tab.)" : ""}</p>
       </div>
       <div class="controls">
         <div class="seg">
@@ -2636,37 +2643,46 @@
           <button data-mkt="doctor" class="${mkt === "doctor" ? "active" : ""}">Derma (Doctor)</button>
         </div>
         <div class="hq-actions">
-          <button id="esthPriceDl" class="dl-btn" type="button" title="Download the salesperson price list (Excel)">⬇ Excel</button>
-          <button id="esthPricePdf" class="dl-btn" type="button" title="Download the salesperson price list + incentive (PDF)">⬇ Salesperson PDF</button>
+          <button id="esthPriceDl" class="dl-btn" type="button" title="Download the price list — both incl. & excl. GST (Excel)">⬇ Excel</button>
+          <button id="esthPricePdf" class="dl-btn" type="button" title="Download the price list — both incl. & excl. GST (PDF)">⬇ Price List PDF</button>
+          <button id="esthIncPdf" class="dl-btn" type="button" title="Download the incentive &amp; volume-bonus plan (PDF)">⬇ Incentive &amp; Bonus PDF</button>
           ${canSeeLanding() ? `<button id="esthMgrPdf" class="dl-btn" type="button" title="Download the Manager incentive plan (PDF)">⬇ Manager PDF</button>` : ""}
         </div>
       </div>
-      ${policy}${offersNote}
-      ${ESTH_SALES_SECTIONS.map(sectionTable).join("")}
-      ${volumeBlock}
-      ${managerBlock}`;
+      ${offersNote}
+      ${ESTH_SALES_SECTIONS.map(sectionTable).join("")}`;
   }
   // Download the computed Esthemax selling-price list for the current market.
   function downloadEsthemaxSalesPrice() {
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
     const adm = false; // selling prices only — cost stays in Company Price
     const r0 = (n) => n == null ? "" : Math.round(n);
-    const aoa = [["Esthemax Price List — " + mLabel + " · all orders 100% advance; incentive released only after payment realised"]];
+    const ex0 = (n) => n == null ? "" : Math.round(n / (1 + ESTH_GST_RATE)); // price excl. 18% GST
+    const aoa = [["Esthemax Price List — " + mLabel + " · prices per box; incl. & excl. 18% GST (incentive & bonus are in the separate Incentive PDF)"]];
     ESTH_SALES_SECTIONS.forEach((gid) => {
       const S = esthComputeSection(mkt, gid);
       if (!S || !S.rows.length) return;
       aoa.push([]);
       aoa.push([S.title + " (" + S.pack + ")"]);
-      aoa.push(["#", "Product", "MRP"].concat(adm ? ["Cost"] : []).concat(["1 unit", S.lbl1]).concat(S.hasOffer2 ? [S.lbl2] : []).concat(["Incentive (per box)"]));
+      aoa.push(["#", "Product",
+        "MRP (incl GST)", "MRP (excl GST)",
+        "1 unit (incl GST)", "1 unit (excl GST)",
+        S.lbl1 + " (incl GST)", S.lbl1 + " (excl GST)"]
+        .concat(S.hasOffer2 ? [S.lbl2 + " (incl GST)", S.lbl2 + " (excl GST)"] : [])
+        .concat(S.hasOffer3 ? [S.lbl3 + " (incl GST)", S.lbl3 + " (excl GST)"] : []));
       S.rows.forEach((r) => {
-        aoa.push([r.sr, r.name, r0(r.mrp)].concat(adm ? [r0(r.cost)] : [])
-          .concat([r0(r.unit), r0(r.p5)]).concat(S.hasOffer2 ? [r0(r.p10)] : []).concat([r.unit != null ? r0(r.inc) : ""]));
+        aoa.push([r.sr, r.name,
+          r0(r.mrp), ex0(r.mrp),
+          r0(r.unit), ex0(r.unit),
+          r0(r.p5), ex0(r.p5)]
+          .concat(S.hasOffer2 ? [r0(r.p10), ex0(r.p10)] : [])
+          .concat(S.hasOffer3 ? [r0(r.p15), ex0(r.p15)] : []));
       });
     });
     const fname = ("Esthemax_" + mLabel + "_price_list").replace(/[^\w]+/g, "_") + ".xlsx";
     if (window.XLSX) {
       const ws = window.XLSX.utils.aoa_to_sheet(aoa);
-      ws["!cols"] = [{ wch: 5 }, { wch: 34 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+      ws["!cols"] = [{ wch: 5 }, { wch: 34 }, { wch: 15 }, { wch: 15 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
       const wb = window.XLSX.utils.book_new();
       window.XLSX.utils.book_append_sheet(wb, ws, "Prices");
       window.XLSX.writeFile(wb, fname);
@@ -2679,33 +2695,59 @@
     }
   }
   // Printable PDF of the Esthemax selling-price list (current market).
+  // Prices only — both incl. & excl. 18% GST. Incentive & bonus are a separate PDF.
   function downloadEsthemaxPdf() {
     const mLabel = mkt === "salon" ? "Saloon" : "Derma";
     const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
     const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+    // Each price shows the GST-inclusive figure with the excl.-GST price beneath.
+    const pc = (n, bold) => n == null ? "—"
+      : `${bold ? `<b>${rup(n)}</b>` : rup(n)}<div style="font-size:10px;color:#777">excl GST ${rup(n / (1 + ESTH_GST_RATE))}</div>`;
     const blocks = ESTH_SALES_SECTIONS.map((gid) => {
       const S = esthComputeSection(mkt, gid);
       if (!S || !S.rows.length) return "";
       const head = [{ label: "#", num: 1 }, { label: "Product" }, { label: "MRP", num: 1 },
         { label: "1 unit", num: 1 }, { label: S.lbl1, num: 1 }]
         .concat(S.hasOffer2 ? [{ label: S.lbl2, num: 1 }] : [])
-        .concat([{ label: "Incentive ₹", num: 1 }]);
+        .concat(S.hasOffer3 ? [{ label: S.lbl3, num: 1 }] : []);
       const body = S.rows.map((r) => `<tr><td class="num">${r.sr}</td><td>${esc(r.name)}</td>
-        <td class="num">${rup(r.mrp)}</td><td class="num"><b>${rup(r.unit)}</b></td>
-        <td class="num">${rup(r.p5)}</td>${S.hasOffer2 ? `<td class="num">${rup(r.p10)}</td>` : ""}
-        <td class="num">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
+        <td class="num">${pc(r.mrp)}</td><td class="num">${pc(r.unit, true)}</td>
+        <td class="num">${pc(r.p5)}</td>${S.hasOffer2 ? `<td class="num">${pc(r.p10)}</td>` : ""}${S.hasOffer3 ? `<td class="num">${pc(r.p15)}</td>` : ""}</tr>`).join("");
       return `<h2>${esc(S.title)} <span style="font-weight:400;font-size:12px">(${esc(S.pack)})</span></h2>${pTable(head, body)}`;
     }).join("");
-    // Monthly volume-bonus ladder (cumulative) for the PDF.
-    const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
-    const vbBody = ESTH_VOLUME_BONUS.map((s) => `<tr><td>Reach ${Lk(s.min)} / month</td><td class="num"><b>${rup(s.bonus)}</b></td></tr>`).join("");
-    const vbTable = pTable([{ label: "Monthly sales reached" }, { label: "Bonus", num: 1 }], vbBody);
     const html = `
       <div class="p-section">
         <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Price List</h1>
         <div class="p-sub">${esc(mLabel)} market · per box (₹)</div>
         <p class="p-meta">Generated ${esc(stamp)}</p>
-        <p class="p-meta"><b>Payment &amp; incentive:</b> all orders are 100% advance — dispatch only after payment received. Incentive (₹ per box) is released only after the customer's payment is realised, not at booking/dispatch. 1 unit = MRP − 10%; 5+1 / 10+3 are buy-and-free bulk offers off MRP — the figure is the effective price per box with the free box already included (5+1 = MRP × 5⁄6).</p>
+        <p class="p-meta"><b>Prices are per box, incl. 18% GST;</b> the smaller figure under each is the price <b>excl. GST</b> (÷ 1.18). 1 unit = MRP − 10%; 5+1 / 10+3 are buy-and-free bulk offers off MRP — the figure is the effective price per box with the free box already included (5+1 = MRP × 5⁄6). All orders are 100% advance — dispatch only after payment received. <b>Incentive &amp; bonus are in the separate Incentive &amp; Bonus PDF.</b></p>
+        ${blocks}
+      </div>`;
+    printHtml(html);
+  }
+
+  // Separate PDF: the salesperson incentive (₹ per box) + the monthly volume
+  // bonus ladder. Kept OUT of the price list so the list is prices only.
+  function downloadEsthemaxIncentivePdf() {
+    const mLabel = mkt === "salon" ? "Saloon" : "Derma";
+    const stamp = new Date().toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
+    const rup = (n) => n == null ? "—" : "₹" + Math.round(n).toLocaleString("en-IN");
+    const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
+    const blocks = ESTH_SALES_SECTIONS.map((gid) => {
+      const S = esthComputeSection(mkt, gid);
+      if (!S || !S.rows.length) return "";
+      const body = S.rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="num">${r.unit != null ? rup(r.inc) : "—"}</td></tr>`).join("");
+      return `<h2>${esc(S.title)} <span style="font-weight:400;font-size:12px">(${esc(S.pack)})</span></h2>${pTable([{ label: "Product" }, { label: "Incentive ₹ / box", num: 1 }], body)}`;
+    }).join("");
+    const vbBody = ESTH_VOLUME_BONUS.map((s) => `<tr><td>Reach ${Lk(s.min)} / month</td><td class="num"><b>${rup(s.bonus)}</b></td></tr>`).join("");
+    const vbTable = pTable([{ label: "Monthly sales reached" }, { label: "Bonus", num: 1 }], vbBody);
+    const html = `
+      <div class="p-section">
+        <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Incentive &amp; Bonus</h1>
+        <div class="p-sub">${esc(mLabel)} market · salesperson plan (₹)</div>
+        <p class="p-meta">Generated ${esc(stamp)}</p>
+        <p class="p-meta"><b>Payment &amp; incentive:</b> all orders are 100% advance — dispatch only after payment received. The per-box incentive is released only after the customer's payment is realised, not at booking/dispatch. When a manager is involved, the per-box incentive splits 2:1 — you 66%, manager 33%.</p>
+        <h2>Per-box incentive</h2>
         ${blocks}
         <h2>Monthly volume bonus <span style="font-weight:400;font-size:12px">(on top of the per-box incentive)</span></h2>
         <p class="p-meta">Earned on total monthly Esthemax sales — you get the bonus for the highest slab you reach (not added up). Released only after the customers' payments are realised.</p>
@@ -2873,16 +2915,28 @@
   const ESTH_SECTION_DEFAULTS = {
     retail: { o1p: 5, o1f: 2, o2p: 0, o2f: 0 },
   };
+  // Per-MARKET offer configuration (overrides the section defaults for that
+  // market only). Derma (doctor) runs the new 3-tier structure — 3+1, 5+2,
+  // 10+5 — on both jar & retail; Saloon keeps its own 5+1 / 10+3.
+  const ESTH_MARKET_DEFAULTS = {
+    doctor: {
+      hydro:  { o1p: 3, o1f: 1, o2p: 5, o2f: 2, o3p: 10, o3f: 5, u1off: 10 },
+      retail: { o1p: 3, o1f: 1, o2p: 5, o2f: 2, o3p: 10, o3f: 5, u1off: 10 },
+    },
+  };
   function esthCalc(mid, gid) {
     const base = {
       o1p: 5, o1f: 1, o2p: 10, o2f: 3,
+      o3p: 0, o3f: 0, // optional THIRD bulk tier (off unless its free count > 0)
       expMo: 0,      // company/section expense per month (₹) — jar & retail only
       boxes: 0,      // boxes sold per month (section-level) — jar & retail only
       incRs: 300,    // incentive = flat ₹ per sale
       u1off: 10,     // single-unit price = MRP − this % (editable; a typed per-row price overrides it)
     };
-    const mv = esthPricingOv[esthStoreMid(mid, gid)];
-    return Object.assign(base, ESTH_SECTION_DEFAULTS[gid] || {}, (mv && mv[gid]) || {});
+    const sm = esthStoreMid(mid, gid);
+    const mv = esthPricingOv[sm];
+    const mktDef = (ESTH_MARKET_DEFAULTS[sm] && ESTH_MARKET_DEFAULTS[sm][gid]) || {};
+    return Object.assign(base, ESTH_SECTION_DEFAULTS[gid] || {}, mktDef, (mv && mv[gid]) || {});
   }
   // Accessories are the same products at the same price in every market, so
   // their calculator settings are stored once (under "salon") and shared by
@@ -2926,24 +2980,26 @@
     const secLands = g.rows.map((r) => landingOf(r[1])).filter((l) => l != null);
     const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
     const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
-    const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
-    // Free-box effect: in a 5+1 the customer pays for 5 and gets 6, so the
+    const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f, lbl3 = c.o3p + "+" + c.o3f;
+    // Free-box effect: in a 3+1 the customer pays for 3 and gets 4, so the
     // EFFECTIVE price per box = MRP × paid/(paid+free). The buy/free counts are
     // the whole deal — there is no extra discount on top.
     const o1pN = Math.max(1, +c.o1p || 1), o1fN = Math.max(0, +c.o1f || 0);
     const o2pN = Math.max(1, +c.o2p || 1), o2fN = Math.max(0, +c.o2f || 0);
-    const free1 = o1pN / (o1pN + o1fN), free2 = o2pN / (o2pN + o2fN);
-    // A section has a SECOND bulk offer only when its tier-2 free-box count > 0.
-    // Retail is set to 0 (5+2 only), so its second-offer column is dropped.
+    const o3pN = Math.max(1, +c.o3p || 1), o3fN = Math.max(0, +c.o3f || 0);
+    const free1 = o1pN / (o1pN + o1fN), free2 = o2pN / (o2pN + o2fN), free3 = o3pN / (o3pN + o3fN);
+    // A bulk tier shows only when its free-box count > 0. Saloon runs two tiers
+    // (5+1 / 10+3); Derma runs three (3+1 / 5+2 / 10+5); Retail-Saloon one (5+2).
     const hasOffer2 = (+c.o2f > 0);
+    const hasOffer3 = (+c.o3f > 0);
     const rows = g.rows.map((r, idx) => {
       const land = landingOf(r[1]);
       const cost = land != null ? land + opCostFor(land) : null;
       const mrpEff = c["mrp" + idx] != null ? +c["mrp" + idx] : (+r[2] || 0);
       const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
       // Single unit = a typed per-row price if set, else MRP − u1off% (10% off
-      // MRP by default). Bulk offers are the free-box effect OFF MRP — in a 5+1
-      // the customer pays for 5 and gets 6, so the rate = MRP × 5/6.
+      // MRP by default). Bulk offers are the free-box effect OFF MRP — in a 3+1
+      // the customer pays for 3 and gets 4, so the rate = MRP × 3/4.
       const u1typed = c["u1" + idx];
       const unit = (u1typed != null && +u1typed > 0)
         ? +u1typed
@@ -2953,10 +3009,11 @@
         unit,
         p5: mrpEff > 0 ? mrpEff * free1 : null,
         p10: mrpEff > 0 ? mrpEff * free2 : null,
+        p15: mrpEff > 0 ? mrpEff * free3 : null,
         inc: rowInc, typed: (u1typed != null && +u1typed > 0),
       };
     });
-    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, mgr, opCost, lbl1, lbl2, hasOffer2, rows };
+    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, mgr, opCost, lbl1, lbl2, lbl3, hasOffer2, hasOffer3, rows };
   }
   // Sales price list sections — Foot Mask is intentionally excluded here and
   // kept only in the super-admin Company Price tab.
@@ -2983,6 +3040,7 @@
   // team size, 1 person or 10. Every order is 100% advance, so "sales" = money
   // already received. Gated: every rep must reach 70% of target (new joinees
   // exempt for their first 3 months).
+  const ESTH_GST_RATE = 0.18;       // GST on Esthemax products — all list prices are GST-inclusive; excl. = price ÷ 1.18
   const ESTH_REP_TARGET = 500000;   // minimum monthly target per rep (₹5 L — jar + retail + accessories combined)
   const ESTH_MGR_PCT = 1;           // manager team bonus = this % of the team's monthly sales
   const ESTH_GATE_PCT = 70;         // a rep must hit this % of target to count / be retained
@@ -3052,8 +3110,8 @@
       if (el.type === "checkbox") { v = el.checked ? 1 : 0; }
       else {
         v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
-        if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
-        else if (/^o[12]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
+        if (/^o[123]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
+        else if (/^o[123]f$/.test(f)) v = Math.max(0, Math.round(v));  // free count ≥ 0
         else if (f === "boxes") v = Math.max(0, Math.round(v));       // section boxes sold ≥ 0
         else if (/^ir\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row incentive ₹ ≥ 0
         else if (/^mrp\d+$/.test(f)) v = Math.max(0, Math.round(v));  // row MRP ₹ ≥ 0
@@ -3150,17 +3208,20 @@
         const secLands = g.rows.map((r) => landingOf(r[1])).filter((l) => l != null);
         const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
         const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
-        const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
+        const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f, lbl3 = c.o3p + "+" + c.o3f;
         const u1off = +c.u1off || 0;   // single-unit discount % off MRP (default 10)
         // Bulk offers = free-box effect off MRP: effective price per box =
-        // MRP × paid/(paid+free). In a 5+1 the customer pays for 5 and gets 6,
-        // so the rate is MRP × 5/6 (e.g. MRP 7,500 → 5+1 = ₹6,250).
+        // MRP × paid/(paid+free). In a 3+1 the customer pays for 3 and gets 4,
+        // so the rate is MRP × 3/4.
         const o1pS = Math.max(1, +c.o1p || 1), o1fS = Math.max(0, +c.o1f || 0);
         const o2pS = Math.max(1, +c.o2p || 1), o2fS = Math.max(0, +c.o2f || 0);
-        const free1 = o1pS / (o1pS + o1fS), free2 = o2pS / (o2pS + o2fS);
-        // Second bulk tier exists only when it has free boxes (retail = 5+2 only,
-        // so its tier-2 free count is 0 and the 10+3 column/controls drop out).
+        const o3pS = Math.max(1, +c.o3p || 1), o3fS = Math.max(0, +c.o3f || 0);
+        const free1 = o1pS / (o1pS + o1fS), free2 = o2pS / (o2pS + o2fS), free3 = o3pS / (o3pS + o3fS);
+        // Each bulk tier shows only when it has free boxes (so Saloon runs two
+        // tiers, Derma three, Saloon-retail one). The columns/controls drop out
+        // for any tier whose free count is 0.
         const hasOffer2 = (+c.o2f > 0);
+        const hasOffer3 = (+c.o3f > 0);
         const num = (f, val, w) => `<input class="ecalc-in" data-ecalc="${mid}:${gid}:${f}" type="number" step="${/[pf]$/.test(f) ? 1 : 0.5}" min="0" value="${esc(val)}"${w ? ` style="width:${w}"` : ""}>`;
         // Cost (landing + weighted operation cost) — shown for reference only.
         const baseOf = (r) => { const land = landingOf(r[1]); return land != null ? (land + opCostFor(land)) : null; };
@@ -3176,6 +3237,7 @@
         };
         const head = ["Product", "MRP", "Cost", "1 unit", lbl1]
           .concat(hasOffer2 ? [lbl2] : [])
+          .concat(hasOffer3 ? [lbl3] : [])
           .concat(isAcc ? ["Incentive ₹"] : [])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
@@ -3193,10 +3255,11 @@
           const unitCell = `<td class="num">${u1in}<div style="font-size:11px" class="t-muted">${u1lbl}</div><div class="cpx-inc">${incLineOf(rowInc)}</div></td>`;
           const cell5 = offerCell(mrpEff > 0 ? mrpEff * free1 : 0, mrpEff, rowInc);
           const cell10 = offerCell(mrpEff > 0 ? mrpEff * free2 : 0, mrpEff, rowInc);
+          const cell15 = offerCell(mrpEff > 0 ? mrpEff * free3 : 0, mrpEff, rowInc);
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
-          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${mrpIn}</td><td class="num t-muted">${rup(cost)}</td>${unitCell}${cell5}${hasOffer2 ? cell10 : ""}${incCell}</tr>`;
+          return `<tr><td class="t-name cprice-prod">${esc(r[1])}</td><td class="num">${mrpIn}</td><td class="num t-muted">${rup(cost)}</td>${unitCell}${cell5}${hasOffer2 ? cell10 : ""}${hasOffer3 ? cell15 : ""}${incCell}</tr>`;
         }).join("");
         const panel = `<div class="controls cprice-calc" style="margin-top:6px">
           ${useBoxes ? `<label class="ord-field"><span>Company expense (₹ / month)</span>${num("expMo", sExp)}</label>
@@ -3207,6 +3270,7 @@
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)${hasOffer2 ? "" : " — off (set free > 0 to add)"}</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
+          <label class="ord-field"><span>Bulk tier 3 (buy + free)${hasOffer3 ? "" : " — off (set free > 0 to add)"}</span><div class="ecalc-pair">${num("o3p", c.o3p, "60px")} + ${num("o3f", c.o3f, "60px")}</div></label>
         </div>`;
         // Register a generator so an edit repaints only this section in place.
         esthSecGen[mid + ":" + gid] = () => section(g);
