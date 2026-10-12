@@ -2861,7 +2861,6 @@
   // with factory (EXW), customs, landing and every selling price. Read-only view
   // (edit the figures on the Pricing / Inventory tabs); visible to super admin only.
   let cprTab = "saloon"; // Company Price sub-tab: landing | saloon | derma | machines | celluma
-  let cprEditMode = false; // Price Calculator is read-only until Edit is turned on
   // Costing assumptions (editable, saved to the shared doc; super admin only).
   const costing = { empExpMonth: 3000000, allocMachine: 60, allocCelluma: 10, allocEsth: 30, profitPct: 30, unitsMonth: 0, o1p: 10, o1f: 4, o2p: 10, o2f: 2 };
   // Per-market, PER-SECTION Esthemax pricing calculator — saved overrides:
@@ -3035,9 +3034,10 @@
   }
   // Warn before leaving (refresh / close tab) with unsaved price changes.
   window.addEventListener("beforeunload", (e) => { if (esthAnyPending()) { e.preventDefault(); e.returnValue = ""; return ""; } });
-  // Edit lock: Price Calculator inputs are editable only when cprEditMode is on.
+  // Edit lock = the global Admin/View mode: inputs are editable only in Admin
+  // (edit) mode and read-only in View mode — same as the rest of the dashboard.
   function esthApplyEditLock() {
-    const dis = !cprEditMode;
+    const dis = !isAdmin();
     document.querySelectorAll("#view .ecalc-in, #view .cost-in").forEach((el) => { el.disabled = dis; });
   }
   function wireEsthInputs() {
@@ -3110,8 +3110,6 @@
         esthPending.cost = true; go("companyprice", true);
       }));
       wireEsthInputs();
-      const et = document.getElementById("cprEditToggle");
-      if (et) et.onclick = () => { cprEditMode = !cprEditMode; go("companyprice", true); };
       esthApplyEditLock();
       esthUpdateSaveBar();
     }, 0);
@@ -3390,11 +3388,11 @@
       <button data-cprtab="machines" class="${cprTab === "machines" ? "active" : ""}">🔧 Machines</button>
       <button data-cprtab="celluma" class="${cprTab === "celluma" ? "active" : ""}">💡 Celluma</button>
     </div>`;
-    // Edit lock: prices are read-only until the admin turns on Edit mode.
-    const editBar = `<div class="controls" style="margin:4px 0 2px;align-items:center">
-      <button id="cprEditToggle" class="${cprEditMode ? "dl-btn" : "ghost-btn"}" type="button">${cprEditMode ? "✓ Done editing" : "✏ Edit prices"}</button>
-      <span class="t-muted" style="font-size:12px">${cprEditMode ? "Editing — change values, then Update (Saloon / Derma / Landing) at the bottom to save." : "View mode — click <b>Edit prices</b> to make changes."}</span>
-    </div>`;
+    // Prices are editable only in Admin mode (the top-right toggle). Show a
+    // hint when in View mode so it's clear how to unlock editing.
+    const editBar = isAdmin()
+      ? `<div class="t-muted" style="margin:6px 0 2px;font-size:12px">✏ <b>Admin mode</b> — edit prices below, then use the <b>Update</b> (Saloon / Derma / Landing) buttons at the bottom to save.</div>`
+      : `<div class="callout" style="margin:6px 0 2px">🔒 Prices are <b>read-only</b> in View mode. Click the <b>👁 View</b> button (top-right) to switch to <b>Admin</b> mode, then you can edit.</div>`;
     const body = cprTab === "machines" ? machinesBlock()
       : cprTab === "celluma" ? cellumaBlock()
       : cprTab === "landing" ? landingCostBlock()

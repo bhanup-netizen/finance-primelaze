@@ -1604,3 +1604,8 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .cpr-sb-btn:hover { filter: brightness(1.07); }
 .cpr-sb-discard { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 12.5px; text-decoration: underline; font-family: inherit; padding: 4px; }
 .cpr-sb-discard:hover { color: var(--text); }
+
+/* Price Calculator — locked (read-only / View mode) inputs look clearly disabled */
+.ecalc-in:disabled, .cost-in:disabled, .ecalc-in[disabled], .cost-in[disabled] {
+  background: var(--surface-2); color: var(--text-2); opacity: .75; cursor: not-allowed;
+}
