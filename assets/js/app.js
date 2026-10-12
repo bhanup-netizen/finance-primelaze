@@ -2916,12 +2916,20 @@
     retail: { o1p: 5, o1f: 2, o2p: 0, o2f: 0 },
   };
   // Per-MARKET offer configuration (overrides the section defaults for that
-  // market only). Derma (doctor) runs the new 3-tier structure — 3+1, 5+2,
-  // 10+5 — on both jar & retail; Saloon keeps its own 5+1 / 10+3.
+  // market only) — the FINAL structure from the approved price PDFs:
+  //   • Saloon hydro  → 5+1, 10+3 (base default, no entry needed)
+  //   • Saloon retail → 5+2, 10+6   (incentive ₹150)
+  //   • Derma  hydro  → 3+1, 5+2, 10+5
+  //   • Derma  retail → 5+4, 10+10  (incentive ₹150)
+  // Single-unit price is MRP − 10% here; any custom single/incentive price
+  // (e.g. retail ₹5,999 / ₹4,400, accessory prices) is kept as a saved override.
   const ESTH_MARKET_DEFAULTS = {
+    salon: {
+      retail: { o1p: 5, o1f: 2, o2p: 10, o2f: 6, o3p: 0, o3f: 0, u1off: 10, incRs: 150 },
+    },
     doctor: {
       hydro:  { o1p: 3, o1f: 1, o2p: 5, o2f: 2, o3p: 10, o3f: 5, u1off: 10 },
-      retail: { o1p: 3, o1f: 1, o2p: 5, o2f: 2, o3p: 10, o3f: 5, u1off: 10 },
+      retail: { o1p: 5, o1f: 4, o2p: 10, o2f: 10, o3p: 0, o3f: 0, u1off: 10, incRs: 150 },
     },
   };
   function esthCalc(mid, gid) {

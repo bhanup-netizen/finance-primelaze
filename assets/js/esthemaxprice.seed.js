@@ -15,7 +15,7 @@
    Accessories: [Product, MRP, Factory$]. purchaseOrders: factory buys (USD).
    ============================================================ */
 window.ESTHEMAX_PRICE_SEED = {
-  version: 9,
+  version: 10,
   note: "Esthemax cost & price. Landing (base) cost recomputed from the NEW 2025 Distributor price list (export USD × 97, customs @44%, + transport): Hydrojelly $13.7, Retail $11.0, Foot Mask $55.0 (CBD Dope / Youthful Elixir unchanged at $24). Landing cost (factory → landing) is shared by both markets. Saloon & Derma carry the LISTED MRP; each market's selling MRP, extra-unit discount and offers are set live in its own calculator (defaults: +15% hike, 10% off, offers 5+1 and 10+3). Per box, ₹.",
   cols: ["Sr", "Variant", "Dist. ($)", "EXW / Factory", "Customs @44%", "Transport", "Landing", "Marketing", "Profit", "Total", "MRP"],
   // ---- Market price lists (customer-facing MRP + offers, per market) ----
@@ -82,8 +82,10 @@ window.ESTHEMAX_PRICE_SEED = {
       id: "doctor", label: "Derma", icon: "💉",
       note: "Derma (doctor) market. Every product is priced to its target margin (price = cost ÷ (1 − margin%)), so each order type lands exactly on its target. Set the cost inputs and the three target margins in the calculator — saves for everyone. MRP is shown only for reference.",
       mrpHikePct: 15, discountPct: 10, discountLabel: "Single unit · 10% off",
-      // Derma new price & offer structure: single = MRP − 10%; bulk = 3+1, 5+2,
-      // 10+5 (each off MRP, effective ₹/unit = MRP × buy / (buy + free)).
+      // Derma FINAL structure (per the approved price PDFs): single = MRP − 10%.
+      // Hydrojelly bulk = 3+1, 5+2, 10+5; Retail bulk = 5+4, 10+10 (MRP 7,500,
+      // custom single price). Each offer off MRP: effective ₹/unit = MRP × buy /
+      // (buy + free). Live offer config is set in ESTH_MARKET_DEFAULTS (app.js).
       offers: [
         { label: "3+1", p: 3, f: 1 },
         { label: "5+2", p: 5, f: 2 },
@@ -118,17 +120,17 @@ window.ESTHEMAX_PRICE_SEED = {
         },
         {
           id: "retail", title: "Retail Hydrojelly Mask", pack: "2 masks / box", rows: [
-            [1, "Antioxidant Goji", 5550],
-            [2, "Super Greens Strength", 5550],
-            [3, "Brightening Complex", 5550],
-            [4, "Egyptian Rose", 5550],
-            [5, "Intensive Aftercare", 5250],
-            [6, "Hyaluronic Acid", 5250],
-            [7, "Cica Complex", 5250],
-            [8, "Illuminating Orange", 5550],
-            [9, "Phyto Nutrients", 5250],
-            [10, "Skin Warrior Ageless", 5250],
-            [11, "Purifying Charcoal", 5550],
+            [1, "Antioxidant Goji", 7500],
+            [2, "Super Greens Strength", 7500],
+            [3, "Brightening Complex", 7500],
+            [4, "Egyptian Rose", 7500],
+            [5, "Intensive Aftercare", 7500],
+            [6, "Hyaluronic Acid", 7500],
+            [7, "Cica Complex", 7500],
+            [8, "Illuminating Orange", 7500],
+            [9, "Phyto Nutrients", 7500],
+            [10, "Skin Warrior Ageless", 7500],
+            [11, "Purifying Charcoal", 7500],
           ],
         },
         {
