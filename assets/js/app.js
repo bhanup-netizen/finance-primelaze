@@ -2589,7 +2589,7 @@
       • Your <b>incentive is released only after the customer's payment is realised</b> (credited to the company), <b>not</b> at order booking or dispatch.<br>
       • Incentive shown is the flat <b>₹ per unit/box sold</b> for that order type.${anyMgr ? " When a manager is involved, it splits <b>2:1</b> — you 66%, manager 33%." : ""}<br>
       • <b>Plus a monthly volume bonus</b> on your total Esthemax sales (see the ladder below).</div>`;
-    const offersNote = `<div class="muted-note" style="margin-top:8px"><b>How to read:</b> <b>1 unit</b> is the single-box price. <b>5+1 / 10+3</b> are buy-and-free bulk offers (e.g. buy 5 get 1 free) — the figure shown is the <b>price per paid box</b> at that offer. Prices are per box in ₹.</div>`;
+    const offersNote = `<div class="muted-note" style="margin-top:8px"><b>How to read:</b> <b>1 unit</b> is the single-box price. <b>5+1 / 10+3</b> are buy-and-free bulk offers (e.g. buy 5 get 1 free) — the figure shown is the <b>effective price per box</b>, with the free box already included (so 5+1 = rate × 5⁄6). Prices are per box in ₹.</div>`;
     // Monthly sales-volume bonus ladder (cumulative) + a quick calculator.
     const Lk = (n) => "₹" + (n % 100000 === 0 ? (n / 100000) + " L" : Math.round(n).toLocaleString("en-IN"));
     const vbRows = ESTH_VOLUME_BONUS.map((s) => `<tr><td>Reach ${Lk(s.min)} / month</td><td class="num"><b>${rupQ(s.bonus)}</b></td></tr>`).join("");
@@ -2705,7 +2705,7 @@
         <h1>${esc(D.meta && D.meta.company ? D.meta.company : "Primelaze")} — Esthemax Price List</h1>
         <div class="p-sub">${esc(mLabel)} market · per box (₹)</div>
         <p class="p-meta">Generated ${esc(stamp)}</p>
-        <p class="p-meta"><b>Payment &amp; incentive:</b> all orders are 100% advance — dispatch only after payment received. Incentive (₹ per box) is released only after the customer's payment is realised, not at booking/dispatch. 1 unit = MRP − discount; 5+1 / 10+3 are buy-and-free bulk offers (price per paid box).</p>
+        <p class="p-meta"><b>Payment &amp; incentive:</b> all orders are 100% advance — dispatch only after payment received. Incentive (₹ per box) is released only after the customer's payment is realised, not at booking/dispatch. 1 unit = MRP − discount; 5+1 / 10+3 are buy-and-free bulk offers — the figure is the effective price per box with the free box already included (5+1 = rate × 5⁄6).</p>
         ${blocks}
         <h2>Monthly volume bonus <span style="font-weight:400;font-size:12px">(on top of the per-box incentive)</span></h2>
         <p class="p-meta">Earned on total monthly Esthemax sales — you get the bonus for the highest slab you reach (not added up). Released only after the customers' payments are realised.</p>
@@ -2931,6 +2931,12 @@
     const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
     const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
     const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
+    // Free-box effect: in a 5+1 the customer pays for 5 and gets 6, so the
+    // EFFECTIVE price per box = rate × paid/(paid+free). The buy/free counts now
+    // lower the price directly (any off% is an extra discount on top).
+    const o1pN = Math.max(1, +c.o1p || 1), o1fN = Math.max(0, +c.o1f || 0);
+    const o2pN = Math.max(1, +c.o2p || 1), o2fN = Math.max(0, +c.o2f || 0);
+    const free1 = o1pN / (o1pN + o1fN), free2 = o2pN / (o2pN + o2fN);
     // A section has a SECOND bulk offer only when its tier-2 free-box count > 0.
     // Retail is set to 0 (5+2 only), so its second-offer column is dropped.
     const hasOffer2 = (+c.o2f > 0);
@@ -2946,8 +2952,8 @@
       return {
         idx, sr: r[0], name: r[1], mrp: mrpEff || null, cost,
         unit: base1 > 0 ? base1 : null,
-        p5: offBaseVal > 0 ? offBaseVal * (1 - off1 / 100) : null,
-        p10: offBaseVal > 0 ? offBaseVal * (1 - off2 / 100) : null,
+        p5: offBaseVal > 0 ? offBaseVal * (1 - off1 / 100) * free1 : null,
+        p10: offBaseVal > 0 ? offBaseVal * (1 - off2 / 100) * free2 : null,
         inc: rowInc, typed: u1typed > 0,
       };
     });
@@ -3152,6 +3158,10 @@
         const off2 = +c.off2 || 0;     // 10+3 = (base or MRP) − this %
         const offFrom = c.offFrom === "mrp" ? "mrp" : "base"; // offers off base (1-unit) or MRP
         const offLbl = offFrom === "mrp" ? "MRP" : "base";
+        // Free-box effect: effective price per box = rate × paid/(paid+free).
+        const o1pS = Math.max(1, +c.o1p || 1), o1fS = Math.max(0, +c.o1f || 0);
+        const o2pS = Math.max(1, +c.o2p || 1), o2fS = Math.max(0, +c.o2f || 0);
+        const free1 = o1pS / (o1pS + o1fS), free2 = o2pS / (o2pS + o2fS);
         // Second bulk tier exists only when it has free boxes (retail = 5+2 only,
         // so its tier-2 free count is 0 and the 10+3 column/controls drop out).
         const hasOffer2 = (+c.o2f > 0);
@@ -3161,13 +3171,15 @@
         const incLineOf = (inc) => mgr
           ? `inc ${rup(inc)} · E ${rup(inc * 2 / 3)} / M ${rup(inc / 3)}`
           : `inc ${rup(inc)}`;
-        // An offer cell: base price − off% + the flat incentive (₹). No margin.
-        const offerCell = (price, offPct, inc) => {
+        // An offer cell: effective price per box + the effective % off the rate
+        // (free box + any extra discount) + the flat incentive (₹).
+        const offerCell = (price, baseRate, inc) => {
           if (!(price > 0)) return `<td class="num t-muted">—</td>`;
-          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px" class="t-muted">−${(+offPct).toFixed(0)}%</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
+          const effPct = baseRate > 0 ? Math.round((1 - price / baseRate) * 100) : 0;
+          return `<td class="num"><div>${rup(price)}</div><div style="font-size:11px" class="t-muted">−${effPct}% eff.</div><div class="cpx-inc">${incLineOf(inc)}</div></td>`;
         };
-        const head = ["Product", "MRP", "Cost", "1 unit", lbl1 + " · −" + off1 + "%"]
-          .concat(hasOffer2 ? [lbl2 + " · −" + off2 + "%"] : [])
+        const head = ["Product", "MRP", "Cost", "1 unit", lbl1]
+          .concat(hasOffer2 ? [lbl2] : [])
           .concat(isAcc ? ["Incentive ₹"] : [])
           .map((x, i) => `<th class="${i ? "num" : ""}">${esc(x)}</th>`).join("");
         const body = g.rows.map((r, idx) => {
@@ -3186,8 +3198,8 @@
           const u1Hint = base1 > 0 ? `<div style="font-size:11px" class="t-muted">${u1typed > 0 ? "typed" : "MRP −" + u1off + "%"}</div><div class="cpx-inc">${incLineOf(rowInc)}</div>` : "";
           const unitCell = `<td class="num">${u1In}${u1Hint}</td>`;
           const offBaseVal = offFrom === "mrp" ? mrpEff : base1; // offers off MRP or the 1-unit base
-          const cell5 = offerCell(offBaseVal > 0 ? offBaseVal * (1 - off1 / 100) : 0, off1, rowInc);
-          const cell10 = offerCell(offBaseVal > 0 ? offBaseVal * (1 - off2 / 100) : 0, off2, rowInc);
+          const cell5 = offerCell(offBaseVal > 0 ? offBaseVal * (1 - off1 / 100) * free1 : 0, offBaseVal, rowInc);
+          const cell10 = offerCell(offBaseVal > 0 ? offBaseVal * (1 - off2 / 100) * free2 : 0, offBaseVal, rowInc);
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
@@ -3203,8 +3215,8 @@
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)${hasOffer2 ? "" : " — off (set free > 0 to add)"}</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
           <label class="ord-field"><span>Offers calculated off</span><select class="ecalc-in" data-ecalc="${mid}:${gid}:offFrom"><option value="base"${offFrom === "base" ? " selected" : ""}>1-unit base price</option><option value="mrp"${offFrom === "mrp" ? " selected" : ""}>MRP</option></select></label>
-          <label class="ord-field"><span>${esc(lbl1)} = ${offLbl} − %</span>${num("off1", c.off1)}</label>
-          ${hasOffer2 ? `<label class="ord-field"><span>${esc(lbl2)} = ${offLbl} − %</span>${num("off2", c.off2)}</label>` : ""}
+          <label class="ord-field"><span>${esc(lbl1)} extra disc % <span class="t-muted">(on top of free box, off ${offLbl})</span></span>${num("off1", c.off1)}</label>
+          ${hasOffer2 ? `<label class="ord-field"><span>${esc(lbl2)} extra disc % <span class="t-muted">(on top of free box, off ${offLbl})</span></span>${num("off2", c.off2)}</label>` : ""}
         </div>`;
         // Register a generator so an edit repaints only this section in place.
         esthSecGen[mid + ":" + gid] = () => section(g);
