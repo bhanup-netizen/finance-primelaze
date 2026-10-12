@@ -2871,7 +2871,7 @@
   // Retail boxes go out as a single 5+2 bulk offer — there is NO second (10+3)
   // tier, so its free-box count is 0 (which hides the second-offer column).
   const ESTH_SECTION_DEFAULTS = {
-    retail: { o1p: 5, o1f: 2, o2p: 0, o2f: 0, off2: 0 },
+    retail: { o1p: 5, o1f: 2, o2p: 0, o2f: 0 },
   };
   function esthCalc(mid, gid) {
     const base = {
@@ -2879,10 +2879,6 @@
       expMo: 0,      // company/section expense per month (₹) — jar & retail only
       boxes: 0,      // boxes sold per month (section-level) — jar & retail only
       incRs: 300,    // incentive = flat ₹ per sale
-      u1off: 10,     // 1 unit price = MRP − this % (auto-fill when 1 unit left blank)
-      off1: 5,       // 5+1 price = (base OR MRP) − this %
-      off2: 10,      // 10+3 price = (base OR MRP) − this %
-      offFrom: "base", // offers computed off the 1-unit "base" price, or off "mrp"
     };
     const mv = esthPricingOv[esthStoreMid(mid, gid)];
     return Object.assign(base, ESTH_SECTION_DEFAULTS[gid] || {}, (mv && mv[gid]) || {});
@@ -2898,8 +2894,8 @@
   // Company Price calculator (section()) and the salesperson Pricing view read
   // from this so the numbers always match. Returns per-row computed prices:
   //   cost  = landing (+ operation cost where it applies: jar & retail)
-  //   unit  = typed 1-unit price, else MRP − u1off%
-  //   p5/p10 = unit − off1% / off2%   ·   inc = flat incentive ₹ for that sale
+  //   unit  = MRP (everything is priced off MRP)
+  //   p5/p10 = MRP × paid/(paid+free)  [free-box effect]  ·  inc = flat ₹ / sale
   function esthComputeSection(mid, gid) {
     const EP = window.ESTHEMAX_PRICE_SEED || {};
     const M = EP.markets && EP.markets[mid];
@@ -2922,7 +2918,7 @@
     };
     const isAcc = gid === "acc";
     const useBoxes = (gid === "hydro" || gid === "retail");
-    const incRs = +c.incRs || 0, off1 = +c.off1 || 0, off2 = +c.off2 || 0;
+    const incRs = +c.incRs || 0;
     const mgr = !!(+c.mgr);
     const sExp = +c.expMo || 0, sBoxes = +c.boxes || 0;
     const opCost = useBoxes && sBoxes > 0 ? sExp / sBoxes : 0;
@@ -2931,8 +2927,8 @@
     const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
     const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
     // Free-box effect: in a 5+1 the customer pays for 5 and gets 6, so the
-    // EFFECTIVE price per box = rate × paid/(paid+free). The buy/free counts now
-    // lower the price directly (any off% is an extra discount on top).
+    // EFFECTIVE price per box = MRP × paid/(paid+free). The buy/free counts are
+    // the whole deal — there is no extra discount on top.
     const o1pN = Math.max(1, +c.o1p || 1), o1fN = Math.max(0, +c.o1f || 0);
     const o2pN = Math.max(1, +c.o2p || 1), o2fN = Math.max(0, +c.o2f || 0);
     const free1 = o1pN / (o1pN + o1fN), free2 = o2pN / (o2pN + o2fN);
@@ -2944,17 +2940,19 @@
       const cost = land != null ? land + opCostFor(land) : null;
       const mrpEff = c["mrp" + idx] != null ? +c["mrp" + idx] : (+r[2] || 0);
       const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
-      // Everything is priced off MRP: single unit = MRP; bulk offers = MRP ×
-      // (1 − extra disc %) × paid/(paid+free)  [the free-box effect].
+      // Everything is priced off MRP: single unit = MRP; bulk offers are just
+      // the free-box effect — MRP × paid/(paid+free). In a 5+1 the customer
+      // pays for 5 and gets 6, so the effective rate = MRP × 5/6 (no extra
+      // discount on top — the free box IS the deal).
       return {
         idx, sr: r[0], name: r[1], mrp: mrpEff || null, cost,
         unit: mrpEff > 0 ? mrpEff : null,
-        p5: mrpEff > 0 ? mrpEff * (1 - off1 / 100) * free1 : null,
-        p10: mrpEff > 0 ? mrpEff * (1 - off2 / 100) * free2 : null,
+        p5: mrpEff > 0 ? mrpEff * free1 : null,
+        p10: mrpEff > 0 ? mrpEff * free2 : null,
         inc: rowInc, typed: false,
       };
     });
-    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, off1, off2, mgr, opCost, lbl1, lbl2, hasOffer2, rows };
+    return { title: g.title, pack: g.pack, isAcc, useBoxes, incRs, mgr, opCost, lbl1, lbl2, hasOffer2, rows };
   }
   // Sales price list sections — Foot Mask is intentionally excluded here and
   // kept only in the super-admin Company Price tab.
@@ -3048,7 +3046,6 @@
       const [mid, gid, f] = String(el.dataset.ecalc).split(":"); // market:section:field
       let v;
       if (el.type === "checkbox") { v = el.checked ? 1 : 0; }
-      else if (f === "offFrom") { v = el.value === "mrp" ? "mrp" : "base"; } // string setting (offers off base/MRP)
       else {
         v = parseFloat(el.value); if (isNaN(v) || v < 0) v = 0;
         if (/^o[12]p$/.test(f)) v = Math.max(1, Math.round(v));       // buy count ≥ 1
@@ -3056,8 +3053,6 @@
         else if (f === "boxes") v = Math.max(0, Math.round(v));       // section boxes sold ≥ 0
         else if (/^ir\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row incentive ₹ ≥ 0
         else if (/^mrp\d+$/.test(f)) v = Math.max(0, Math.round(v));  // row MRP ₹ ≥ 0
-        else if (/^u1\d+$/.test(f)) v = Math.max(0, Math.round(v));   // row 1-unit base price ≥ 0
-        else if (/^(off1|off2|u1off)$/.test(f)) v = Math.max(0, Math.min(100, v)); // discount % 0–100
       }
       const sm = esthStoreMid(mid, gid); // accessories share one store across markets (→ Saloon)
       const mv = (esthPricingOv[sm] = esthPricingOv[sm] || {});
@@ -3133,7 +3128,7 @@
         const a = (EP.accessories || []).find((x) => x[0] === name);
         return (a && a[2] != null) ? a[2] * usdN * (1 + custN) : null;
       };
-      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> — everything is priced off it. The <b>1 unit</b> (single box) price <b>is the MRP</b>. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are off MRP and already include the <b>free box</b> (5+1 = MRP × 5⁄6), with an optional <b>extra discount %</b> you can add on top of each. Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing (+ operation cost where it applies) for reference. Operation cost (company expense ÷ <b>boxes sold</b>) is added only in the <b>Hydrojelly jar</b> and <b>Retail</b> sections. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M). <b>Policy:</b> all orders are 100% advance; incentive is released only after the customer's payment is realised. A <b>monthly volume bonus</b> (highest slab reached — ₹5L→₹10k, ₹10L→₹25k, ₹15L→₹50k, ₹25L→₹1L, ₹50L→₹2.5L) is paid on top, shown on the sales <b>Pricing → Esthemax</b> page.</p>`;
+      const intro = `<p class="muted-note" style="margin:2px 0 10px">Set each product's <b>MRP</b> — everything is priced off it. The <b>1 unit</b> (single box) price <b>is the MRP</b>. The <b>${esc("5+1")} / ${esc("10+3")}</b> offers are off MRP and are simply the <b>free-box effect</b> — the customer pays for 5 and gets 6, so 5+1 = MRP × 5⁄6 (e.g. MRP ₹7,500 → ₹6,250); there is no extra discount on top. Each cell shows the flat <b>incentive</b> (₹) for that sale; <b>Cost</b> is the landing (+ operation cost where it applies) for reference. Operation cost (company expense ÷ <b>boxes sold</b>) is added only in the <b>Hydrojelly jar</b> and <b>Retail</b> sections. Tick <b>Manager involved</b> to split the incentive <b>2:1</b> — employee 66% (E), manager 33% (M). <b>Policy:</b> all orders are 100% advance; incentive is released only after the customer's payment is realised. A <b>monthly volume bonus</b> (highest slab reached — ₹5L→₹10k, ₹10L→₹25k, ₹15L→₹50k, ₹25L→₹1L, ₹50L→₹2.5L) is paid on top, shown on the sales <b>Pricing → Esthemax</b> page.</p>`;
       // One section = one group with its OWN calculator + price table.
       const section = (g) => {
         const gid = g.id || "sec";
@@ -3150,9 +3145,9 @@
         const avgLand = secLands.length ? secLands.reduce((s, x) => s + x, 0) / secLands.length : 0;
         const opCostFor = (land) => (!useBoxes || !opCost) ? 0 : (avgLand > 0 ? opCost * (land / avgLand) : opCost);
         const lbl1 = c.o1p + "+" + c.o1f, lbl2 = c.o2p + "+" + c.o2f;
-        const off1 = +c.off1 || 0;     // 5+1 extra discount % off MRP (on top of the free box)
-        const off2 = +c.off2 || 0;     // 10+3 extra discount % off MRP
-        // Free-box effect: effective price per box = MRP × paid/(paid+free).
+        // Free-box effect only: effective price per box = MRP × paid/(paid+free).
+        // No extra discount on top — in a 5+1 the customer pays for 5 and gets 6,
+        // so the rate is MRP × 5/6 (e.g. MRP 7,500 → 5+1 = ₹6,250).
         const o1pS = Math.max(1, +c.o1p || 1), o1fS = Math.max(0, +c.o1f || 0);
         const o2pS = Math.max(1, +c.o2p || 1), o2fS = Math.max(0, +c.o2f || 0);
         const free1 = o1pS / (o1pS + o1fS), free2 = o2pS / (o2pS + o2fS);
@@ -3165,8 +3160,8 @@
         const incLineOf = (inc) => mgr
           ? `inc ${rup(inc)} · E ${rup(inc * 2 / 3)} / M ${rup(inc / 3)}`
           : `inc ${rup(inc)}`;
-        // An offer cell: effective price per box + the effective % off the rate
-        // (free box + any extra discount) + the flat incentive (₹).
+        // An offer cell: effective price per box + the effective % off MRP
+        // (from the free box) + the flat incentive (₹).
         const offerCell = (price, baseRate, inc) => {
           if (!(price > 0)) return `<td class="num t-muted">—</td>`;
           const effPct = baseRate > 0 ? Math.round((1 - price / baseRate) * 100) : 0;
@@ -3185,8 +3180,8 @@
           // Single unit = MRP (everything is priced off MRP now).
           const rowInc = (isAcc && c["ir" + idx] != null) ? +c["ir" + idx] : incRs;
           const unitCell = `<td class="num">${rup(mrpEff || null)}<div style="font-size:11px" class="t-muted">= MRP</div><div class="cpx-inc">${incLineOf(rowInc)}</div></td>`;
-          const cell5 = offerCell(mrpEff > 0 ? mrpEff * (1 - off1 / 100) * free1 : 0, mrpEff, rowInc);
-          const cell10 = offerCell(mrpEff > 0 ? mrpEff * (1 - off2 / 100) * free2 : 0, mrpEff, rowInc);
+          const cell5 = offerCell(mrpEff > 0 ? mrpEff * free1 : 0, mrpEff, rowInc);
+          const cell10 = offerCell(mrpEff > 0 ? mrpEff * free2 : 0, mrpEff, rowInc);
           const incCell = isAcc
             ? `<td class="num"><input class="ecalc-in" data-ecalc="${mid}:${gid}:ir${idx}" type="number" step="10" min="0" value="${c["ir" + idx] != null ? esc(c["ir" + idx]) : ""}" placeholder="${incRs}" style="width:80px"></td>`
             : "";
@@ -3200,8 +3195,6 @@
           <label class="ord-field cpx-chk"><span>Manager involved (2:1)</span><input class="ecalc-in" data-ecalc="${mid}:${gid}:mgr" type="checkbox"${mgr ? " checked" : ""}></label>
           <label class="ord-field"><span>Bulk tier 1 (buy + free)</span><div class="ecalc-pair">${num("o1p", c.o1p, "60px")} + ${num("o1f", c.o1f, "60px")}</div></label>
           <label class="ord-field"><span>Bulk tier 2 (buy + free)${hasOffer2 ? "" : " — off (set free > 0 to add)"}</span><div class="ecalc-pair">${num("o2p", c.o2p, "60px")} + ${num("o2f", c.o2f, "60px")}</div></label>
-          <label class="ord-field"><span>${esc(lbl1)} extra disc % <span class="t-muted">(off MRP, on top of free box)</span></span>${num("off1", c.off1)}</label>
-          ${hasOffer2 ? `<label class="ord-field"><span>${esc(lbl2)} extra disc % <span class="t-muted">(off MRP, on top of free box)</span></span>${num("off2", c.off2)}</label>` : ""}
         </div>`;
         // Register a generator so an edit repaints only this section in place.
         esthSecGen[mid + ":" + gid] = () => section(g);
