@@ -9857,11 +9857,11 @@
 
   function renderMIS() {
     setTimeout(initMisUI, 0);
-    const canEdit = canEditPage("mis");
+    const canEdit = isAdmin();
     return `
       <div class="section-head">
         <h1>📊 MIS — Monthly Summary</h1>
-        <p>${canEdit ? "Record each month's sales, bank balances, expenses and collections. Saved to the cloud for everyone." : "Monthly management summary — sales, bank balances, expenses and collections."} ${canEdit ? "" : "(Editing is restricted.)"}</p>
+        <p>${canEdit ? "Record each month's sales, bank balances, expenses and collections. Saved to the cloud for everyone." : "Monthly management summary — sales, bank balances, expenses and collections. Switch to Admin mode (or ask an admin) to add/edit."}</p>
       </div>
       ${canEdit ? `<div class="controls"><button id="misNewBtn" class="dl-btn" type="button">＋ New month</button></div>` : ""}
       <div id="misForm"></div>
@@ -10054,7 +10054,7 @@
     } catch (e) { box.innerHTML = `<div class="empty">Could not load MIS (${esc(e.message || "" + e)}).</div>`; return; }
     // Sort newest first by monthKey, then by createdAt.
     list.sort((a, b) => String(b.monthKey || "").localeCompare(String(a.monthKey || "")) || (b.createdAt || 0) - (a.createdAt || 0));
-    const canEdit = canEditPage("mis");
+    const canEdit = isAdmin();
     if (!list.length) { box.innerHTML = `<div class="empty">No MIS months yet.${canEdit ? " Click “New month” to add one." : ""}</div>`; return; }
     const rows = list.map((m) => {
       const t = misTotals(m);
