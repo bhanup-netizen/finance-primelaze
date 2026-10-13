@@ -128,6 +128,7 @@
     { id: "companyprice", label: "🧮 Price Calculator", group: "Finance", render: renderCompanyPrice },
     { id: "quotation", label: "🧾 Quotation", group: "Finance", render: renderQuotation },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
+    { id: "mis", label: "📊 MIS", group: "Finance", render: renderMIS },
     { id: "weeklyFin", label: "Duties", group: "Finance", render: () => renderWeekly("Finance") },
     // Sale
     { id: "leads", label: "Casovil CRM", group: "Sale", render: renderCasovilCRM },
@@ -9841,6 +9842,303 @@
     const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
     setTimeout(() => window.print(), 40);
+  }
+
+  /* ================= MIS (Finance monthly report) =================
+     A monthly Management Information Summary — sales by category, machine
+     sales, bank balances, expenses (fixed/variable) and collections. Each
+     month is one document in the Firestore "mis" collection (a dedicated
+     backend, not the shared edits doc), so it persists & syncs for everyone.
+     Manual entry only. Editing is gated on canEditPage("mis"). */
+  function misStore() { return db ? db.collection("mis") : null; }
+  let localMis = [];          // in-memory fallback when Firebase isn't available
+  const MIS_EXP_TYPES = ["Variable", "Fixed"];
+  const misNum = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+
+  function renderMIS() {
+    setTimeout(initMisUI, 0);
+    const canEdit = canEditPage("mis");
+    return `
+      <div class="section-head">
+        <h1>📊 MIS — Monthly Summary</h1>
+        <p>${canEdit ? "Record each month's sales, bank balances, expenses and collections. Saved to the cloud for everyone." : "Monthly management summary — sales, bank balances, expenses and collections."} ${canEdit ? "" : "(Editing is restricted.)"}</p>
+      </div>
+      ${canEdit ? `<div class="controls"><button id="misNewBtn" class="dl-btn" type="button">＋ New month</button></div>` : ""}
+      <div id="misForm"></div>
+      <div id="misList"><div class="empty">Loading…</div></div>`;
+  }
+
+  // ---- dynamic row templates ----
+  function misMachineRow(r) {
+    r = r || {};
+    return `<div class="mis-row mis-r5" data-sec="mach">
+      <input class="mi" data-f="drName" placeholder="Dr / Clinic" value="${esc(r.drName || "")}">
+      <input class="mi" data-f="machine" placeholder="Machine" value="${esc(r.machine || "")}">
+      <input class="mi" data-f="salesPerson" placeholder="Sales person" value="${esc(r.salesPerson || "")}">
+      <input class="mi" data-f="hq" placeholder="HQ / Zone" value="${esc(r.hq || "")}">
+      <input class="mi num" data-f="amount" type="number" step="any" placeholder="Amount ₹" value="${esc(r.amount ?? "")}">
+      <button type="button" class="ghost-btn mis-del" title="Remove">✕</button></div>`;
+  }
+  function misBankRow(r) {
+    r = r || {};
+    return `<div class="mis-row mis-r5" data-sec="bank">
+      <input class="mi" data-f="account" placeholder="Account (AXIS-962 / ICICI-202)" value="${esc(r.account || "")}">
+      <input class="mi num" data-f="opening" type="number" step="any" placeholder="Opening ₹" value="${esc(r.opening ?? "")}">
+      <input class="mi num" data-f="collection" type="number" step="any" placeholder="Collection ₹" value="${esc(r.collection ?? "")}">
+      <input class="mi num" data-f="payment" type="number" step="any" placeholder="Payment ₹" value="${esc(r.payment ?? "")}">
+      <button type="button" class="ghost-btn mis-del" title="Remove">✕</button></div>`;
+  }
+  function misExpRow(r) {
+    r = r || {};
+    const opts = MIS_EXP_TYPES.map((t) => `<option${(r.type || "Variable") === t ? " selected" : ""}>${t}</option>`).join("");
+    return `<div class="mis-row mis-r3" data-sec="exp">
+      <select class="mi select" data-f="type">${opts}</select>
+      <input class="mi" data-f="details" placeholder="Details / category (e.g. Salary, Customs)" value="${esc(r.details || "")}">
+      <input class="mi num" data-f="amount" type="number" step="any" placeholder="Amount ₹" value="${esc(r.amount ?? "")}">
+      <button type="button" class="ghost-btn mis-del" title="Remove">✕</button></div>`;
+  }
+  function misCollRow(r) {
+    r = r || {};
+    return `<div class="mis-row mis-r4" data-sec="coll">
+      <input class="mi" data-f="date" type="date" value="${esc(r.date || "")}">
+      <input class="mi" data-f="name" placeholder="Name / Dr / Clinic" value="${esc(r.name || "")}">
+      <input class="mi" data-f="tag" placeholder="Tag (e.g. Esthemax Sale)" value="${esc(r.tag || "")}">
+      <input class="mi num" data-f="amount" type="number" step="any" placeholder="Amount ₹" value="${esc(r.amount ?? "")}">
+      <button type="button" class="ghost-btn mis-del" title="Remove">✕</button></div>`;
+  }
+
+  function misFormHtml(m) {
+    m = m || {};
+    const s = m.sales || {};
+    const sIn = (f, ph) => `<label class="ord-field"><span>${esc(ph)}</span><input class="mis-sum" data-f="${f}" type="number" step="any" value="${esc(s[f] ?? "")}" placeholder="₹"></label>`;
+    const mach = (m.machineSales && m.machineSales.length ? m.machineSales : [{}]).map(misMachineRow).join("");
+    const banks = (m.banks && m.banks.length ? m.banks : [{}]).map(misBankRow).join("");
+    const exps = (m.expenses && m.expenses.length ? m.expenses : [{}]).map(misExpRow).join("");
+    const colls = (m.collections && m.collections.length ? m.collections : [{}]).map(misCollRow).join("");
+    return `
+      <div class="card" style="margin-bottom:20px">
+        <h2 style="margin-top:0">${m.id ? "Edit" : "New"} MIS month</h2>
+        <form id="misFormEl" class="admin-form">
+          <div class="ch-grid">
+            <label class="ord-field"><span>Period label *</span><input id="misPeriod" value="${esc(m.period || "")}" placeholder="e.g. May 2026"></label>
+            <label class="ord-field"><span>Month (for sorting)</span><input id="misMonth" type="month" value="${esc(m.monthKey || "")}"></label>
+          </div>
+
+          <div class="perm-group">
+            <div class="perm-title">Sales (₹) — by category</div>
+            <div class="ch-grid">
+              ${sIn("primelaze", "Machine · Primelaze")}
+              ${sIn("vagicia", "Machine · Vagicia")}
+              ${sIn("spareParts", "Spare Parts")}
+              ${sIn("consumables", "Consumables")}
+              ${sIn("service", "Service")}
+              ${sIn("esthemax", "Esthemax — Mask")}
+            </div>
+            <div class="mis-sumline" id="misSumLine"></div>
+          </div>
+
+          <div class="perm-group">
+            <div class="perm-title">Machine sales <button type="button" class="linkish mis-add" data-sec="mach">+ add row</button></div>
+            <div class="mis-head mis-r5"><span>Dr / Clinic</span><span>Machine</span><span>Sales person</span><span>HQ / Zone</span><span>Amount ₹</span><span></span></div>
+            <div id="misSec-mach">${mach}</div>
+          </div>
+
+          <div class="perm-group">
+            <div class="perm-title">Bank balances <button type="button" class="linkish mis-add" data-sec="bank">+ add account</button></div>
+            <div class="mis-head mis-r5"><span>Account</span><span>Opening ₹</span><span>Collection ₹</span><span>Payment ₹</span><span></span></div>
+            <div id="misSec-bank">${banks}</div>
+            <div class="muted-note" style="margin-top:4px">Balance = Opening + Collection − Payment (computed automatically).</div>
+          </div>
+
+          <div class="perm-group">
+            <div class="perm-title">Payments / expenses <button type="button" class="linkish mis-add" data-sec="exp">+ add row</button></div>
+            <div class="mis-head mis-r3"><span>Type</span><span>Details / category</span><span>Amount ₹</span><span></span></div>
+            <div id="misSec-exp">${exps}</div>
+          </div>
+
+          <div class="perm-group">
+            <div class="perm-title">Collections <button type="button" class="linkish mis-add" data-sec="coll">+ add row</button></div>
+            <div class="mis-head mis-r4"><span>Date</span><span>Name</span><span>Tag</span><span>Amount ₹</span><span></span></div>
+            <div id="misSec-coll">${colls}</div>
+          </div>
+
+          <label class="ord-field"><span>Notes (optional)</span><textarea id="misNote" rows="2">${esc(m.note || "")}</textarea></label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" class="dl-btn">${m.id ? "Save changes" : "Create month"}</button>
+            <button type="button" class="ghost-btn" id="misCancel">Cancel</button>
+          </div>
+          <div id="misMsg" class="lock-error" style="min-height:16px"></div>
+        </form>
+      </div>`;
+  }
+
+  // Read every section + summary into a clean document object.
+  function readMisForm() {
+    const readSec = (sec, fields) => Array.from(document.querySelectorAll(`#misSec-${sec} .mis-row`)).map((row) => {
+      const o = {};
+      fields.forEach((f) => { const el = row.querySelector(`[data-f="${f}"]`); if (el) o[f] = el.value.trim(); });
+      return o;
+    });
+    const sumVal = (f) => { const el = document.querySelector(`.mis-sum[data-f="${f}"]`); return el ? misNum(el.value) : 0; };
+    const machine = sumVal("primelaze") + sumVal("vagicia");
+    const sales = {
+      primelaze: sumVal("primelaze"), vagicia: sumVal("vagicia"), spareParts: sumVal("spareParts"),
+      consumables: sumVal("consumables"), service: sumVal("service"), esthemax: sumVal("esthemax"),
+      machine, total: machine + sumVal("spareParts") + sumVal("consumables") + sumVal("service") + sumVal("esthemax"),
+    };
+    const machineSales = readSec("mach", ["drName", "machine", "salesPerson", "hq", "amount"])
+      .filter((r) => r.drName || r.machine || r.amount).map((r) => ({ ...r, amount: misNum(r.amount) }));
+    const banks = readSec("bank", ["account", "opening", "collection", "payment"])
+      .filter((r) => r.account || r.opening || r.collection || r.payment).map((r) => {
+        const opening = misNum(r.opening), collection = misNum(r.collection), payment = misNum(r.payment);
+        return { account: r.account, opening, collection, payment, balance: opening + collection - payment };
+      });
+    const expenses = readSec("exp", ["type", "details", "amount"])
+      .filter((r) => r.details || r.amount).map((r) => ({ type: r.type || "Variable", details: r.details, amount: misNum(r.amount) }));
+    const collections = readSec("coll", ["date", "name", "tag", "amount"])
+      .filter((r) => r.name || r.amount || r.date).map((r) => ({ ...r, amount: misNum(r.amount) }));
+    return {
+      period: $("#misPeriod").value.trim(),
+      monthKey: $("#misMonth").value.trim(),
+      note: $("#misNote").value.trim(),
+      sales, machineSales, banks, expenses, collections,
+    };
+  }
+
+  function misTotals(m) {
+    m = m || {};
+    const sum = (arr) => (arr || []).reduce((s, r) => s + misNum(r.amount), 0);
+    return {
+      sale: (m.sales && misNum(m.sales.total)) || 0,
+      collection: sum(m.collections),
+      payment: sum(m.expenses),
+      machineSale: sum(m.machineSales),
+      bankBalance: (m.banks || []).reduce((s, b) => s + misNum(b.balance), 0),
+    };
+  }
+
+  function misDetailHtml(m) {
+    const s = m.sales || {};
+    const money = (v) => misNum(v) ? rupeeShort(misNum(v)) : "—";
+    const salesRows = [
+      ["Machine · Primelaze", s.primelaze], ["Machine · Vagicia", s.vagicia],
+      ["Machine (subtotal)", s.machine], ["Spare Parts", s.spareParts],
+      ["Consumables", s.consumables], ["Service", s.service], ["Esthemax — Mask", s.esthemax],
+    ].map(([k, v]) => `<tr><td>${k}</td><td class="num">${money(v)}</td></tr>`).join("")
+      + `<tr class="pay-totals"><td><b>Total Sale</b></td><td class="num"><b>${money(s.total)}</b></td></tr>`;
+    const machRows = (m.machineSales || []).map((r) => `<tr><td>${esc(r.drName || "")}</td><td>${esc(r.machine || "")}</td><td>${esc(r.salesPerson || "")}</td><td>${esc(r.hq || "")}</td><td class="num">${money(r.amount)}</td></tr>`).join("");
+    const bankRows = (m.banks || []).map((r) => `<tr><td>${esc(r.account || "")}</td><td class="num">${money(r.opening)}</td><td class="num">${money(r.collection)}</td><td class="num">${money(r.payment)}</td><td class="num"><b>${money(r.balance)}</b></td></tr>`).join("");
+    const expRows = (m.expenses || []).map((r) => `<tr><td>${esc(r.type || "")}</td><td>${esc(r.details || "")}</td><td class="num">${money(r.amount)}</td></tr>`).join("");
+    const collRows = (m.collections || []).map((r) => `<tr><td>${esc(r.date || "")}</td><td>${esc(r.name || "")}</td><td>${esc(r.tag || "")}</td><td class="num">${money(r.amount)}</td></tr>`).join("");
+    const t = misTotals(m);
+    const sect = (title, head, rows, totalLabel, totalVal) => rows
+      ? `<div class="block" style="margin-top:14px"><h3 style="margin:0 0 4px">${title}</h3>${table(head, rows + (totalLabel ? `<tr class="pay-totals">${totalLabel}<td class="num"><b>${rupeeShort(totalVal)}</b></td></tr>` : ""))}</div>`
+      : "";
+    return `
+      <div class="block"><h3 style="margin:0 0 4px">Sales</h3>${table(`<th>Category</th><th class="num">Amount</th>`, salesRows)}</div>
+      ${sect("Machine sales", `<th>Dr / Clinic</th><th>Machine</th><th>Sales person</th><th>HQ</th><th class="num">Amount</th>`, machRows, `<td colspan="4"><b>Total</b></td>`, t.machineSale)}
+      ${sect("Bank balances", `<th>Account</th><th class="num">Opening</th><th class="num">Collection</th><th class="num">Payment</th><th class="num">Balance</th>`, bankRows, "", 0)}
+      ${sect("Payments / expenses", `<th>Type</th><th>Details</th><th class="num">Amount</th>`, expRows, `<td colspan="2"><b>Total</b></td>`, t.payment)}
+      ${sect("Collections", `<th>Date</th><th>Name</th><th>Tag</th><th class="num">Amount</th>`, collRows, `<td colspan="3"><b>Total</b></td>`, t.collection)}
+      ${m.note ? `<p class="muted-note" style="margin-top:10px"><b>Notes:</b> ${esc(m.note)}</p>` : ""}`;
+  }
+
+  async function loadMisList() {
+    const box = document.getElementById("misList");
+    if (!box) return;
+    let list = [];
+    try {
+      const store = misStore();
+      if (store) { const snap = await store.get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
+      else list = localMis.slice();
+    } catch (e) { box.innerHTML = `<div class="empty">Could not load MIS (${esc(e.message || "" + e)}).</div>`; return; }
+    // Sort newest first by monthKey, then by createdAt.
+    list.sort((a, b) => String(b.monthKey || "").localeCompare(String(a.monthKey || "")) || (b.createdAt || 0) - (a.createdAt || 0));
+    const canEdit = canEditPage("mis");
+    if (!list.length) { box.innerHTML = `<div class="empty">No MIS months yet.${canEdit ? " Click “New month” to add one." : ""}</div>`; return; }
+    const rows = list.map((m) => {
+      const t = misTotals(m);
+      const act = `<button class="ghost-btn mis-view" data-id="${esc(m.id)}">View</button>` +
+        (canEdit ? ` <button class="ghost-btn mis-edit" data-id="${esc(m.id)}">Edit</button> <button class="ghost-btn mis-rm" data-id="${esc(m.id)}">Delete</button>` : "");
+      return `<tr>
+        <td class="t-name">${esc(m.period || "—")}</td>
+        <td class="num">${t.sale ? rupeeShort(t.sale) : "—"}</td>
+        <td class="num">${t.collection ? rupeeShort(t.collection) : "—"}</td>
+        <td class="num">${t.payment ? rupeeShort(t.payment) : "—"}</td>
+        <td>${act}</td></tr>`;
+    }).join("");
+    box.innerHTML = `<div class="block"><h2>Months</h2>${table(`<th>Period</th><th class="num">Total Sale</th><th class="num">Collection</th><th class="num">Payment</th><th></th>`, rows)}</div><div id="misDetail"></div>`;
+    const byId = (id) => list.find((x) => x.id === id);
+    box.querySelectorAll(".mis-view").forEach((b) => b.onclick = () => {
+      const d = document.getElementById("misDetail"); const m = byId(b.dataset.id);
+      if (d && m) { d.innerHTML = `<div class="card" style="margin-top:16px"><h2 style="margin-top:0">${esc(m.period || "MIS")}</h2>${misDetailHtml(m)}</div>`; d.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    });
+    box.querySelectorAll(".mis-edit").forEach((b) => b.onclick = () => openMisForm(byId(b.dataset.id)));
+    box.querySelectorAll(".mis-rm").forEach((b) => b.onclick = async () => {
+      if (!window.confirm("Delete this MIS month?")) return;
+      try { const store = misStore(); if (store) await store.doc(b.dataset.id).delete(); else localMis = localMis.filter((x) => x.id !== b.dataset.id); loadMisList(); }
+      catch (e) { window.alert("Delete failed: " + (e.message || e)); }
+    });
+  }
+
+  function misUpdateSumLine() {
+    const line = document.getElementById("misSumLine"); if (!line) return;
+    const v = (f) => { const el = document.querySelector(`.mis-sum[data-f="${f}"]`); return el ? misNum(el.value) : 0; };
+    const machine = v("primelaze") + v("vagicia");
+    const total = machine + v("spareParts") + v("consumables") + v("service") + v("esthemax");
+    line.innerHTML = `Machine subtotal <b>${rupeeShort(machine)}</b> &nbsp;·&nbsp; Total Sale <b>${rupeeShort(total)}</b>`;
+  }
+
+  function openMisForm(m) {
+    const host = document.getElementById("misForm");
+    if (!host) return;
+    host.innerHTML = misFormHtml(m || null);
+    const existing = m || null;
+    misUpdateSumLine();
+    document.querySelectorAll(".mis-sum").forEach((el) => el.oninput = misUpdateSumLine);
+    // Add-row buttons.
+    const rowFor = { mach: misMachineRow, bank: misBankRow, exp: misExpRow, coll: misCollRow };
+    host.querySelectorAll(".mis-add").forEach((b) => b.onclick = () => {
+      const sec = b.dataset.sec; const cont = document.getElementById("misSec-" + sec);
+      if (cont) cont.insertAdjacentHTML("beforeend", rowFor[sec]({}));
+    });
+    // Delegated row delete (bound to the form, which is recreated each open so
+    // listeners never accumulate).
+    $("#misFormEl").addEventListener("click", (e) => {
+      const del = e.target.closest(".mis-del"); if (!del) return;
+      const row = del.closest(".mis-row"); const cont = row && row.parentElement;
+      if (row && cont && cont.querySelectorAll(".mis-row").length > 1) row.remove();
+      else if (row) row.querySelectorAll("input,select").forEach((i) => { i.value = ""; });
+    });
+    $("#misCancel").onclick = () => { host.innerHTML = ""; };
+    $("#misFormEl").onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = $("#misMsg"); msg.style.color = ""; msg.textContent = "";
+      const data = readMisForm();
+      if (!data.period) { msg.style.color = "var(--bad)"; msg.textContent = "Period label is required."; return; }
+      data.updatedAt = Date.now();
+      data.updatedBy = (sessionUser && sessionUser.email) || "";
+      try {
+        const store = misStore();
+        if (store) {
+          if (existing && existing.id) await store.doc(existing.id).set(data, { merge: true });
+          else { data.createdAt = Date.now(); data.createdBy = data.updatedBy; await store.add(data); }
+        } else {
+          if (existing && existing.id) { const i = localMis.findIndex((x) => x.id === existing.id); if (i >= 0) localMis[i] = { ...data, id: existing.id }; }
+          else localMis.unshift({ ...data, id: "local-" + localMis.length, createdAt: Date.now() });
+        }
+        host.innerHTML = "";
+        loadMisList();
+        toast("MIS month saved", "good");
+      } catch (err) { msg.style.color = "var(--bad)"; msg.textContent = "Save failed: " + (err.message || err); }
+    };
+    host.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function initMisUI() {
+    const nb = document.getElementById("misNewBtn");
+    if (nb) nb.onclick = () => openMisForm(null);
+    loadMisList();
   }
 
   /* ================= REVIEW LOG ================= */

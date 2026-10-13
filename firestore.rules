@@ -78,6 +78,14 @@ service cloud.firestore {
       allow delete: if isAdmin() || isPageEditor();
     }
 
+    // MIS — Finance monthly summary documents (one per month). Any signed-in
+    // user may read; only admins and page editors may write. Without this rule
+    // the "New month" save is denied and nothing persists.
+    match /mis/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isPageEditor();
+    }
+
     // Outgoing email queue for the Firebase "Trigger Email" extension. The
     // dashboard queues post-sale lead notifications here by CREATING a doc; the
     // extension reads/updates them server-side (admin privileges bypass rules).

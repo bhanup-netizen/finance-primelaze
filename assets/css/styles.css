@@ -1609,3 +1609,20 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .ecalc-in:disabled, .cost-in:disabled, .ecalc-in[disabled], .cost-in[disabled] {
   background: var(--surface-2); color: var(--text-2); opacity: .75; cursor: not-allowed;
 }
+
+/* ===== MIS (Finance monthly summary) — row editors ===== */
+.mis-row { display: grid; gap: 8px; margin-bottom: 8px; align-items: center; }
+.mis-head { display: grid; gap: 8px; margin: 2px 0 4px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.mis-r5 { grid-template-columns: 1.4fr 1.2fr 1fr .9fr 1fr 34px; }
+.mis-r4 { grid-template-columns: 150px 1.4fr 1.2fr 1fr 34px; }
+.mis-r3 { grid-template-columns: 130px 1.6fr 1fr 34px; }
+.mis-head span:last-child { } /* spacer col */
+.mis-row .mi { width: 100%; min-width: 0; }
+.mis-row .mi.num { text-align: right; }
+.mis-sumline { margin-top: 8px; font-size: 13px; color: var(--text-2); }
+.mis-sumline b { color: var(--text); }
+@media (max-width: 760px) {
+  .mis-head { display: none; }
+  .mis-r5, .mis-r4, .mis-r3 { grid-template-columns: 1fr 1fr 34px; }
+}
