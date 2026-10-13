@@ -10055,7 +10055,15 @@
     // Sort newest first by monthKey, then by createdAt.
     list.sort((a, b) => String(b.monthKey || "").localeCompare(String(a.monthKey || "")) || (b.createdAt || 0) - (a.createdAt || 0));
     const canEdit = isAdmin();
-    if (!list.length) { box.innerHTML = `<div class="empty">No MIS months yet.${canEdit ? " Click “New month” to add one." : ""}</div>`; return; }
+    const seedAvail = !!(window.MIS_IMPORT_SEED && window.MIS_IMPORT_SEED.length);
+    if (!list.length) {
+      box.innerHTML = `<div class="empty">No MIS months yet.${canEdit
+        ? ` Click <b>＋ New month</b> to add one${seedAvail ? `, or <button id="misImportInline" class="dl-btn" type="button" style="margin-left:8px">⬆ Load MIS_2026 data (${window.MIS_IMPORT_SEED.length} months)</button>` : "."}`
+        : " Ask an admin to add data (or switch to Admin mode)."}</div>`;
+      const ii = document.getElementById("misImportInline");
+      if (ii) ii.onclick = misImportSeed;
+      return;
+    }
     const rows = list.map((m) => {
       const t = misTotals(m);
       const act = `<button class="ghost-btn mis-view" data-id="${esc(m.id)}">View</button>` +
