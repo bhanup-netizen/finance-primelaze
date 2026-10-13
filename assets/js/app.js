@@ -9863,7 +9863,7 @@
         <h1>📊 MIS — Monthly Summary</h1>
         <p>${canEdit ? "Record each month's sales, bank balances, expenses and collections. Saved to the cloud for everyone." : "Monthly management summary — sales, bank balances, expenses and collections. Switch to Admin mode (or ask an admin) to add/edit."}</p>
       </div>
-      ${canEdit ? `<div class="controls"><button id="misNewBtn" class="dl-btn" type="button">＋ New month</button></div>` : ""}
+      ${canEdit ? `<div class="controls"><button id="misNewBtn" class="dl-btn" type="button">＋ New month</button>${(window.MIS_IMPORT_SEED && window.MIS_IMPORT_SEED.length) ? `<button id="misImportBtn" class="ghost-btn" type="button" title="Load the months from MIS_2026.xlsx (skips any already added)">⬆ Load MIS_2026 data</button>` : ""}</div>` : ""}
       <div id="misForm"></div>
       <div id="misList"><div class="empty">Loading…</div></div>`;
   }
@@ -10135,9 +10135,47 @@
     host.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // One-time bootstrap: write the months parsed from MIS_2026.xlsx
+  // (window.MIS_IMPORT_SEED) into Firestore, skipping any period already there.
+  async function misImportSeed() {
+    const seed = window.MIS_IMPORT_SEED || [];
+    if (!seed.length) return;
+    if (!window.confirm(`Load ${seed.length} month(s) from MIS_2026.xlsx? Months already added are skipped.`)) return;
+    const btn = document.getElementById("misImportBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+    try {
+      const store = misStore();
+      // Existing periods — skip duplicates so re-clicking is safe.
+      const have = new Set();
+      if (store) { const snap = await store.get(); snap.forEach((d) => { const p = d.data().period; if (p) have.add(p); }); }
+      else localMis.forEach((m) => { if (m.period) have.add(m.period); });
+      let added = 0, skipped = 0;
+      for (const m of seed) {
+        if (have.has(m.period)) { skipped++; continue; }
+        const doc = {
+          period: m.period, monthKey: m.monthKey || "", note: m.note || "",
+          sales: m.sales || {}, machineSales: m.machineSales || [], banks: m.banks || [],
+          expenses: m.expenses || [], collections: m.collections || [],
+          createdAt: Date.now(), createdBy: (sessionUser && sessionUser.email) || "", importedFrom: "MIS_2026.xlsx",
+        };
+        if (store) await store.add(doc);
+        else localMis.unshift({ ...doc, id: "local-" + localMis.length });
+        added++;
+      }
+      loadMisList();
+      toast(`MIS import: ${added} added${skipped ? ", " + skipped + " already there" : ""}`, "good");
+    } catch (e) {
+      window.alert("Import failed: " + (e.message || e) + "\n\nIf this is a permissions error, publish the Firestore rule for the \"mis\" collection first.");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "⬆ Load MIS_2026 data"; }
+    }
+  }
+
   function initMisUI() {
     const nb = document.getElementById("misNewBtn");
     if (nb) nb.onclick = () => openMisForm(null);
+    const ib = document.getElementById("misImportBtn");
+    if (ib) ib.onclick = misImportSeed;
     loadMisList();
   }
 
