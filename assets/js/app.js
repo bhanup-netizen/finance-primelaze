@@ -7156,7 +7156,9 @@
   const regDocs = {}; // "<group>:<slug>:<docType>" -> {name,url,path,size,at,by} | {url,link:true,at,by}
   const regTrack = {}; // "<group>:<slug>" -> {status, expected, actual, remarks:[{at,by,text}]}
   const regItemEdits = {}; // "<group>:<slug>:<field>" -> corrected value for an item's own detail
-  const socOwners = {}; // Social Media accounts: "<account id>" -> owner override (editable)
+  const socOwners = {}; // Social Media accounts: key -> "Content created & posted by" override (editable)
+  const socDm = {};     // key -> "DM reply & engagement" override (editable; default Sparsha for social pages)
+  const socNote = {};   // key -> Notes override (editable)
   const socPageStatus = {}; // page key -> "off" when Not Active (default Active)
   const socPageAdds = [];   // page-admin-added online pages
   const socPageHidden = []; // keys of seed pages removed by a page admin
@@ -7816,21 +7818,33 @@
     const acctHead = (ed ? [""] : []).concat("Brand", "Account", "Status", "Content created & posted by", "DM reply & engagement", "Notes").map((x) => `<th>${x}</th>`).join("");
     const platSections = platOrdered.map((pl) => {
       const rows = platGroups[pl];
-      const dmBy = SOC_DM_PLATFORMS[pl] ? "Sparsha" : "";
+      const dmDef = SOC_DM_PLATFORMS[pl] ? "Sparsha" : "";
       const body = rows.map((a) => {
         const k = acctKey(a);
         const off = socPageStatus[k] === "off";
+        const pbVal = socOwnerOf(a);
+        const dmVal = socDm[k] != null ? socDm[k] : dmDef;
+        const noteVal = socNote[k] != null ? socNote[k] : (a.note || "");
         const statusCell = ed
           ? `<td><button type="button" class="soc-status ${off ? "off" : "on"}" data-key="${esc(k)}">${off ? "Not Active" : "Active"}</button></td>`
           : `<td><span class="badge ${off ? "b-bad" : "b-good"}">${off ? "Not Active" : "Active"}</span></td>`;
+        const pbCell = ed
+          ? `<td><input class="soc-pb-in" data-key="${esc(k)}" value="${esc(pbVal)}" placeholder="team / agency…" style="min-width:150px"></td>`
+          : `<td>${esc(pbVal || "—")}</td>`;
+        const dmCell = ed
+          ? `<td><input class="soc-dm-in" data-key="${esc(k)}" value="${esc(dmVal)}" placeholder="who replies…" style="min-width:130px"></td>`
+          : `<td>${esc(dmVal || "—")}</td>`;
+        const noteCell = ed
+          ? `<td><input class="soc-note-in" data-key="${esc(k)}" value="${esc(noteVal)}" placeholder="notes…" style="min-width:150px"></td>`
+          : `<td>${noteVal ? `<span class="cell-note">${esc(noteVal)}</span>` : "—"}</td>`;
         return `<tr>
         ${ed ? `<td class="num"><button type="button" class="ghost-btn danger soc-del" data-key="${esc(k)}" title="Delete this page">🗑</button></td>` : ""}
         <td><span class="badge b-neutral">${esc(a.brand)}</span></td>
         <td class="t-name">${a.link ? `<a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.id)}</a>` : esc(a.id)}</td>
         ${statusCell}
-        <td>${esc(a.owner || "—")}</td>
-        <td>${dmBy || "—"}</td>
-        <td>${a.note ? `<span class="cell-note">${esc(a.note)}</span>` : "—"}</td>
+        ${pbCell}
+        ${dmCell}
+        ${noteCell}
       </tr>`;
       }).join("");
       return `<div class="block" style="margin-top:16px">
@@ -7901,6 +7915,16 @@
       });
       const ap = document.getElementById("socAddPage");
       if (ap) ap.onclick = socAddPageDialog;
+      // Editable columns: Content created & posted by / DM reply & engagement / Notes.
+      document.querySelectorAll(".soc-pb-in").forEach((el) => {
+        el.onchange = () => { socOwners[el.dataset.key] = el.value.trim(); saveEdits("Online page · posted by"); };
+      });
+      document.querySelectorAll(".soc-dm-in").forEach((el) => {
+        el.onchange = () => { socDm[el.dataset.key] = el.value.trim(); saveEdits("Online page · DM / engagement"); };
+      });
+      document.querySelectorAll(".soc-note-in").forEach((el) => {
+        el.onchange = () => { socNote[el.dataset.key] = el.value.trim(); saveEdits("Online page · notes"); };
+      });
       wireMkt();
     }, 0);
 
@@ -11262,6 +11286,8 @@
       if (e.regTrack && typeof e.regTrack === "object") { Object.keys(regTrack).forEach((k) => delete regTrack[k]); Object.assign(regTrack, e.regTrack); }
       if (e.regItemEdits && typeof e.regItemEdits === "object") { Object.keys(regItemEdits).forEach((k) => delete regItemEdits[k]); Object.assign(regItemEdits, e.regItemEdits); }
       if (e.socOwners && typeof e.socOwners === "object") { Object.keys(socOwners).forEach((k) => delete socOwners[k]); Object.assign(socOwners, e.socOwners); }
+      if (e.socDm && typeof e.socDm === "object") { Object.keys(socDm).forEach((k) => delete socDm[k]); Object.assign(socDm, e.socDm); }
+      if (e.socNote && typeof e.socNote === "object") { Object.keys(socNote).forEach((k) => delete socNote[k]); Object.assign(socNote, e.socNote); }
       if (e.socPageStatus && typeof e.socPageStatus === "object") { Object.keys(socPageStatus).forEach((k) => delete socPageStatus[k]); Object.assign(socPageStatus, e.socPageStatus); }
       if (Array.isArray(e.socPageAdds)) { socPageAdds.length = 0; e.socPageAdds.forEach((x) => socPageAdds.push(x)); const ids = socPageAdds.map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); socPageSeq = Math.max(socPageSeq, ...(ids.length ? ids : [0])) + 1; }
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
@@ -11524,7 +11550,7 @@
     ["expenseAdds", () => expenseAdds], ["expenseHideBase", () => expenseHideBase],
     ["orgTop", () => orgTop], ["orgNsm", () => orgNsm], ["termsOverride", () => termsOverride],
     ["ovEdits", () => ovEdits],
-    ["socOwners", () => socOwners], ["socPageStatus", () => socPageStatus],
+    ["socOwners", () => socOwners], ["socDm", () => socDm], ["socNote", () => socNote], ["socPageStatus", () => socPageStatus],
     ["socPageAdds", () => socPageAdds], ["socPageHidden", () => socPageHidden],
     ["mktDoc", () => mktDoc], ["induction", () => induction], ["attendance", () => attendance],
     ["coverage", () => coverage, () => covDirty],
