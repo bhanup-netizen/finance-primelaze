@@ -5521,7 +5521,7 @@
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
     "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
-    "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
+    "demoProducts", "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
   const LEAD_STEP_KEYS = ["new", "contacted", "working", "demosched", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
@@ -6131,6 +6131,7 @@
         ${fText("link", "Attachment link", "https://…")}
       </div>
       ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.stage === "dispatched" && leadExpectedDelivery(r) ? ` · <b>Exp. delivery:</b> ${esc(leadExpectedDelivery(r))}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
+      ${(Array.isArray(r.demoProducts) && r.demoProducts.length) ? `<div class="ld-meta"><b>🧪 Demoed:</b> ${r.demoProducts.map(esc).join(", ")}</div>` : ""}
       <div class="ld-attach"><h4 class="ld-h">Attachments</h4><div id="ldFiles"></div>${admin ? `<label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Attach file<input type="file" id="ldFileInput" hidden></label>` : ""}</div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
       ${(otherPipelines.length || (admin && leadContactKey(r))) ? `<div class="ld-pipelines">
@@ -6385,6 +6386,20 @@
   // "Add to timeline" popup — always lets you record an update and, in the same
   // step, set the stage (defaults to the current stage). Choosing Sold reveals
   // the deal value + date. Opened from the row stage dropdown or the ＋ button.
+  // Esthemax product list (variants) for the "Demo done" picker — grouped by
+  // section, built from the price seed so it stays in sync with the catalogue.
+  function esthDemoProductGroups() {
+    const EP = window.ESTHEMAX_PRICE_SEED || {};
+    const groups = [], seen = new Set();
+    const mk = (title, names) => {
+      const items = [];
+      names.forEach((n) => { n = String(n == null ? "" : n).trim(); const k = n.toLowerCase(); if (n && !seen.has(k)) { seen.add(k); items.push(n); } });
+      if (items.length) groups.push({ title, items });
+    };
+    ((EP.markets && EP.markets.salon && EP.markets.salon.groups) || []).forEach((g) => mk(g.title || "Products", (g.rows || []).map((r) => r[1])));
+    if (Array.isArray(EP.accessories) && EP.accessories.length) mk("Accessories", EP.accessories.map((a) => a[0]));
+    return groups;
+  }
   function leadRemarkDialog(opts) {
     const { id, newStage, oldStage, selEl } = opts;
     const l = leadAll().find((x) => x.id === id); if (!l) { if (selEl && oldStage) selEl.value = oldStage; return; }
@@ -6418,6 +6433,10 @@
       </div>
       <div class="lead-form-grid" id="lrDelivBox"${preStage === "delivered" ? "" : " hidden"}>
         <label>Delivered on<input id="lrDelivDate" type="date" value="${esc(l.deliveredDate || leadToday())}"></label>
+      </div>
+      <div id="lrDemoBox"${preStage === "demo" ? "" : " hidden"}>
+        <div class="lead-remark-label" style="margin-bottom:4px"><b>Which Esthemax products were demoed?</b> <span class="t-muted" style="font-weight:400">— tick all that apply (you can pick multiple variants)</span></div>
+        <div class="lead-demo-prods">${esthDemoProductGroups().map((g) => `<div class="ldp-group"><div class="ldp-group-t">${esc(g.title)}</div>${g.items.map((n) => `<label class="ldp-chk"><input type="checkbox" class="lr-demo-prod" value="${esc(n)}"${(Array.isArray(l.demoProducts) && l.demoProducts.indexOf(n) >= 0) ? " checked" : ""}> ${esc(n)}</label>`).join("")}</div>`).join("")}</div>
       </div>` : `<div class="muted-note">This is added as a note in the current stage. Only editors can move the stage.</div>`}
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="lrCancel">Cancel</button>
@@ -6433,6 +6452,7 @@
       document.getElementById("lrSoldBox").hidden = v !== "sold";
       document.getElementById("lrDispBox").hidden = v !== "dispatched";
       document.getElementById("lrDelivBox").hidden = v !== "delivered";
+      const db2 = document.getElementById("lrDemoBox"); if (db2) db2.hidden = v !== "demo";
     };
     const actSel = document.getElementById("lrAct");
     const evWrap = document.getElementById("lrEvWrap");
@@ -6471,6 +6491,12 @@
       }
       if (moved && chosen === "delivered") {
         leadUpdate(id, "deliveredDate", (document.getElementById("lrDelivDate").value || "").trim() || leadToday());
+      }
+      // Demo done: record which Esthemax products/variants were demoed.
+      if (chosen === "demo") {
+        const picks = Array.from(document.querySelectorAll(".lr-demo-prod:checked")).map((c) => c.value);
+        leadUpdate(id, "demoProducts", picks);
+        if (picks.length) text += (text ? " " : "") + "— Demoed: " + picks.join(", ");
       }
       if (moved) { leadUpdate(id, "stage", chosen); leadUpdate(id, "stageSince", Date.now()); }
       leadAddHistory(id, chosen, text, "", act, ev);
