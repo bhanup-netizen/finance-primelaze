@@ -6263,14 +6263,19 @@
   function leadRepaint() {
     const rows0 = leadBoardRows();
     const filtered = leadFiltered(rows0);
-    const k = document.getElementById("leadKpis"); if (k) k.innerHTML = leadKpis(rows0);
-    const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(rows0); }
-    const pc = document.getElementById("leadProdChips"); if (pc) { pc.innerHTML = leadProductChips(rows0); }
+    const stageBase = leadRowsExcept(rows0, "stage");    // KPIs / stage chips / scoreboard reflect active filters
+    const prodBase = leadRowsExcept(rows0, "product");   // product chips reflect active filters
+    const k = document.getElementById("leadKpis"); if (k) k.innerHTML = leadKpis(stageBase);
+    const c = document.getElementById("leadChips"); if (c) { c.innerHTML = leadChips(stageBase); }
+    const pc = document.getElementById("leadProdChips"); if (pc) { pc.innerHTML = leadProductChips(prodBase); }
     wireLeadChips();
-    const sc = document.getElementById("leadScore"); if (sc) sc.innerHTML = leadScoreboard(rows0);
+    const sc = document.getElementById("leadScore"); if (sc) sc.innerHTML = leadScoreboard(stageBase);
     leadSyncFilters(rows0);
     const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
     const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + (leadViewArchived ? " archived" : " leads");
+    // Keep the Stuck / Follow-ups button counts in step with the active filters.
+    const sb = document.getElementById("leadStuck"); if (sb) sb.innerHTML = `⚠ Stuck (${leadRowsExcept(rows0, "stuck").filter(leadIsStuck).length})`;
+    const fb = document.getElementById("leadFollow"); if (fb) fb.innerHTML = `🔔 Follow-ups due (${leadRowsExcept(rows0, "follow").filter(leadFollowDue).length})`;
     const at = document.getElementById("leadArchBtn"); if (at) at.textContent = `🗄 Archived (${leadAll().filter((r) => leadIsArchived(r.id)).length})`;
     const ss = document.getElementById("leadStageSel"); if (ss) ss.value = leadFilter.stage || "";
     wireLeadRowEdits();
@@ -7027,8 +7032,13 @@
       if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) leadImport(f); e.target.value = ""; };
     }, 0);
     const me = myLeadOwner();
-    const stuckN = rows0.filter(leadIsStuck).length;
-    const followN = rows0.filter(leadFollowDue).length;
+    // Stats, chips and the Stuck/Follow counts all reflect the ACTIVE filters
+    // (state, owner, source, search, …). Each facet excludes only its own
+    // dimension so every chip in that group stays visible with its count.
+    const stageBase = leadRowsExcept(rows0, "stage");    // for KPIs, stage chips, scoreboard
+    const prodBase = leadRowsExcept(rows0, "product");   // for product chips
+    const stuckN = leadRowsExcept(rows0, "stuck").filter(leadIsStuck).length;
+    const followN = leadRowsExcept(rows0, "follow").filter(leadFollowDue).length;
     const sel = (id, cur, values, label) => `<label class="ord-field"><span>${esc(label)}</span><select id="${id}" class="select"><option value="">All</option>${values.map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(spLabel(v))}</option>`).join("")}</select></label>`;
     return `
       <div class="section-head">
@@ -7036,10 +7046,10 @@
         <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually, or <b>download → edit → upload</b>: use <b>⬇ Download (edit)</b> to get the current leads, change or add rows in Excel, then <b>⬆ Upload</b> — rows matched by <b>Lead ID</b> (or mobile) are <b>updated</b> (blank cells are left as-is) and new rows are added. New leads need a mobile. Use <b>⬇ Template</b> for a blank format." : "Read-only view."}</p>
       </div>
       ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
-      <div id="leadKpis" class="grid kpi-grid">${leadKpis(rows0)}</div>
-      <div id="leadChips">${leadChips(rows0)}</div>
-      <div id="leadProdChips">${leadProductChips(rows0)}</div>
-      <div id="leadScore">${leadScoreboard(rows0)}</div>
+      <div id="leadKpis" class="grid kpi-grid">${leadKpis(stageBase)}</div>
+      <div id="leadChips">${leadChips(stageBase)}</div>
+      <div id="leadProdChips">${leadProductChips(prodBase)}</div>
+      <div id="leadScore">${leadScoreboard(stageBase)}</div>
       <div class="controls" style="margin-top:14px">
         <input id="leadSearch" class="search" type="search" placeholder="Search name, salon, mobile, city, rep…" value="${esc(leadFilter.q)}">
         ${sel("leadSource", leadFilter.source, leadUniq(leadRowsExcept(rows0, "source"), "source"), "Source")}
