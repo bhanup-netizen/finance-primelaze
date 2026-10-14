@@ -5538,7 +5538,7 @@
   const leadFilesDirty = new Set();     // leadFiles keys we changed
   let leadSeq = 0;
   let leadViewArchived = false; // board showing the archived leads instead of active
-  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false, follow: false };
+  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", file: "", stuck: false, follow: false };
   const canEditLeads = () => isAdmin();
   const leadToday = () => new Date().toISOString().slice(0, 10);
   // Default transit window: when a lead is dispatched, this is how many days
@@ -5897,14 +5897,23 @@
     rows.forEach((r) => { const v = (r[field] || "").trim(); if (v) s.add(v); });
     return Array.from(s).sort((a, b) => a.localeCompare(b));
   }
+  // Set of lead ids that have at least one uploaded attachment.
+  function leadIdsWithFiles() {
+    const s = new Set();
+    Object.keys(leadFiles).forEach((k) => { const i = k.indexOf("#"); if (i > 0) s.add(k.slice(0, i)); });
+    return s;
+  }
   function leadFiltered(rows) {
     const q = (leadFilter.q || "").toLowerCase();
+    const withFiles = leadFilter.file ? leadIdsWithFiles() : null;
     return rows.filter((r) => {
       if (leadFilter.source && r.source !== leadFilter.source) return false;
       if (leadFilter.stage && (r.stage || "new") !== leadFilter.stage) return false;
       if (leadFilter.owner && r.owner !== leadFilter.owner) return false;
       if (leadFilter.state && r.state !== leadFilter.state) return false;
       if (leadFilter.product && !(String(r.product || "").indexOf(leadFilter.product) >= 0)) return false;
+      if (leadFilter.file === "yes" && !withFiles.has(r.id)) return false;
+      if (leadFilter.file === "no" && withFiles.has(r.id)) return false;
       if (leadFilter.stuck && !leadIsStuck(r)) return false;
       if (leadFilter.follow && !leadFollowDue(r)) return false;
       if (q) {
@@ -6232,7 +6241,7 @@
         <td data-label="Product">${esc(r.product || "—")}</td>
         <td data-label="Owner">${leadOwnerCell(r, admin)}</td>
         <td data-label="Stage">${leadStageCell(r, admin)}</td>
-        <td data-label="Updated" class="lead-updated">${lu ? esc(fmtWhen(lu)) : "—"}</td>
+        <td data-label="Updated" class="lead-updated">${lu ? esc(fmtWhen(lu)) : "—"}${r.createdAt ? `<div class="lead-added">added ${esc(fmtWhen(r.createdAt))}</div>` : ""}</td>
         <td class="lead-remarkcell" data-label="Lead journey">${leadRemarkCell(r, admin)}</td>
       </tr>`;
     }).join("");
@@ -7011,10 +7020,11 @@
       wire("leadOwner", (e) => { leadFilter.owner = e.target.value; leadRepaint(); });
       wire("leadState", (e) => { leadFilter.state = e.target.value; leadRepaint(); });
       wire("leadStageSel", (e) => { leadFilter.stage = e.target.value; leadRepaint(); });
+      wire("leadFileSel", (e) => { leadFilter.file = e.target.value; leadRepaint(); });
       const s = document.getElementById("leadSearch");
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
-      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", stuck: false, follow: false }; renderTab("leads"); };
+      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", file: "", stuck: false, follow: false }; renderTab("leads"); };
       const arch = document.getElementById("leadArchBtn");
       if (arch) arch.onclick = () => { leadViewArchived = !leadViewArchived; leadFilter.stage = ""; leadFilter.stuck = false; renderTab("leads"); };
       const mine = document.getElementById("leadMine");
@@ -7056,6 +7066,7 @@
         ${sel("leadOwner", leadFilter.owner, leadOwnersPresent(leadRowsExcept(rows0, "owner")), "Owner")}
         ${sel("leadState", leadFilter.state, leadUniq(leadRowsExcept(rows0, "state"), "state"), "State")}
         <label class="ord-field"><span>Stage</span><select id="leadStageSel" class="select"><option value="">All</option>${LEAD_STAGES.map((s) => `<option value="${s.key}"${leadFilter.stage === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Attachment</span><select id="leadFileSel" class="select"><option value=""${leadFilter.file === "" ? " selected" : ""}>All</option><option value="yes"${leadFilter.file === "yes" ? " selected" : ""}>📎 Has file</option><option value="no"${leadFilter.file === "no" ? " selected" : ""}>No file</option></select></label>
         ${me ? `<button id="leadMine" class="ghost-btn${leadFilter.owner === me ? " active" : ""}" type="button" title="Show only leads assigned to you">👤 My leads</button>` : ""}
         <button id="leadStuck" class="ghost-btn${leadFilter.stuck ? " active" : ""}" type="button" title="Leads sitting over ${LEAD_STUCK_DAYS} days in one stage">⚠ Stuck (${stuckN})</button>
         <button id="leadFollow" class="ghost-btn${leadFilter.follow ? " active" : ""}" type="button" title="Open leads whose follow-up date is today or overdue">🔔 Follow-ups due (${followN})</button>

@@ -1648,3 +1648,6 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
   .lead-controls .ord-field { flex: 1 1 46%; }
   .lead-controls .hq-actions { flex-wrap: wrap; }
 }
+
+/* Lead UPDATED cell — show when the lead was entered under the updated time. */
+.lead-updated .lead-added { font-size: 10.5px; color: var(--text-3); margin-top: 2px; white-space: nowrap; }
