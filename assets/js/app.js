@@ -7043,14 +7043,14 @@
     return `
       <div class="section-head">
         <h1>Casovil Leads</h1>
-        <p>Capture every enquiry, move it through the pipeline, and push it to <b>Sold</b> when it closes. Every lead is stored in the database and never lost — if a lead is not meaningful, <b>archive</b> it (it stays saved and can be restored). ${admin ? "Add leads manually, or <b>download → edit → upload</b>: use <b>⬇ Download (edit)</b> to get the current leads, change or add rows in Excel, then <b>⬆ Upload</b> — rows matched by <b>Lead ID</b> (or mobile) are <b>updated</b> (blank cells are left as-is) and new rows are added. New leads need a mobile. Use <b>⬇ Template</b> for a blank format." : "Read-only view."}</p>
+        <p>${admin ? `Capture, work and close every enquiry. New here or need the add / download &amp; upload steps? See <a class="linkish" data-cv="help">📖 Help &amp; Training</a>.` : "Read-only view."}</p>
       </div>
       ${leadViewArchived ? `<div class="muted-note" style="margin:2px 0 10px">🗄 Showing <b>archived</b> leads — hidden from the active board but kept in the database. Use “Back to active” to return.</div>` : ""}
-      <div id="leadKpis" class="grid kpi-grid">${leadKpis(stageBase)}</div>
+      <div id="leadKpis" class="grid kpi-grid lead-kpis">${leadKpis(stageBase)}</div>
       <div id="leadChips">${leadChips(stageBase)}</div>
       <div id="leadProdChips">${leadProductChips(prodBase)}</div>
       <div id="leadScore">${leadScoreboard(stageBase)}</div>
-      <div class="controls" style="margin-top:14px">
+      <div class="controls lead-controls" style="margin-top:14px">
         <input id="leadSearch" class="search" type="search" placeholder="Search name, salon, mobile, city, rep…" value="${esc(leadFilter.q)}">
         ${sel("leadSource", leadFilter.source, leadUniq(leadRowsExcept(rows0, "source"), "source"), "Source")}
         ${sel("leadOwner", leadFilter.owner, leadOwnersPresent(leadRowsExcept(rows0, "owner")), "Owner")}

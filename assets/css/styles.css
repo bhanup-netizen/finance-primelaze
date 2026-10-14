@@ -1626,3 +1626,25 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
   .mis-head { display: none; }
   .mis-r5, .mis-r4, .mis-r3 { grid-template-columns: 1fr 1fr 34px; }
 }
+
+/* ===== Casovil Leads — compact KPI row + tidy filter/action bar ===== */
+/* Fit all six KPI cards on one row; smaller, denser cards. */
+.lead-kpis { grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.lead-kpis .card { padding: 12px 14px; }
+.lead-kpis .kpi-value { font-size: 23px; margin: 3px 0 1px; letter-spacing: -.5px; }
+.lead-kpis .kpi-label { font-size: 11px; letter-spacing: .3px; }
+.lead-kpis .kpi-note { font-size: 10.5px; }
+@media (max-width: 1040px) { .lead-kpis { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 560px)  { .lead-kpis { grid-template-columns: repeat(2, 1fr); } }
+
+/* Filter bar: align the labelled selects and the plain buttons on one line,
+   and drop the action buttons (Add / Upload / …) onto their own row. */
+.lead-controls { align-items: flex-end; row-gap: 10px; }
+.lead-controls .ord-field { flex: 0 1 148px; min-width: 120px; margin: 0; }
+.lead-controls .search { flex: 1 1 230px; }
+.lead-controls .ghost-btn, .lead-controls .dl-btn { height: 38px; }
+.lead-controls .hq-actions { width: 100%; margin-left: 0; margin-top: 2px; justify-content: flex-start; }
+@media (max-width: 560px) {
+  .lead-controls .ord-field { flex: 1 1 46%; }
+  .lead-controls .hq-actions { flex-wrap: wrap; }
+}
