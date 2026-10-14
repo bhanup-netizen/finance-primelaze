@@ -281,6 +281,7 @@
   const customHQs = [];   // admin-added base-HQ cities
   const customDesignations = []; // admin-added designations/roles
   const rosterRemovals = []; // nums of original roster people deleted by admin
+  let rosterDirty = false;   // this session changed the team roster (protects unsaved edits on refresh)
   // Uploaded KRA docs per position, keyed by card id ("aid:xx" / "num:xx").
   // Value: { name, url, path, size, at, by }. File bytes live in Firebase Storage.
   const kraFiles = {};
@@ -442,6 +443,7 @@
   const zonesFor = (dept) => (dept === "Sales" ? ZONES : NONSALES_ZONES);
   const isRemoved = (p) => p._aid == null && rosterRemovals.includes(p.num);
   function removePerson(p) {
+    rosterDirty = true;
     let nm = "";
     if (p._aid != null) {
       const i = rosterAdds.findIndex((x) => x._aid === p._aid);
@@ -677,6 +679,7 @@
   // Write an edited field from an org card back to the roster (add or base row).
   function orgCardWrite(card, field, val) {
     if (!card) return;
+    rosterDirty = true;
     const aid = card.getAttribute("data-aid"), num = card.getAttribute("data-num");
     if (aid !== null) { const p = rosterAdds.find((x) => x._aid === aid); if (p) p[field] = val; }
     else if (num !== null) rosterEdits[num + "#" + field] = val;
@@ -719,6 +722,7 @@
         // Inherit the department (and Sales division) currently on screen so
         // the new card stays visible under the active tab instead of vanishing.
         const ndiv = orgDept === "Sales" ? orgSalesDiv : "Derma";
+        rosterDirty = true;
         rosterAdds.push({ _aid: aid, name: "New person", designation: "", division: ndiv, dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
         saveEdits("Added a report under " + parent);
         orgEditId = "aid:" + aid; // open the new card so it's ready to fill in
@@ -940,6 +944,7 @@
 
   // "Ravi Kumar · Base HQ → Pune" describing an edited roster field.
   function rosterWhat(num, aid, field, val) {
+    rosterDirty = true; // called at every roster save → mark the module dirty
     let nm = "";
     if (aid) { const p = rosterAdds.find((x) => x._aid === aid); nm = (p && p.name) || ""; }
     else { const p = (D.roster.people || [])[+num]; nm = (p && p.name) || ""; }
@@ -1019,6 +1024,7 @@
       // Sales, otherwise as a top-level card in that department.
       const parent = orgDept === "Sales" ? "Arjun" : (orgNsm.name || "Arjun");
       const ndiv = orgDept === "Sales" ? orgSalesDiv : "Derma";
+      rosterDirty = true;
       rosterAdds.push({ _aid: aid, name, designation: "", division: ndiv, dept: orgDept, baseHQ: "", reportsTo: parent, zone: "", status: "active" });
       saveEdits("Added a person: " + name);
       orgEditId = "aid:" + aid;
@@ -1205,6 +1211,7 @@
     const addVac = document.getElementById("vacancyAddBtn");
     if (addVac) addVac.onclick = () => {
       // A vacancy is a roster row flagged vacant, so it also shows in Team Roster.
+      rosterDirty = true;
       rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: "Vacant position", designation: "", division: "Derma", baseHQ: "", reportsTo: "Arjun", zone: "", status: "vacant" });
       saveEdits();
       go("team");
@@ -8835,6 +8842,7 @@
   // any field, add/remove rows and phases.
   const INDUCTION_SEED = window.INDUCTION_SEED || { note: "", phases: [] };
   let induction = JSON.parse(JSON.stringify(INDUCTION_SEED));
+  let inductionDirty = false; // this session changed induction (protects unsaved edits on refresh)
   let indSeq = 100;
   function indAllItems() { return (induction.phases || []).flatMap((p) => p.items || []); }
 
@@ -8886,7 +8894,7 @@
       ${ed ? `<div style="margin-top:18px"><button type="button" class="ghost-btn" id="indAddPhase">＋ Add phase</button> <button type="button" class="ghost-btn" id="indReset" title="Restore the default plan">↺ Restore default plan</button></div>` : ""}`;
   }
 
-  function indSave(what) { saveEdits(what || "Induction updated", true); }
+  function indSave(what) { inductionDirty = true; saveEdits(what || "Induction updated", true); }
   function wireInduction() {
     const pdf = document.getElementById("indPdf");
     if (pdf) pdf.onclick = () => printDoc("Primelaze — Induction & Onboarding Plan", "New-Joinee Induction &amp; Onboarding Plan", inductionPrintBody());
@@ -8934,8 +8942,9 @@
   // admins/HR can edit any field, add/remove rows and abbreviations.
   const ATTENDANCE_SEED = window.ATTENDANCE_SEED || { note: "", validNote: "", rows: [], legendNote: "", legend: [] };
   let attendance = JSON.parse(JSON.stringify(ATTENDANCE_SEED));
+  let attendanceDirty = false; // this session changed attendance (protects unsaved edits on refresh)
   let attSeq = 100;
-  function attSave(what) { saveEdits(what || "Attendance protocol updated", true); }
+  function attSave(what) { attendanceDirty = true; saveEdits(what || "Attendance protocol updated", true); }
 
   function renderAttendance() {
     const ed = isAdmin();
@@ -11295,13 +11304,18 @@
         demoAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
       }
       if (e.demoRemovals) ["current", "status", "movement", "packing"].forEach((k) => { if (Array.isArray(e.demoRemovals[k])) demoRemovals[k] = e.demoRemovals[k]; });
-      if (e.roster) Object.assign(rosterEdits, e.roster);
-      if (Array.isArray(e.rosterAdds)) {
-        rosterAdds.length = 0; e.rosterAdds.forEach((p) => rosterAdds.push(p));
-        const ids = rosterAdds.map((x) => +String(x._aid).slice(1)).filter((n) => !isNaN(n));
-        rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
+      // Roster: don't let a remote refresh wipe this session's unsaved team
+      // edits (the "updates disappear after refresh" report). Keep local while
+      // dirty; the pending save writes them, then the flag resets.
+      if (!rosterDirty) {
+        if (e.roster) Object.assign(rosterEdits, e.roster);
+        if (Array.isArray(e.rosterAdds)) {
+          rosterAdds.length = 0; e.rosterAdds.forEach((p) => rosterAdds.push(p));
+          const ids = rosterAdds.map((x) => +String(x._aid).slice(1)).filter((n) => !isNaN(n));
+          rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
+        }
+        if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       }
-      if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
       if (e.regDocs && typeof e.regDocs === "object") { Object.keys(regDocs).forEach((k) => delete regDocs[k]); Object.assign(regDocs, e.regDocs); }
       if (e.regTrack && typeof e.regTrack === "object") { Object.keys(regTrack).forEach((k) => delete regTrack[k]); Object.assign(regTrack, e.regTrack); }
@@ -11334,7 +11348,7 @@
         brochureNeedsReseed = true;
       }
       brochureSeq = brochures.reduce((m, r) => Math.max(m, +String(r.id).replace(/\D/g, "") || 0), 0) + 1;
-      if (e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
+      if (!inductionDirty && e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
       if (e.coverage && typeof e.coverage === "object" && Array.isArray(e.coverage.rows)) {
         const CUR = COVERAGE_SEED.version || 1;
         if ((e.coverage.version || 1) >= CUR) {
@@ -11353,7 +11367,7 @@
       // Price draft, so a background reload / remote sync can't wipe it.
       if (!(esthPending.cost) && e.costingAssump && typeof e.costingAssump === "object") { ["empExpMonth", "allocMachine", "allocCelluma", "allocEsth", "profitPct", "unitsMonth", "o1p", "o1f", "o2p", "o2f"].forEach((k) => { if (e.costingAssump[k] != null) costing[k] = e.costingAssump[k]; }); }
       if (!(esthPending.salon || esthPending.doctor) && e.esthPricing && typeof e.esthPricing === "object") { Object.keys(esthPricingOv).forEach((k) => delete esthPricingOv[k]); Object.assign(esthPricingOv, e.esthPricing); }
-      if (e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
+      if (!attendanceDirty && e.attendance && typeof e.attendance === "object" && (Array.isArray(e.attendance.sections) || Array.isArray(e.attendance.rows))) {
         attendance = e.attendance;
         // Migrate the earlier flat {rows:[…]} shape into a single section.
         if (!Array.isArray(attendance.sections)) {
@@ -11561,7 +11575,7 @@
     ["hqTargets", () => hqEdits], ["hqAdds", () => hqAdds], ["hqQtr", () => hqQtr],
     ["hqSales", () => hqSales], ["hqEsthSales", () => hqEsthSales], ["hqSpTargets", () => hqSpTargets],
     ["demo", () => demoEdits], ["demoAdds", () => demoAdds], ["demoRemovals", () => demoRemovals],
-    ["roster", () => rosterEdits], ["rosterAdds", () => rosterAdds], ["rosterRemovals", () => rosterRemovals],
+    ["roster", () => rosterEdits, () => rosterDirty], ["rosterAdds", () => rosterAdds, () => rosterDirty], ["rosterRemovals", () => rosterRemovals, () => rosterDirty],
     ["kraFiles", () => kraFiles],
     ["customHQs", () => customHQs], ["customDesignations", () => customDesignations],
     ["customPeople", () => customPeople], ["customAddresses", () => customAddresses],
@@ -11573,7 +11587,7 @@
     ["ovEdits", () => ovEdits],
     ["socOwners", () => socOwners], ["socDm", () => socDm], ["socNote", () => socNote], ["socPageStatus", () => socPageStatus],
     ["socPageAdds", () => socPageAdds], ["socPageHidden", () => socPageHidden],
-    ["mktDoc", () => mktDoc], ["induction", () => induction], ["attendance", () => attendance],
+    ["mktDoc", () => mktDoc], ["induction", () => induction, () => inductionDirty], ["attendance", () => attendance, () => attendanceDirty],
     ["coverage", () => coverage, () => covDirty],
     // NOTE: costingAssump & esthPricing are intentionally NOT here — Company
     // Price is a draft saved explicitly per market via esthSaveMarket(), so a
@@ -11805,6 +11819,11 @@
         if (brochureDirty) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
         if (regDirty) Object.assign(payload, { regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved });
         await db.collection("edits").doc("overrides").set(payload, { merge: true });
+        // HR passive modules just persisted — clear their dirty flags and rebase
+        // the snapshot so a later save from another area doesn't re-write (and
+        // clobber) them, and remote refreshes can flow back in.
+        inductionDirty = false; attendanceDirty = false; rosterDirty = false;
+        try { ["induction", "attendance", "roster", "rosterAdds", "rosterRemovals"].forEach((k) => { const f = PASSIVE_FIELDS.find((x) => x[0] === k); if (f) loadedFieldSnap[k] = JSON.stringify(f[1]()); }); } catch (e3) {}
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
