@@ -7040,6 +7040,9 @@
         <a href="#h-start">Quick start</a> ·
         <a href="#h-pages">The pages</a> ·
         <a href="#h-add">Add a lead</a> ·
+        <a href="#h-views">Views (Table / Board / Analytics)</a> ·
+        <a href="#h-prio">Priority &amp; tags</a> ·
+        <a href="#h-bulk">Bulk actions</a> ·
         <a href="#h-stages">Pipeline stages</a> ·
         <a href="#h-activity">Log an activity</a> ·
         <a href="#h-sold">Sold &amp; dispatch</a> ·
@@ -7053,7 +7056,7 @@
 
       <div class="help-cards">
         <div class="help-card help-new"><h3>🙋 New here?</h3><p>Start with the <a href="#h-start">5-minute quick start</a> below, then read <a href="#h-stages">Pipeline stages</a> and <a href="#h-activity">Log an activity</a>. That covers 90% of daily work.</p></div>
-        <div class="help-card help-exist"><h3>🔁 Already using it?</h3><p>What's new: a <b>Calendar</b>, an <b>Activity Board</b>, <b>Task/Event</b> activity types with <b>Event Type</b>, <b>mandatory</b> next-action date + description, and <b>multiple orders per contact</b>. See the sections below.</p></div>
+        <div class="help-card help-exist"><h3>🔁 Already using it?</h3><p>What's new: three board <b>views</b> (Table / <b>Kanban Board</b> / <b>Analytics</b>), lead <b>Priority</b> (🔥/🌤/❄️) &amp; <b>Tags</b>, and <b>Bulk actions</b> (assign, move stage, set priority, archive many at once). Also: a <b>Calendar</b>, an <b>Activity Board</b>, Task/Event activity types, mandatory next-action date, and multiple orders per contact. See the sections below.</p></div>
       </div>
 
       <h2 class="df-sec" id="h-start">① Quick start (5 minutes)</h2>
@@ -7123,6 +7126,27 @@
       <h2 class="df-sec" id="h-board">⑩ Activity Board</h2>
       <p>The <a class="linkish" data-cv="activity">Activity Board</a> lists every logged activity. Filter <b>Logged by</b> a person and <b>Type</b> to review work.</p>
       ${ex("tracking a salesperson's calls", "To see all of Ashutosh's calls: Activity Board → Logged by <b>Ashutosh</b> → Type <b>📞 Call</b>. You get every call he logged, with the lead, note and date.")}
+
+      <h2 class="df-sec" id="h-views">⭐ Views — Table, Board &amp; Analytics</h2>
+      <p>Top-right of <b>Casovil Sale</b> you can switch how the leads are shown. The search, filters and KPI cards stay active in every view.</p>
+      <ul class="df-list">
+        <li><b>☰ Table</b> — the classic list. Best for editing owner/stage inline, bulk actions and download/upload.</li>
+        <li><b>▦ Board (Kanban)</b> — leads shown as cards in stage columns (New → Delivered). <b>Drag a card into another column to move its stage</b> — it asks for a remark just like the normal stage change, so the move is logged. Click a card to open the full lead.</li>
+        <li><b>📊 Analytics</b> — a read-only dashboard over the leads matching your current filters: totals, win rate, won value, the pipeline funnel, leads by source / state / priority, a per-rep table (leads / won / win %) and a new-leads trend for the last 8 weeks. Tip: filter to one state or owner first and the analytics update to match.</li>
+      </ul>
+      ${ex("working the board", "Switch to <b>▦ Board</b>. You see a column of <b>New</b> cards. You call one and it's promising — drag its card into <b>Potential customer</b>, add the remark “<i>checked Instagram, active clinic</i>” and a next-action date. The card moves across and the funnel in Analytics updates.")}
+
+      <h2 class="df-sec" id="h-prio">⭐ Priority &amp; tags</h2>
+      <p>Open any lead to set these in the detail popup (admins).</p>
+      <ul class="df-list">
+        <li><b>Priority</b> — <b>🔥 Hot</b>, <b>🌤 Warm</b> or <b>❄️ Cold</b>. It shows as a small badge on the lead's name everywhere and gives you a <b>Priority</b> filter so you can work the hot leads first.</li>
+        <li><b>Tags</b> — short free-text labels (e.g. <i>Expo-Delhi</i>, <i>budget</i>, <i>referral</i>). Type a tag and press <b>＋ Add</b> (or Enter); remove one with its ✕. Tags show under the lead name, are searchable, and a <b>Tag</b> filter appears once any tags exist.</li>
+      </ul>
+      ${ex("focusing the day", "Mark three keen clinics <b>🔥 Hot</b> and tag them <i>demo-pending</i>. Next morning set the Priority filter to <b>🔥 Hot</b> (or the Tag filter to <i>demo-pending</i>) and you instantly have your call list.")}
+
+      <h2 class="df-sec" id="h-bulk">⭐ Bulk actions (do many at once)</h2>
+      <p>In <b>☰ Table</b> view, tick the checkbox on the left of each lead (or the header box to select all shown). A bar appears with: <b>Assign owner</b>, <b>Move to stage</b>, <b>Set priority</b> and <b>Archive</b> (or Restore in the archived view). Pick an action and it applies to every ticked lead at once.</p>
+      ${ex("handing over a batch", "A new rep joins. Filter to the unassigned leads, tick the ones for them, then <b>Assign owner → the rep</b>. All move to them in one go, each with a history note.")}
 
       <h2 class="df-sec" id="h-rules">⑪ Golden rules</h2>
       <ul class="df-list">
