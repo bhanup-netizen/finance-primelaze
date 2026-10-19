@@ -1279,9 +1279,12 @@ tr.ind-done .ind-check span { color: var(--good); }
 /* ================= LEADS · SALES PIPELINE ================= */
 /* Stage accent colours (shared by chips, dots and stage pills). */
 :root {
-  --lst-new: #64748b; --lst-contacted: #2563eb; --lst-working: #0891b2; --lst-demosched: #4f46e5; --lst-demo: #7c3aed;
+  --lst-new: #64748b; --lst-potential: #ca8a04; --lst-contacted: #2563eb; --lst-working: #0891b2; --lst-demosched: #4f46e5; --lst-demo: #7c3aed;
   --lst-negotiation: #d97706; --lst-sold: #16a34a; --lst-lost: #dc2626;
 }
+.lch-potential .lead-chip-dot { background: var(--lst-potential); }
+.lst-potential { background: var(--lst-potential); }
+.lead-step.cur.lst-potential { background: var(--lst-potential); }
 .lead-chips { margin-bottom: 2px; }
 .lead-chip .lead-chip-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); }
 .lch-new .lead-chip-dot { background: var(--lst-new); }

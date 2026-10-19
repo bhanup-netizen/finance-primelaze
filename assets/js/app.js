@@ -5396,6 +5396,7 @@
   // in the shared edits doc so the whole team sees the same board.
   const LEAD_STAGES = [
     { key: "new", label: "New" },
+    { key: "potential", label: "Potential customer" },
     { key: "contacted", label: "Contacted" },
     { key: "working", label: "Actively working" },
     { key: "demosched", label: "Demo scheduled" },
@@ -5407,7 +5408,7 @@
     { key: "lost", label: "Lost" },
   ];
   const LEAD_STAGE_LABEL = {}; LEAD_STAGES.forEach((s) => (LEAD_STAGE_LABEL[s.key] = s.label));
-  const LEAD_OPEN = ["new", "contacted", "working", "demosched", "demo", "negotiation"]; // still in play
+  const LEAD_OPEN = ["new", "potential", "contacted", "working", "demosched", "demo", "negotiation"]; // still in play
   const LEAD_WON = ["sold", "dispatched", "delivered"];           // converted (post-sale too)
   const LEAD_SOURCES = ["Beauty Expo Delhi", "Beauty Expo Mumbai", "Instagram", "WhatsApp", "Referral", "Website", "Cold call", "Walk-in", "Other"];
   const customLeadSources = []; // admin-added lead sources, persisted for everyone
@@ -5522,7 +5523,7 @@
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
     "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
     "demoProducts", "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
-  const LEAD_STEP_KEYS = ["new", "contacted", "working", "demosched", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
+  const LEAD_STEP_KEYS = ["new", "potential", "contacted", "working", "demosched", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
   const leadAdds = [];     // manually-added / imported leads {id:"u..", ...}
@@ -6017,8 +6018,9 @@
 
   function leadStageCell(r, admin) {
     if (!admin) return `<span class="lead-stage lst-${r.stage || "new"}">${esc(LEAD_STAGE_LABEL[r.stage || "new"])}</span>`;
-    return `<select class="select lead-stage-sel lst-${r.stage || "new"}" data-id="${esc(r.id)}" title="Change stage — you'll be asked for a remark">
+    return `<select class="select lead-stage-sel lst-${r.stage || "new"}" data-id="${esc(r.id)}" title="Change stage — you'll be asked for a remark. Pick Archive to clean out a dead lead.">
       ${LEAD_STAGES.map((s) => `<option value="${s.key}"${(r.stage || "new") === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}
+      <option value="__archive__">🗄 Archive (dead / no update)</option>
     </select>`;
   }
   function leadOwnerCell(r, admin) {
@@ -6325,6 +6327,13 @@
       el.onchange = () => {
         const id = el.dataset.id, newStage = el.value;
         const l = leadAll().find((x) => x.id === id); const oldStage = (l && l.stage) || "new";
+        // "Archive" from the stage dropdown → clean a dead lead off the board
+        // (kept in the database, restorable), without changing its stage.
+        if (newStage === "__archive__") {
+          if (window.confirm('Archive lead "' + ((l && l.name) || "") + '"?\n\nUse this for dead leads with no updates. It is hidden from the active board but kept in the database — restore it any time from the Archived view.')) { leadArchiveSet(id, true); leadRepaint(); }
+          else el.value = oldStage;
+          return;
+        }
         if (newStage === oldStage) return;
         leadRemarkDialog({ id, newStage, oldStage, selEl: el });
       };
@@ -6822,7 +6831,7 @@
         ${step(1, "Open <a class='linkish' data-cv='leads'>Casovil Sale</a> — this is the lead board. Each card/row is one enquiry (a “lead”).")}
         ${step(2, "Find your leads: click <b>👤 My leads</b>, or use the search and the Owner / Stage / State filters.")}
         ${step(3, "Open a lead to see its full detail &amp; history. Use <b>＋ Add update</b> to log what happened (call, meeting, etc.) and set the next action.")}
-        ${step(4, "Move the lead along the pipeline as it progresses — New → Contacted → … → <b>Sold</b> → Dispatched → Delivered.")}
+        ${step(4, "Move the lead along the pipeline as it progresses — New → Potential customer → Contacted → … → <b>Sold</b> → Dispatched → Delivered. Use the Stage dropdown's <b>🗄 Archive</b> option to clean out a dead lead with no updates.")}
         ${step(5, "Check the <a class='linkish' data-cv='calendar'>Calendar</a> every morning for today's follow-ups, and log every call so it shows on the <a class='linkish' data-cv='activity'>Activity Board</a>.")}
       </div>
 
@@ -6842,6 +6851,7 @@
       <p>Move a lead by opening it and choosing a new stage in <b>＋ Add update</b> (you'll always add a note + next action at the same time).</p>
       <ul class="df-list">
         <li><b>New</b> → just entered.</li>
+        <li><b>Potential customer</b> → pre-qualified before contact — the lead was checked (Google profile, Instagram, website…) and looks genuinely worth pursuing. Move only real prospects here so the caller spends time on leads that matter.</li>
         <li><b>Contacted</b> → you've reached them.</li>
         <li><b>Actively working / Demo scheduled / Demo done</b> → in progress.</li>
         <li><b>Negotiation</b> → discussing price/close.</li>
