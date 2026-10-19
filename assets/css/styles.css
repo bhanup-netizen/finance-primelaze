@@ -1693,3 +1693,62 @@ tr.lead-row-sel > td { background: var(--accent-soft); }
 .ld-tag-add { display: flex; gap: 6px; align-items: center; }
 .ld-tag-add input { flex: 1 1 auto; max-width: 240px; padding: 6px 10px; border: 1px solid var(--border);
   border-radius: 8px; background: var(--card); color: var(--fg); font-size: .9rem; }
+
+/* ===== Casovil CRM — view toggle (Table / Board) ===== */
+.lead-viewtabs { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.lead-viewtabs .lvt { border: 0; background: var(--card); color: var(--muted); font-weight: 700;
+  font-size: .85rem; padding: 6px 12px; cursor: pointer; border-left: 1px solid var(--border); }
+.lead-viewtabs .lvt:first-child { border-left: 0; }
+.lead-viewtabs .lvt.active { background: var(--accent); color: #fff; }
+
+/* ===== Casovil CRM — Kanban board ===== */
+.lead-kanban { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 12px; align-items: flex-start; }
+.lk-col { flex: 0 0 248px; min-width: 248px; background: var(--bg-soft, var(--accent-soft));
+  border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; max-height: 72vh; }
+.lk-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 9px 12px;
+  font-weight: 800; font-size: .86rem; border-bottom: 2px solid var(--border);
+  border-top-left-radius: 12px; border-top-right-radius: 12px; position: sticky; top: 0; }
+.lk-head .lk-count { background: var(--card); color: var(--fg); border-radius: 999px; padding: 0 8px;
+  font-size: .76rem; font-weight: 800; min-width: 20px; text-align: center; }
+.lk-body { padding: 8px; overflow-y: auto; flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px;
+  min-height: 60px; transition: background .12s; }
+.lk-body.lk-over { background: var(--accent-soft); outline: 2px dashed var(--accent); outline-offset: -4px; border-radius: 8px; }
+.lk-empty { color: var(--muted); font-size: .8rem; text-align: center; padding: 10px 0; }
+.lead-card { background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--border);
+  border-radius: 9px; padding: 9px 10px; cursor: pointer; box-shadow: var(--shadow-sm);
+  transition: transform .08s, box-shadow .12s; }
+.lead-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+.lead-card.lc-dragging { opacity: .45; }
+.lead-card.lcs-new { border-left-color: var(--lst-new, #64748b); }
+.lead-card.lcs-potential { border-left-color: var(--lst-potential, #ca8a04); }
+.lead-card.lcs-contacted { border-left-color: var(--lst-contacted, #2563eb); }
+.lead-card.lcs-working { border-left-color: var(--lst-working, #0891b2); }
+.lead-card.lcs-demosched { border-left-color: var(--lst-demosched, #4f46e5); }
+.lead-card.lcs-demo { border-left-color: var(--lst-demo, #7c3aed); }
+.lead-card.lcs-negotiation { border-left-color: var(--lst-negotiation, #d97706); }
+.lead-card.lcs-sold, .lead-card.lead-card-won { border-left-color: var(--lst-sold, #16a34a); }
+.lead-card.lcs-dispatched { border-left-color: #0891b2; }
+.lead-card.lcs-delivered { border-left-color: #059669; }
+.lead-card .lc-top { display: flex; align-items: center; gap: 4px; font-weight: 800; font-size: .9rem; }
+.lead-card .lc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lead-card .lc-sub { color: var(--muted); font-size: .78rem; margin-top: 1px; }
+.lead-card .lc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; font-size: .74rem; color: var(--muted); }
+.lead-card .lc-owner { font-weight: 700; color: var(--accent); }
+.lead-card .lc-owner.lc-unassigned { color: var(--muted); font-weight: 600; font-style: italic; }
+.lead-card .lc-prod { font-size: .74rem; margin-top: 4px; color: var(--fg); }
+.lead-card .lead-tags { margin-top: 5px; }
+.lead-card .lc-foot { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px;
+  font-size: .72rem; color: var(--muted); }
+.lead-card .lc-mob { font-variant-numeric: tabular-nums; }
+/* Column accent per stage (reuses the stage colour tokens). */
+.lkh-new { border-bottom-color: var(--lst-new, #64748b); }
+.lkh-potential { border-bottom-color: var(--lst-potential, #ca8a04); }
+.lkh-contacted { border-bottom-color: var(--lst-contacted, #2563eb); }
+.lkh-working { border-bottom-color: var(--lst-working, #0891b2); }
+.lkh-demosched { border-bottom-color: var(--lst-demosched, #4f46e5); }
+.lkh-demo { border-bottom-color: var(--lst-demo, #7c3aed); }
+.lkh-negotiation { border-bottom-color: var(--lst-negotiation, #d97706); }
+.lkh-sold { border-bottom-color: var(--lst-sold, #16a34a); }
+.lkh-dispatched { border-bottom-color: #0891b2; }
+.lkh-delivered { border-bottom-color: #059669; }
+@media (max-width: 560px) { .lk-col { flex-basis: 212px; min-width: 212px; } }

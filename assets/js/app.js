@@ -5566,6 +5566,7 @@
   const leadFilesDirty = new Set();     // leadFiles keys we changed
   let leadSeq = 0;
   let leadViewArchived = false; // board showing the archived leads instead of active
+  let leadView = "table"; // "table" | "board" (Kanban) | "analytics"
   let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", file: "", priority: "", tag: "", stuck: false, follow: false };
   const leadSelected = new Set(); // ids ticked for a bulk action (session-only)
   const canEditLeads = () => isAdmin();
@@ -6308,6 +6309,74 @@
     }).join("");
   }
 
+  // ---- Kanban board view -------------------------------------------------
+  // One compact card per lead; cards are draggable (admin) between stage
+  // columns. Dropping onto a new column opens the remark dialog so the move
+  // is logged just like the table's stage dropdown.
+  function leadCardHtml(r, admin) {
+    const loc = [r.city, r.state].filter(Boolean).join(", ");
+    const lu = leadLastUpdated(r);
+    return `<div class="lead-card lcs-${r.stage || "new"}${r.stage === "sold" ? " lead-card-won" : ""}" data-id="${esc(r.id)}" draggable="${admin ? "true" : "false"}">
+      <div class="lc-top">${leadPrioBadge(r)}<span class="lc-name">${esc(r.name || "—")}</span></div>
+      ${r.company ? `<div class="lc-sub">${esc(r.company)}</div>` : ""}
+      <div class="lc-meta">${r.owner ? `<span class="lc-owner">${esc(spLabel(r.owner))}</span>` : `<span class="lc-owner lc-unassigned">Unassigned</span>`}${loc ? `<span class="lc-loc">📍 ${esc(loc)}</span>` : ""}</div>
+      ${r.product ? `<div class="lc-prod">${esc(r.product)}</div>` : ""}
+      ${leadTagChipsHtml(r)}
+      <div class="lc-foot">${r.mobile ? `<span class="lc-mob">${esc(r.mobile)}</span>` : "<span></span>"}${lu ? `<span class="lc-when">${esc(fmtWhen(lu))}</span>` : ""}</div>
+    </div>`;
+  }
+  function leadBoardHtml(rows, admin) {
+    const byStage = {}; LEAD_STEP_KEYS.forEach((k) => (byStage[k] = []));
+    rows.forEach((r) => { const s = r.stage || "new"; (byStage[s] = byStage[s] || []).push(r); });
+    return `<div class="lead-kanban" id="leadKanban">${LEAD_STEP_KEYS.map((k) => {
+      const list = (byStage[k] || []).slice().sort((a, b) => leadLastUpdated(b) - leadLastUpdated(a));
+      return `<div class="lk-col" data-stage="${k}">
+        <div class="lk-head lkh-${k}"><span class="lk-title">${esc(LEAD_STAGE_LABEL[k] || k)}</span><span class="lk-count">${list.length}</span></div>
+        <div class="lk-body" data-stage="${k}">${list.length ? list.map((r) => leadCardHtml(r, admin)).join("") : `<div class="lk-empty">No leads</div>`}</div>
+      </div>`;
+    }).join("")}</div>`;
+  }
+  function wireLeadBoard() {
+    const admin = canEditLeads();
+    document.querySelectorAll(".lead-card").forEach((c) => {
+      c.onclick = () => leadDetailDialog(c.dataset.id);
+      if (!admin) return;
+      c.ondragstart = (e) => { try { e.dataTransfer.setData("text/plain", c.dataset.id); e.dataTransfer.effectAllowed = "move"; } catch (_) {} c.classList.add("lc-dragging"); };
+      c.ondragend = () => c.classList.remove("lc-dragging");
+    });
+    if (!admin) return;
+    document.querySelectorAll(".lk-body").forEach((body) => {
+      body.ondragover = (e) => { e.preventDefault(); body.classList.add("lk-over"); };
+      body.ondragleave = () => body.classList.remove("lk-over");
+      body.ondrop = (e) => {
+        e.preventDefault(); body.classList.remove("lk-over");
+        let id = ""; try { id = e.dataTransfer.getData("text/plain"); } catch (_) {}
+        if (!id) return;
+        const newStage = body.dataset.stage;
+        const l = leadAll().find((x) => x.id === id); const oldStage = (l && l.stage) || "new";
+        if (newStage === oldStage) return;
+        leadRemarkDialog({ id, newStage, oldStage });
+      };
+    });
+  }
+  // Dispatcher — renders the active view (table / board / analytics) into #leadMain.
+  function leadMainHtml(filtered, rows0, admin) {
+    if (leadView === "board") return leadBoardHtml(filtered, admin);
+    return `<div class="table-wrap"><table class="lead-table">
+        <thead><tr>
+          ${admin ? `<th class="lead-selcell"><input type="checkbox" id="leadSelAll" title="Select all shown"></th>` : ""}
+          <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
+          <th>Owner</th><th>Stage</th><th>Updated</th><th>Lead journey</th>
+        </tr></thead>
+        <tbody id="leadBody">${leadRows(filtered, admin)}</tbody>
+      </table></div>`;
+  }
+  // Re-wire whichever view is currently rendered inside #leadMain.
+  function wireLeadMain() {
+    if (leadView === "board") wireLeadBoard();
+    else wireLeadRowEdits();
+  }
+
   // Refill one filter <select> with the given values, keeping the current
   // selection (and keeping it selectable even if it fell out of the list).
   function leadFillSelect(id, field, values, useSpLabel) {
@@ -6341,14 +6410,14 @@
     wireLeadChips();
     const sc = document.getElementById("leadScore"); if (sc) sc.innerHTML = leadScoreboard(stageBase);
     leadSyncFilters(rows0);
-    const b = document.getElementById("leadBody"); if (b) b.innerHTML = leadRows(filtered, canEditLeads());
+    const main = document.getElementById("leadMain"); if (main) main.innerHTML = leadMainHtml(filtered, rows0, canEditLeads());
     const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + (leadViewArchived ? " archived" : " leads");
     // Keep the Stuck / Follow-ups button counts in step with the active filters.
     const sb = document.getElementById("leadStuck"); if (sb) sb.innerHTML = `⚠ Stuck (${leadRowsExcept(rows0, "stuck").filter(leadIsStuck).length})`;
     const fb = document.getElementById("leadFollow"); if (fb) fb.innerHTML = `🔔 Follow-ups due (${leadRowsExcept(rows0, "follow").filter(leadFollowDue).length})`;
     const at = document.getElementById("leadArchBtn"); if (at) at.textContent = `🗄 Archived (${leadAll().filter((r) => leadIsArchived(r.id)).length})`;
     const ss = document.getElementById("leadStageSel"); if (ss) ss.value = leadFilter.stage || "";
-    wireLeadRowEdits();
+    wireLeadMain();
   }
   function wireLeadChips() {
     document.querySelectorAll("[data-leadstage]").forEach((el) => {
@@ -7163,7 +7232,8 @@
     const archN = leadAll().filter((r) => leadIsArchived(r.id)).length;
     setTimeout(() => {
       wireLeadChips();
-      wireLeadRowEdits();
+      wireLeadMain();
+      document.querySelectorAll(".lvt[data-lv]").forEach((b) => (b.onclick = () => { if (leadView === b.dataset.lv) return; leadView = b.dataset.lv; leadSelected.clear(); renderTab("leads"); }));
       const wire = (id, fn) => { const el = document.getElementById(id); if (el) el.onchange = fn; };
       wire("leadSource", (e) => { leadFilter.source = e.target.value; leadRepaint(); });
       wire("leadOwner", (e) => { leadFilter.owner = e.target.value; leadRepaint(); });
@@ -7235,17 +7305,16 @@
       </div>
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
         <h2 style="margin:0">${leadViewArchived ? "Archived leads" : "Lead board"}</h2>
-        <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length}${leadViewArchived ? " archived" : " leads"}</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="lead-viewtabs" role="tablist">
+            <button type="button" class="lvt${leadView === "table" ? " active" : ""}" data-lv="table" title="Table view">☰ Table</button>
+            <button type="button" class="lvt${leadView === "board" ? " active" : ""}" data-lv="board" title="Kanban board — drag cards between stages">▦ Board</button>
+          </div>
+          <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length}${leadViewArchived ? " archived" : " leads"}</span>
+        </div>
       </div>
       <div id="leadBulkBar" class="lead-bulkbar" hidden></div>
-      <div class="table-wrap"><table class="lead-table">
-        <thead><tr>
-          ${admin ? `<th class="lead-selcell"><input type="checkbox" id="leadSelAll" title="Select all shown"></th>` : ""}
-          <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
-          <th>Owner</th><th>Stage</th><th>Updated</th><th>Lead journey</th>
-        </tr></thead>
-        <tbody id="leadBody">${leadRows(leadFiltered(rows0), admin)}</tbody>
-      </table></div>
+      <div id="leadMain">${leadMainHtml(leadFiltered(rows0), rows0, admin)}</div>
       ${admin ? `<button type="button" class="lead-fab" id="leadFab" title="Add a lead" aria-label="Add a lead">＋</button>` : ""}`;
   }
 
