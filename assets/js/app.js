@@ -5938,7 +5938,9 @@
     const withFiles = leadFilter.file ? leadIdsWithFiles() : null;
     return rows.filter((r) => {
       if (leadFilter.source && r.source !== leadFilter.source) return false;
-      if (leadFilter.stage && (r.stage || "new") !== leadFilter.stage) return false;
+      // "__won__" = all closed deals (sold + dispatched + delivered); otherwise exact stage.
+      if (leadFilter.stage === "__won__") { if (LEAD_WON.indexOf(r.stage) < 0) return false; }
+      else if (leadFilter.stage && (r.stage || "new") !== leadFilter.stage) return false;
       if (leadFilter.owner && r.owner !== leadFilter.owner) return false;
       if (leadFilter.state && r.state !== leadFilter.state) return false;
       if (leadFilter.product && !(String(r.product || "").indexOf(leadFilter.product) >= 0)) return false;
@@ -6020,11 +6022,32 @@
   function leadChips(rows) {
     const counts = {}; LEAD_STAGES.forEach((s) => (counts[s.key] = 0));
     rows.forEach((r) => { counts[r.stage || "new"] = (counts[r.stage || "new"] || 0) + 1; });
-    const chip = (key, label, n) => `<button type="button" class="pay-chip lead-chip lch-${key}${leadFilter.stage === key ? " active" : ""}" data-leadstage="${key}"><span class="lead-chip-dot"></span>${esc(label)}<span class="pay-chip-n">${n}</span></button>`;
+    // Sold / Dispatched / Delivered are the same deal at different logistics
+    // steps. Showing them as three separate funnel stages made "Sold" read 0
+    // once a deal moved on to Delivered. Instead the funnel shows one
+    // cumulative "Sold ✓" count (all closed deals) and the post-sale split is a
+    // small "of which" breakdown below.
+    const soldExact = counts.sold || 0, disp = counts.dispatched || 0, deliv = counts.delivered || 0;
+    const wonCount = soldExact + disp + deliv;
+    const chip = (key, label, n, filterKey) => `<button type="button" class="pay-chip lead-chip lch-${key}${leadFilter.stage === (filterKey || key) ? " active" : ""}" data-leadstage="${filterKey || key}"><span class="lead-chip-dot"></span>${esc(label)}<span class="pay-chip-n">${n}</span></button>`;
+    // Main funnel = every stage except the post-sale logistics steps; the Sold
+    // chip is cumulative and filters to all closed deals (__won__).
+    const funnelStages = LEAD_STAGES.filter((s) => s.key !== "dispatched" && s.key !== "delivered");
+    const mainChips = funnelStages.map((s) => s.key === "sold"
+      ? chip("sold", "Sold ✓", wonCount, "__won__")
+      : chip(s.key, s.label, counts[s.key] || 0)).join("");
+    // Post-sale breakdown (only when there are closed deals).
+    const mini = (key, label, n) => `<button type="button" class="pay-chip lead-chip lead-postchip lch-${key}${leadFilter.stage === key ? " active" : ""}" data-leadstage="${key}"><span class="lead-chip-dot"></span>${esc(label)}<span class="pay-chip-n">${n}</span></button>`;
+    const breakdown = wonCount ? `<div class="pay-chips lead-chips lead-postchips">
+      <span class="lead-postlbl">of the ${wonCount} closed:</span>
+      ${mini("sold", "📦 Awaiting dispatch", soldExact)}
+      ${mini("dispatched", "🚚 Dispatched", disp)}
+      ${mini("delivered", "✅ Delivered", deliv)}
+    </div>` : "";
     return `<div class="pay-chips lead-chips">
       <button type="button" class="pay-chip${leadFilter.stage === "" ? " active" : ""}" data-leadstage="">All stages<span class="pay-chip-n">${rows.length}</span></button>
-      ${LEAD_STAGES.map((s) => chip(s.key, s.label, counts[s.key] || 0)).join("")}
-    </div>`;
+      ${mainChips}
+    </div>${breakdown}`;
   }
   // Top-level product filter (Esthemax / Celluma / Devices) as clickable chips.
   function leadProductChips(rows) {
@@ -7368,7 +7391,7 @@
         ${sel("leadSource", leadFilter.source, leadUniq(leadRowsExcept(rows0, "source"), "source"), "Source")}
         ${sel("leadOwner", leadFilter.owner, leadOwnersPresent(leadRowsExcept(rows0, "owner")), "Owner")}
         ${sel("leadState", leadFilter.state, leadUniq(leadRowsExcept(rows0, "state"), "state"), "State")}
-        <label class="ord-field"><span>Stage</span><select id="leadStageSel" class="select"><option value="">All</option>${LEAD_STAGES.map((s) => `<option value="${s.key}"${leadFilter.stage === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Stage</span><select id="leadStageSel" class="select"><option value="">All</option><option value="__won__"${leadFilter.stage === "__won__" ? " selected" : ""}>Sold ✓ (all closed)</option>${LEAD_STAGES.map((s) => `<option value="${s.key}"${leadFilter.stage === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Attachment</span><select id="leadFileSel" class="select"><option value=""${leadFilter.file === "" ? " selected" : ""}>All</option><option value="yes"${leadFilter.file === "yes" ? " selected" : ""}>📎 Has file</option><option value="no"${leadFilter.file === "no" ? " selected" : ""}>No file</option></select></label>
         <label class="ord-field"><span>Priority</span><select id="leadPrioSel" class="select"><option value=""${leadFilter.priority === "" ? " selected" : ""}>All</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}"${leadFilter.priority === p.key ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
         ${leadAllTags(rows0).length ? `<label class="ord-field"><span>Tag</span><select id="leadTagSel" class="select"><option value="">All</option>${leadAllTags(rows0).map((t) => `<option value="${esc(t)}"${leadFilter.tag === t ? " selected" : ""}>${esc(t)}</option>`).join("")}</select></label>` : ""}

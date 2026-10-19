@@ -1694,6 +1694,11 @@ tr.lead-row-sel > td { background: var(--accent-soft); }
 .ld-tag-add input { flex: 1 1 auto; max-width: 240px; padding: 6px 10px; border: 1px solid var(--border);
   border-radius: 8px; background: var(--card); color: var(--fg); font-size: .9rem; }
 
+/* ===== Casovil CRM — post-sale breakdown chips ===== */
+.lead-postchips { margin-top: 6px; align-items: center; }
+.lead-postlbl { font-size: .78rem; color: var(--muted); font-weight: 700; margin-right: 2px; }
+.lead-postchip { font-size: .8rem; padding-top: 3px; padding-bottom: 3px; opacity: .92; }
+
 /* ===== Casovil CRM — view toggle (Table / Board) ===== */
 .lead-viewtabs { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
 .lead-viewtabs .lvt { border: 0; background: var(--card); color: var(--muted); font-weight: 700;
