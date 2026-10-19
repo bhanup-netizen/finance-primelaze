@@ -6359,9 +6359,66 @@
       };
     });
   }
+  // ---- Analytics view ----------------------------------------------------
+  // A read-only dashboard over the leads currently on the board (archived or
+  // active, honouring the archived toggle but NOT the row filters, so it shows
+  // the whole picture).
+  function leadAnalyticsHtml(rows) {
+    const total = rows.length;
+    if (!total) return `<div class="empty" style="padding:30px;text-align:center">No leads to analyse yet.</div>`;
+    const won = rows.filter((r) => LEAD_WON.indexOf(r.stage) >= 0);
+    const open = rows.filter((r) => LEAD_OPEN.indexOf(r.stage) >= 0);
+    const winRate = Math.round((won.length / total) * 100);
+    const pipelineVal = won.reduce((s, r) => s + (Number(r.soldAmount) || 0), 0);
+    const stuckN = rows.filter(leadIsStuck).length;
+    const kpi = (v, l, cls) => `<div class="lan-kpi ${cls || ""}"><div class="lan-kpi-v">${v}</div><div class="lan-kpi-l">${esc(l)}</div></div>`;
+    const kpis = `<div class="lan-kpis">
+      ${kpi(total, "Total leads")}
+      ${kpi(open.length, "Open / in play")}
+      ${kpi(won.length, "Won (sold+)", "lan-good")}
+      ${kpi(winRate + "%", "Win rate", "lan-good")}
+      ${kpi("₹" + inr(pipelineVal), "Won value")}
+      ${kpi(stuckN, "Stuck > " + LEAD_STUCK_DAYS + "d", stuckN ? "lan-warn" : "")}
+    </div>`;
+    // Funnel over the forward pipeline.
+    const stageCount = {}; LEAD_STEP_KEYS.forEach((k) => (stageCount[k] = 0));
+    rows.forEach((r) => { const s = r.stage || "new"; if (stageCount[s] != null) stageCount[s]++; });
+    const maxStage = Math.max(1, ...LEAD_STEP_KEYS.map((k) => stageCount[k]));
+    const funnel = `<div class="lan-card"><h3>Pipeline funnel</h3><div class="lan-bars">${LEAD_STEP_KEYS.map((k) => {
+      const c = stageCount[k];
+      return `<div class="lan-bar-row"><span class="lan-bar-lbl">${esc(LEAD_STAGE_LABEL[k])}</span><div class="lan-bar-track"><div class="lan-bar-fill lkh-${k}" style="width:${Math.round((c / maxStage) * 100)}%"></div></div><span class="lan-bar-val">${c}</span></div>`;
+    }).join("")}</div></div>`;
+    // Generic "group by" bar card (top 10).
+    const groupCard = (title, keyFn, labelFn) => {
+      const m = {};
+      rows.forEach((r) => { const key = keyFn(r); if (key == null || key === "") return; m[key] = (m[key] || 0) + 1; });
+      const entries = Object.keys(m).map((k) => ({ k, n: m[k] })).sort((a, b) => b.n - a.n);
+      if (!entries.length) return "";
+      const mx = Math.max(1, ...entries.map((e) => e.n));
+      return `<div class="lan-card"><h3>${esc(title)}</h3><div class="lan-bars">${entries.slice(0, 10).map((e) => `<div class="lan-bar-row"><span class="lan-bar-lbl">${esc(labelFn ? labelFn(e.k) : e.k)}</span><div class="lan-bar-track"><div class="lan-bar-fill" style="width:${Math.round((e.n / mx) * 100)}%"></div></div><span class="lan-bar-val">${e.n}</span></div>`).join("")}</div></div>`;
+    };
+    const bySource = groupCard("By source", (r) => r.source || "—");
+    const byState = groupCard("Top states", (r) => r.state || "");
+    const byPrio = groupCard("By priority", (r) => r.priority || "", (k) => (LEAD_PRIO_LABEL[k] ? LEAD_PRIO_LABEL[k].label : k));
+    // Owner performance.
+    const om = {};
+    rows.forEach((r) => { const o = r.owner || "__un"; (om[o] = om[o] || { t: 0, w: 0 }); om[o].t++; if (LEAD_WON.indexOf(r.stage) >= 0) om[o].w++; });
+    const owners = Object.keys(om).map((o) => ({ o, t: om[o].t, w: om[o].w })).sort((a, b) => b.t - a.t);
+    const ownerTable = `<div class="lan-card lan-wide"><h3>By owner (rep)</h3><div class="table-wrap"><table class="lead-table"><thead><tr><th>Owner</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Win %</th></tr></thead><tbody>${owners.map((e) => `<tr><td>${e.o === "__un" ? "<span class='t-muted'>Unassigned</span>" : esc(spLabel(e.o))}</td><td class="num">${e.t}</td><td class="num">${e.w}</td><td class="num">${e.t ? Math.round((e.w / e.t) * 100) : 0}%</td></tr>`).join("")}</tbody></table></div></div>`;
+    // New leads over the last 8 weeks (by createdAt).
+    const now = Date.now(), wk = 7 * 24 * 3600 * 1000, weeks = [];
+    for (let i = 7; i >= 0; i--) { const end = now - (i * wk); weeks.push({ start: end - wk, end, n: 0 }); }
+    rows.forEach((r) => { const c = Number(r.createdAt) || 0; if (!c) return; weeks.forEach((w) => { if (c >= w.start && c < w.end) w.n++; }); });
+    const wkMax = Math.max(1, ...weeks.map((w) => w.n));
+    const trend = `<div class="lan-card lan-wide"><h3>New leads — last 8 weeks</h3><div class="lan-cols">${weeks.map((w, i) => `<div class="lan-col"><span class="lan-col-v">${w.n}</span><div class="lan-col-bar" style="height:${Math.max(3, Math.round((w.n / wkMax) * 100))}%"></div><span class="lan-col-x">${i === 7 ? "now" : (7 - i) + "w"}</span></div>`).join("")}</div></div>`;
+    return `<div class="lead-analytics">${kpis}<div class="lan-grid">${funnel}${bySource}${byState}${byPrio}</div>${ownerTable}${trend}</div>`;
+  }
+  function wireLeadAnalytics() { /* read-only view — no interactions to wire */ }
+
   // Dispatcher — renders the active view (table / board / analytics) into #leadMain.
   function leadMainHtml(filtered, rows0, admin) {
     if (leadView === "board") return leadBoardHtml(filtered, admin);
+    if (leadView === "analytics") return leadAnalyticsHtml(filtered);
     return `<div class="table-wrap"><table class="lead-table">
         <thead><tr>
           ${admin ? `<th class="lead-selcell"><input type="checkbox" id="leadSelAll" title="Select all shown"></th>` : ""}
@@ -6374,6 +6431,7 @@
   // Re-wire whichever view is currently rendered inside #leadMain.
   function wireLeadMain() {
     if (leadView === "board") wireLeadBoard();
+    else if (leadView === "analytics") wireLeadAnalytics();
     else wireLeadRowEdits();
   }
 
@@ -7309,6 +7367,7 @@
           <div class="lead-viewtabs" role="tablist">
             <button type="button" class="lvt${leadView === "table" ? " active" : ""}" data-lv="table" title="Table view">☰ Table</button>
             <button type="button" class="lvt${leadView === "board" ? " active" : ""}" data-lv="board" title="Kanban board — drag cards between stages">▦ Board</button>
+            <button type="button" class="lvt${leadView === "analytics" ? " active" : ""}" data-lv="analytics" title="Analytics — funnel, sources, owners and trend">📊 Analytics</button>
           </div>
           <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length}${leadViewArchived ? " archived" : " leads"}</span>
         </div>
