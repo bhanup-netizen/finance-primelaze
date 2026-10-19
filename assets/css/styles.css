@@ -1662,3 +1662,14 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-demo-prods .ldp-chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; padding: 3px 8px; margin: 2px 4px 2px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }
 .lead-demo-prods .ldp-chk:hover { border-color: var(--accent); }
 .lead-demo-prods .ldp-chk input { margin: 0; }
+
+/* ===== Casovil CRM — bulk actions ===== */
+.lead-selcell { width: 34px; text-align: center; padding-left: 6px !important; padding-right: 6px !important; }
+.lead-selcell input { cursor: pointer; }
+tr.lead-row-sel > td { background: var(--accent-soft); }
+.lead-bulkbar { position: sticky; top: 4px; z-index: 6; }
+.lead-bulkbar .lbk-inner { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 8px 12px; box-shadow: var(--shadow-sm); }
+.lead-bulkbar .lbk-count { font-weight: 800; color: var(--accent); }
+.lead-bulkbar .select { min-width: 148px; }
+@media (max-width: 560px) { .lead-bulkbar .select { min-width: 0; flex: 1 1 44%; } }

@@ -5549,7 +5549,8 @@
   const leadFilesDirty = new Set();     // leadFiles keys we changed
   let leadSeq = 0;
   let leadViewArchived = false; // board showing the archived leads instead of active
-  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", file: "", stuck: false, follow: false };
+  let leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", file: "", priority: "", tag: "", stuck: false, follow: false };
+  const leadSelected = new Set(); // ids ticked for a bulk action (session-only)
   const canEditLeads = () => isAdmin();
   const leadToday = () => new Date().toISOString().slice(0, 10);
   // Default transit window: when a lead is dispatched, this is how many days
@@ -6241,12 +6242,13 @@
     return Number(r.updatedAt) || hAt || Number(r.createdAt) || 0;
   }
   function leadRows(rows, admin) {
-    if (!rows.length) return `<tr><td colspan="9" class="empty">No leads match these filters.</td></tr>`;
+    if (!rows.length) return `<tr><td colspan="${admin ? 10 : 9}" class="empty">No leads match these filters.</td></tr>`;
     return rows.slice().sort((a, b) => leadLastUpdated(b) - leadLastUpdated(a)).map((r) => {
       const loc = [r.city, r.state].filter(Boolean).join(", ");
       const sold = r.stage === "sold";
       const lu = leadLastUpdated(r);
-      return `<tr class="${sold ? "lead-won" : ""}">
+      return `<tr class="${sold ? "lead-won" : ""}${leadSelected.has(r.id) ? " lead-row-sel" : ""}">
+        ${admin ? `<td class="lead-selcell"><input type="checkbox" class="lead-sel" data-id="${esc(r.id)}"${leadSelected.has(r.id) ? " checked" : ""} title="Select for bulk action"></td>` : ""}
         <td data-label="Lead"><button type="button" class="lead-open" data-id="${esc(r.id)}"><span class="lead-name">${esc(r.name || "—")}</span><span class="t-muted lead-open-sub">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</span></button></td>
         <td data-label="Contact">${leadContactCell(r)}</td>
         <td data-label="Location">${esc(loc || "—")}</td>
@@ -6353,6 +6355,58 @@
       const l = leadAll().find((x) => x.id === b.dataset.id);
       if (window.confirm('PERMANENTLY delete lead "' + ((l && l.name) || "") + '"?\n\nThis cannot be undone. Prefer Archive unless you are sure.')) { leadRemove(b.dataset.id); leadRepaint(); }
     }));
+    wireLeadBulk();
+  }
+  // ---- Bulk actions: tick several leads, then act on all of them at once ----
+  function leadSelAllSync() {
+    const all = document.getElementById("leadSelAll"); if (!all) return;
+    const cbs = Array.from(document.querySelectorAll("#leadBody .lead-sel"));
+    const checked = cbs.filter((c) => c.checked).length;
+    all.checked = cbs.length > 0 && checked === cbs.length;
+    all.indeterminate = checked > 0 && checked < cbs.length;
+  }
+  function leadBulkBarUpdate() {
+    const bar = document.getElementById("leadBulkBar"); if (!bar) return;
+    const n = leadSelected.size;
+    if (!n || !canEditLeads()) { bar.hidden = true; bar.innerHTML = ""; return; }
+    const owners = leadOwners();
+    bar.hidden = false;
+    bar.innerHTML = `<div class="lbk-inner">
+      <span class="lbk-count">✓ ${n} selected</span>
+      <select id="lbkOwner" class="select" title="Assign all selected to one owner"><option value="">Assign owner…</option>${owners.map((o) => `<option value="${esc(o)}">${esc(spLabel(o))}</option>`).join("")}</select>
+      <select id="lbkStage" class="select" title="Move all selected to one stage"><option value="">Move to stage…</option>${LEAD_STAGES.map((s) => `<option value="${s.key}">${esc(s.label)}</option>`).join("")}</select>
+      ${leadViewArchived ? `<button type="button" class="ghost-btn" id="lbkRestore">↩ Restore</button>` : `<button type="button" class="ghost-btn" id="lbkArchive">🗄 Archive</button>`}
+      <button type="button" class="ghost-btn" id="lbkClear">Clear</button>
+    </div>`;
+    const ids = () => Array.from(leadSelected);
+    const ow = document.getElementById("lbkOwner");
+    if (ow) ow.onchange = () => { const v = ow.value; if (!v) return; if (!window.confirm(`Assign ${n} lead(s) to ${spLabel(v)}?`)) { ow.value = ""; return; } ids().forEach((id) => { leadUpdate(id, "owner", v); leadAddHistory(id, null, "Assigned to " + spLabel(v) + " (bulk)"); }); leadSelected.clear(); leadRepaint(); };
+    const st = document.getElementById("lbkStage");
+    if (st) st.onchange = () => { const v = st.value; if (!v) return; if (!window.confirm(`Move ${n} lead(s) to "${LEAD_STAGE_LABEL[v]}"?`)) { st.value = ""; return; } ids().forEach((id) => { const l = leadAll().find((x) => x.id === id); if (l && (l.stage || "new") !== v) { leadUpdate(id, "stage", v); leadUpdate(id, "stageSince", Date.now()); leadAddHistory(id, v, "Moved to " + LEAD_STAGE_LABEL[v] + " (bulk)"); } }); leadSelected.clear(); leadRepaint(); };
+    const ar = document.getElementById("lbkArchive");
+    if (ar) ar.onclick = () => { if (!window.confirm(`Archive ${n} lead(s)? They stay in the database and can be restored from the Archived view.`)) return; ids().forEach((id) => leadArchiveSet(id, true)); leadSelected.clear(); leadRepaint(); };
+    const re = document.getElementById("lbkRestore");
+    if (re) re.onclick = () => { ids().forEach((id) => leadArchiveSet(id, false)); leadSelected.clear(); leadRepaint(); };
+    const cl = document.getElementById("lbkClear");
+    if (cl) cl.onclick = () => { leadSelected.clear(); leadRepaint(); };
+  }
+  function wireLeadBulk() {
+    document.querySelectorAll("#leadBody .lead-sel").forEach((el) => el.onchange = () => {
+      const id = el.dataset.id;
+      if (el.checked) leadSelected.add(id); else leadSelected.delete(id);
+      const tr = el.closest("tr"); if (tr) tr.classList.toggle("lead-row-sel", el.checked);
+      leadBulkBarUpdate(); leadSelAllSync();
+    });
+    const all = document.getElementById("leadSelAll");
+    if (all) all.onchange = () => {
+      document.querySelectorAll("#leadBody .lead-sel").forEach((cb) => {
+        cb.checked = all.checked; const id = cb.dataset.id;
+        if (all.checked) leadSelected.add(id); else leadSelected.delete(id);
+        const tr = cb.closest("tr"); if (tr) tr.classList.toggle("lead-row-sel", all.checked);
+      });
+      leadBulkBarUpdate();
+    };
+    leadSelAllSync(); leadBulkBarUpdate();
   }
   // ---- Lead file attachments (Firebase Storage) ----
   function leadFileList(id) { return Object.keys(leadFiles).filter((k) => k.indexOf(id + "#") === 0).map((k) => Object.assign({ key: k }, leadFiles[k])); }
@@ -7070,9 +7124,9 @@
       const s = document.getElementById("leadSearch");
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
-      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", file: "", stuck: false, follow: false }; renderTab("leads"); };
+      if (clr) clr.onclick = () => { leadFilter = { q: "", source: "", stage: "", owner: "", state: "", product: "", file: "", priority: "", tag: "", stuck: false, follow: false }; leadSelected.clear(); renderTab("leads"); };
       const arch = document.getElementById("leadArchBtn");
-      if (arch) arch.onclick = () => { leadViewArchived = !leadViewArchived; leadFilter.stage = ""; leadFilter.stuck = false; renderTab("leads"); };
+      if (arch) arch.onclick = () => { leadViewArchived = !leadViewArchived; leadFilter.stage = ""; leadFilter.stuck = false; leadSelected.clear(); renderTab("leads"); };
       const mine = document.getElementById("leadMine");
       if (mine) mine.onclick = () => { const me = myLeadOwner(); leadFilter.owner = (leadFilter.owner === me ? "" : me); renderTab("leads"); };
       const stuckB = document.getElementById("leadStuck");
@@ -7130,8 +7184,10 @@
         <h2 style="margin:0">${leadViewArchived ? "Archived leads" : "Lead board"}</h2>
         <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length}${leadViewArchived ? " archived" : " leads"}</span>
       </div>
+      <div id="leadBulkBar" class="lead-bulkbar" hidden></div>
       <div class="table-wrap"><table class="lead-table">
         <thead><tr>
+          ${admin ? `<th class="lead-selcell"><input type="checkbox" id="leadSelAll" title="Select all shown"></th>` : ""}
           <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
           <th>Owner</th><th>Stage</th><th>Updated</th><th>Lead journey</th>
         </tr></thead>
