@@ -1673,3 +1673,23 @@ tr.lead-row-sel > td { background: var(--accent-soft); }
 .lead-bulkbar .lbk-count { font-weight: 800; color: var(--accent); }
 .lead-bulkbar .select { min-width: 148px; }
 @media (max-width: 560px) { .lead-bulkbar .select { min-width: 0; flex: 1 1 44%; } }
+
+/* ===== Casovil CRM — priority & tags ===== */
+.lead-prio { display: inline-block; margin-right: 5px; font-size: .82em; line-height: 1;
+  padding: 1px 2px; border-radius: 5px; vertical-align: middle; }
+.lead-prio.lp-hot { filter: none; }
+.lead-name .lead-prio { font-size: .9em; }
+/* Tag chips (table cell + detail dialog). */
+.lead-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.lead-tag { display: inline-flex; align-items: center; gap: 3px; font-size: .72rem; font-weight: 700;
+  padding: 1px 8px; border-radius: 999px; background: var(--chip-bg, var(--accent-soft));
+  color: var(--chip-fg, var(--accent)); border: 1px solid var(--border); white-space: nowrap; }
+.ld-tags-wrap { margin: 12px 0 2px; }
+.ld-tags-edit { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; align-items: center; }
+.ld-tag-chip { font-size: .78rem; padding: 3px 10px; }
+.ld-tag-rm { border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 800;
+  padding: 0 0 0 2px; line-height: 1; opacity: .7; }
+.ld-tag-rm:hover { opacity: 1; }
+.ld-tag-add { display: flex; gap: 6px; align-items: center; }
+.ld-tag-add input { flex: 1 1 auto; max-width: 240px; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--card); color: var(--fg); font-size: .9rem; }

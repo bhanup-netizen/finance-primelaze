@@ -5522,7 +5522,24 @@
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
     "product", "owner", "notes", "link", "stage", "history", "stageSince",
     "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
-    "demoProducts", "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
+    "demoProducts", "priority", "tags", "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
+  // Lead priority (hot / warm / cold) for focus-first working.
+  const LEAD_PRIORITIES = [
+    { key: "hot", label: "🔥 Hot", short: "Hot" },
+    { key: "warm", label: "🌤 Warm", short: "Warm" },
+    { key: "cold", label: "❄️ Cold", short: "Cold" },
+  ];
+  const LEAD_PRIO_LABEL = {}; LEAD_PRIORITIES.forEach((p) => (LEAD_PRIO_LABEL[p.key] = p));
+  const leadTags = (r) => Array.isArray(r.tags) ? r.tags : [];
+  const leadPrioBadge = (r) => (r.priority && LEAD_PRIO_LABEL[r.priority])
+    ? `<span class="lead-prio lp-${r.priority}" title="${LEAD_PRIO_LABEL[r.priority].short} priority">${LEAD_PRIO_LABEL[r.priority].label}</span>` : "";
+  const leadTagChipsHtml = (r) => { const t = leadTags(r); return t.length ? `<div class="lead-tags">${t.map((x) => `<span class="lead-tag">${esc(x)}</span>`).join("")}</div>` : ""; };
+  // All tags currently in use across the given leads (for the tag filter).
+  function leadAllTags(rows) {
+    const s = new Set();
+    (rows || []).forEach((r) => leadTags(r).forEach((t) => { if (t) s.add(t); }));
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }
   const LEAD_STEP_KEYS = ["new", "potential", "contacted", "working", "demosched", "demo", "negotiation", "sold", "dispatched", "delivered"]; // forward pipeline
 
   const leadEdits = {};    // "<id>#<field>" -> value (overrides on seeded leads)
@@ -5926,10 +5943,12 @@
       if (leadFilter.product && !(String(r.product || "").indexOf(leadFilter.product) >= 0)) return false;
       if (leadFilter.file === "yes" && !withFiles.has(r.id)) return false;
       if (leadFilter.file === "no" && withFiles.has(r.id)) return false;
+      if (leadFilter.priority && (r.priority || "") !== leadFilter.priority) return false;
+      if (leadFilter.tag && leadTags(r).indexOf(leadFilter.tag) < 0) return false;
       if (leadFilter.stuck && !leadIsStuck(r)) return false;
       if (leadFilter.follow && !leadFollowDue(r)) return false;
       if (q) {
-        const hay = [r.name, r.company, r.mobile, r.city, r.state, r.owner, r.notes, r.source, r.product].join(" ").toLowerCase();
+        const hay = [r.name, r.company, r.mobile, r.city, r.state, r.owner, r.notes, r.source, r.product, (leadTags(r).join(" "))].join(" ").toLowerCase();
         if (hay.indexOf(q) < 0) return false;
       }
       return true;
@@ -6134,7 +6153,13 @@
         ${fSelect("source", "Source", allLeadSources(), "")}
         ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
         ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
+        ${admin ? `<label class="ld-field"><span>Priority</span><select id="ld_priority"><option value="">— None</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}"${(r.priority || "") === p.key ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>` : (r.priority ? `<div class="ld-field"><span>Priority</span><div class="ld-val">${leadPrioBadge(r)}</div></div>` : "")}
         ${fText("link", "Attachment link", "https://…")}
+      </div>
+      <div class="ld-tags-wrap">
+        <h4 class="ld-h">Tags</h4>
+        <div class="ld-tags-edit" id="ldTagsBox"></div>
+        ${admin ? `<div class="ld-tag-add"><input type="text" id="ldTagInput" placeholder="Add a tag…" maxlength="24" autocomplete="off"><button type="button" class="mini-btn" id="ldTagAdd">＋ Add</button></div>` : ""}
       </div>
       ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.stage === "dispatched" && leadExpectedDelivery(r) ? ` · <b>Exp. delivery:</b> ${esc(leadExpectedDelivery(r))}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
       ${(Array.isArray(r.demoProducts) && r.demoProducts.length) ? `<div class="ld-meta"><b>🧪 Demoed:</b> ${r.demoProducts.map(esc).join(", ")}</div>` : ""}
@@ -6183,6 +6208,27 @@
     paintFiles();
     const fileInput = document.getElementById("ldFileInput");
     if (fileInput) fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) uploadLeadFile(id, f, paintFiles); e.target.value = ""; };
+    // Tags — add/remove chips (saved immediately so they survive dialog close).
+    const curTags = () => leadTags(leadAll().find((x) => x.id === id) || r);
+    const paintTags = () => {
+      const box = document.getElementById("ldTagsBox"); if (!box) return;
+      const cur = curTags();
+      box.innerHTML = cur.length
+        ? cur.map((t) => `<span class="lead-tag ld-tag-chip">${esc(t)}${admin ? ` <button type="button" class="ld-tag-rm" data-tag="${esc(t)}" title="Remove tag">✕</button>` : ""}</span>`).join("")
+        : `<span class="t-muted">No tags yet.</span>`;
+      box.querySelectorAll(".ld-tag-rm").forEach((b) => (b.onclick = () => { leadUpdate(id, "tags", curTags().filter((x) => x !== b.dataset.tag)); paintTags(); leadRepaint(); }));
+    };
+    paintTags();
+    const tagAdd = () => {
+      const inp = document.getElementById("ldTagInput"); if (!inp) return;
+      const v = (inp.value || "").trim(); inp.value = ""; if (!v) return;
+      const cur = curTags(); if (cur.indexOf(v) < 0) leadUpdate(id, "tags", cur.concat([v]));
+      paintTags(); leadRepaint();
+    };
+    const tagAddB = document.getElementById("ldTagAdd");
+    if (tagAddB) tagAddB.onclick = tagAdd;
+    const tagInp = document.getElementById("ldTagInput");
+    if (tagInp) tagInp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); tagAdd(); } };
     const addB = document.getElementById("ldAdd");
     if (addB) addB.onclick = () => { close(); leadRemarkDialog({ id }); };
     const mineB = document.getElementById("ldMine");
@@ -6195,7 +6241,7 @@
     const saveB = document.getElementById("ldSave");
     if (saveB) saveB.onclick = () => {
       let changed = 0;
-      ["name", "mobile", "company", "city", "state", "source", "product", "owner", "link"].forEach((f) => {
+      ["name", "mobile", "company", "city", "state", "source", "product", "owner", "link", "priority"].forEach((f) => {
         const el = document.getElementById("ld_" + f); if (!el) return;
         let v = (el.value || "").trim();
         if (f === "mobile") v = v.replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
@@ -6249,7 +6295,7 @@
       const lu = leadLastUpdated(r);
       return `<tr class="${sold ? "lead-won" : ""}${leadSelected.has(r.id) ? " lead-row-sel" : ""}">
         ${admin ? `<td class="lead-selcell"><input type="checkbox" class="lead-sel" data-id="${esc(r.id)}"${leadSelected.has(r.id) ? " checked" : ""} title="Select for bulk action"></td>` : ""}
-        <td data-label="Lead"><button type="button" class="lead-open" data-id="${esc(r.id)}"><span class="lead-name">${esc(r.name || "—")}</span><span class="t-muted lead-open-sub">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</span></button></td>
+        <td data-label="Lead"><button type="button" class="lead-open" data-id="${esc(r.id)}"><span class="lead-name">${leadPrioBadge(r)}${esc(r.name || "—")}</span><span class="t-muted lead-open-sub">${esc(r.company || "")}${r.occ ? " · " + esc(r.occ) : ""}</span></button>${leadTagChipsHtml(r)}</td>
         <td data-label="Contact">${leadContactCell(r)}</td>
         <td data-label="Location">${esc(loc || "—")}</td>
         <td data-label="Source"><span class="tag lead-src">${esc(r.source || "—")}</span></td>
@@ -6375,6 +6421,7 @@
       <span class="lbk-count">✓ ${n} selected</span>
       <select id="lbkOwner" class="select" title="Assign all selected to one owner"><option value="">Assign owner…</option>${owners.map((o) => `<option value="${esc(o)}">${esc(spLabel(o))}</option>`).join("")}</select>
       <select id="lbkStage" class="select" title="Move all selected to one stage"><option value="">Move to stage…</option>${LEAD_STAGES.map((s) => `<option value="${s.key}">${esc(s.label)}</option>`).join("")}</select>
+      <select id="lbkPrio" class="select" title="Set priority on all selected"><option value="">Set priority…</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}">${esc(p.label)}</option>`).join("")}<option value="__none__">— No priority</option></select>
       ${leadViewArchived ? `<button type="button" class="ghost-btn" id="lbkRestore">↩ Restore</button>` : `<button type="button" class="ghost-btn" id="lbkArchive">🗄 Archive</button>`}
       <button type="button" class="ghost-btn" id="lbkClear">Clear</button>
     </div>`;
@@ -6383,6 +6430,8 @@
     if (ow) ow.onchange = () => { const v = ow.value; if (!v) return; if (!window.confirm(`Assign ${n} lead(s) to ${spLabel(v)}?`)) { ow.value = ""; return; } ids().forEach((id) => { leadUpdate(id, "owner", v); leadAddHistory(id, null, "Assigned to " + spLabel(v) + " (bulk)"); }); leadSelected.clear(); leadRepaint(); };
     const st = document.getElementById("lbkStage");
     if (st) st.onchange = () => { const v = st.value; if (!v) return; if (!window.confirm(`Move ${n} lead(s) to "${LEAD_STAGE_LABEL[v]}"?`)) { st.value = ""; return; } ids().forEach((id) => { const l = leadAll().find((x) => x.id === id); if (l && (l.stage || "new") !== v) { leadUpdate(id, "stage", v); leadUpdate(id, "stageSince", Date.now()); leadAddHistory(id, v, "Moved to " + LEAD_STAGE_LABEL[v] + " (bulk)"); } }); leadSelected.clear(); leadRepaint(); };
+    const pr = document.getElementById("lbkPrio");
+    if (pr) pr.onchange = () => { const v = pr.value; if (!v) return; const nv = v === "__none__" ? "" : v; ids().forEach((id) => leadUpdate(id, "priority", nv)); leadSelected.clear(); leadRepaint(); };
     const ar = document.getElementById("lbkArchive");
     if (ar) ar.onclick = () => { if (!window.confirm(`Archive ${n} lead(s)? They stay in the database and can be restored from the Archived view.`)) return; ids().forEach((id) => leadArchiveSet(id, true)); leadSelected.clear(); leadRepaint(); };
     const re = document.getElementById("lbkRestore");
@@ -7121,6 +7170,8 @@
       wire("leadState", (e) => { leadFilter.state = e.target.value; leadRepaint(); });
       wire("leadStageSel", (e) => { leadFilter.stage = e.target.value; leadRepaint(); });
       wire("leadFileSel", (e) => { leadFilter.file = e.target.value; leadRepaint(); });
+      wire("leadPrioSel", (e) => { leadFilter.priority = e.target.value; leadRepaint(); });
+      wire("leadTagSel", (e) => { leadFilter.tag = e.target.value; leadRepaint(); });
       const s = document.getElementById("leadSearch");
       if (s) s.oninput = (e) => { leadFilter.q = e.target.value; leadRepaint(); };
       const clr = document.getElementById("leadClear");
@@ -7167,6 +7218,8 @@
         ${sel("leadState", leadFilter.state, leadUniq(leadRowsExcept(rows0, "state"), "state"), "State")}
         <label class="ord-field"><span>Stage</span><select id="leadStageSel" class="select"><option value="">All</option>${LEAD_STAGES.map((s) => `<option value="${s.key}"${leadFilter.stage === s.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Attachment</span><select id="leadFileSel" class="select"><option value=""${leadFilter.file === "" ? " selected" : ""}>All</option><option value="yes"${leadFilter.file === "yes" ? " selected" : ""}>📎 Has file</option><option value="no"${leadFilter.file === "no" ? " selected" : ""}>No file</option></select></label>
+        <label class="ord-field"><span>Priority</span><select id="leadPrioSel" class="select"><option value=""${leadFilter.priority === "" ? " selected" : ""}>All</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}"${leadFilter.priority === p.key ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
+        ${leadAllTags(rows0).length ? `<label class="ord-field"><span>Tag</span><select id="leadTagSel" class="select"><option value="">All</option>${leadAllTags(rows0).map((t) => `<option value="${esc(t)}"${leadFilter.tag === t ? " selected" : ""}>${esc(t)}</option>`).join("")}</select></label>` : ""}
         ${me ? `<button id="leadMine" class="ghost-btn${leadFilter.owner === me ? " active" : ""}" type="button" title="Show only leads assigned to you">👤 My leads</button>` : ""}
         <button id="leadStuck" class="ghost-btn${leadFilter.stuck ? " active" : ""}" type="button" title="Leads sitting over ${LEAD_STUCK_DAYS} days in one stage">⚠ Stuck (${stuckN})</button>
         <button id="leadFollow" class="ghost-btn${leadFilter.follow ? " active" : ""}" type="button" title="Open leads whose follow-up date is today or overdue">🔔 Follow-ups due (${followN})</button>
