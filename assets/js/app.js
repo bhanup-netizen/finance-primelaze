@@ -7161,6 +7161,7 @@
         <a href="#h-views">Views (Table / Board / Analytics)</a> ·
         <a href="#h-prio">Priority &amp; tags</a> ·
         <a href="#h-bulk">Bulk actions</a> ·
+        <a href="#h-safety">Data safety &amp; backups</a> ·
         <a href="#h-stages">Pipeline stages</a> ·
         <a href="#h-activity">Log an activity</a> ·
         <a href="#h-sold">Sold &amp; dispatch</a> ·
@@ -7266,6 +7267,16 @@
       <p>In <b>☰ Table</b> view, tick the checkbox on the left of each lead (or the header box to select all shown). A bar appears with: <b>Assign owner</b>, <b>Move to stage</b>, <b>Set priority</b> and <b>Archive</b> (or Restore in the archived view). Pick an action and it applies to every ticked lead at once.</p>
       ${ex("handing over a batch", "A new rep joins. Filter to the unassigned leads, tick the ones for them, then <b>Assign owner → the rep</b>. All move to them in one go, each with a history note.")}
 
+      <h2 class="df-sec" id="h-safety">🛟 Data safety &amp; backups</h2>
+      <p>Your leads are safe. Each lead is now saved <b>on its own</b> in the database, so one person's save can only ever change the leads <i>they</i> edited — it can't affect anyone else's. Add leads, edit, and work in parallel freely; nothing gets overwritten.</p>
+      <ul class="df-list">
+        <li><b>Everything auto-saves</b> and syncs to teammates within a few seconds.</li>
+        <li><b>Daily automatic backups</b> of all leads are kept, so any accidental loss is recoverable.</li>
+        <li><b>Safety trip-wire:</b> if a bad/old browser tab ever tries to wipe the list, open screens <b>refuse it</b> and warn, instead of losing data.</li>
+        <li><b>Super-admin → 🛟 Backups</b> (button on the lead board) can snapshot on demand and restore any day's backup. Restore only <b>adds back</b> — it never deletes current leads.</li>
+      </ul>
+      <p class="muted-note">The one thing that still matters: <b>everyone must refresh (Ctrl + Shift + R)</b> after an update so no one is running an old version.</p>
+
       <h2 class="df-sec" id="h-rules">⑪ Golden rules</h2>
       <ul class="df-list">
         <li><b>Refresh after an update is announced</b> (Ctrl + Shift + R) and check the footer shows the latest version. An old browser tab can show stale data.</li>
@@ -7279,7 +7290,7 @@
       <h2 class="df-sec" id="h-faq">⑫ FAQ</h2>
       <ul class="df-list">
         <li><b>I can't move a stage / edit.</b> You may have view-only access — ask the admin for edit rights.</li>
-        <li><b>A lead “disappeared”.</b> Check the <b>Archived</b> view (it's kept, not deleted). If genuinely missing, tell the admin with the name &amp; time.</li>
+        <li><b>A lead “disappeared”.</b> First check the <b>Archived</b> view (it's kept, not deleted). Still missing? Tell the admin — every lead is backed up daily and can be restored from <b>🛟 Backups</b>.</li>
         <li><b>Call &amp; WhatsApp buttons</b> — open any lead; tap 📞 Call (opens your dialer) or 💬 WhatsApp. Call <i>recording</i> isn't available in the dashboard.</li>
         <li><b>Two of us edited together — whose wins?</b> Both are kept; the system merges changes per lead, so nothing is lost.</li>
       </ul>
