@@ -5513,7 +5513,7 @@
       const name = (window.prompt("New city name:") || "").trim();
       if (name) {
         const nc = normalizeCity(name);
-        if (!citiesForState(st.value).includes(nc)) { customCities.push({ state: st.value, city: nc }); leadDirty = true; saveEdits("Added city: " + nc); }
+        if (!citiesForState(st.value).includes(nc)) { customCities.push({ state: st.value, city: nc }); leadDirty = true; leadConfigDirty = true; saveEdits("Added city: " + nc); }
         ct.innerHTML = cityOptionsHtml(st.value, nc); ct.value = nc; lastCity = nc;
       } else { ct.value = lastCity; }
     };
@@ -5549,13 +5549,19 @@
   const leadFiles = {};    // "<id>#<n>" -> {name,url,path,size,at,by} uploaded attachments
   // Lead data lives in its OWN Firestore document (edits/leads) so the main
   // overrides doc stays under Firestore's 1 MB-per-document limit.
-  const LEAD_DOC_FIELDS = ["leadEdits", "leadAdds", "leadRemovals", "leadArchive", "leadFiles", "customLeadSources", "customCities", "customLeadOwners"];
+  // Persisted lead fields in edits/leads. The *Map variants are the new
+  // clobber-proof format: id-keyed MAPS written per-key with set+merge (Firestore
+  // deep-merges maps), so a write can only touch the leads we changed — never
+  // replace the whole set. The plain-array variants are the legacy format, still
+  // READ (and unioned in) so nothing is lost, but no longer written.
+  const LEAD_DOC_FIELDS = ["leadEdits", "leadAdds", "leadRemovals", "leadArchive", "leadFiles", "customLeadSources", "customCities", "customLeadOwners", "leadAddsMap", "leadArchiveMap", "leadRemovalsMap"];
   // Sticky "this session edited leads" flag. Leads live in the big shared doc,
   // so a save triggered from ANY other area used to write back this session's
   // (possibly stale) copy of the leads — silently deleting leads that other
   // people added meanwhile. When this stays false, saveEdits writes the SERVER's
   // copy of every lead field back instead of ours (mirrors invDirty).
   let leadDirty = false;
+  let leadConfigDirty = false; // custom source/city/owner pick-lists changed this session
   // Which lead records THIS session actually changed — so a save MERGES our
   // changes onto the server's current copy instead of overwriting the whole
   // blob (which would delete leads/edits other people made meanwhile).
@@ -5852,8 +5858,11 @@
   // Hard delete — super-admin only. Everything else is preserved forever.
   function leadRemove(id) {
     if (!canDeleteLeads()) { window.alert("Only a super-admin can permanently delete a lead. Use Archive instead."); return; }
-    if (String(id).charAt(0) === "L") { if (!leadRemovals.includes(id)) leadRemovals.push(id); leadRemovalsDirty.push(id); }
-    else { const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) leadAdds.splice(i, 1); leadAddIdsDirty.add(id); }
+    // Record a universal removal tombstone (works for seed AND added leads, and
+    // overrides any legacy copy still present), and drop the local add if any.
+    if (!leadRemovals.includes(id)) leadRemovals.push(id);
+    leadRemovalsDirty.push(id);
+    const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) { leadAdds.splice(i, 1); leadAddIdsDirty.add(id); }
     leadDirty = true;
     saveEdits("Deleted a lead (super-admin)");
   }
@@ -5919,7 +5928,7 @@
   function addNewRepPrompt() {
     const name = (window.prompt("New salesperson name:") || "").trim();
     if (!name) return "";
-    if (!leadOwners().some((o) => o.toLowerCase() === name.toLowerCase())) { customLeadOwners.push(name); leadDirty = true; saveEdits("Added salesperson: " + name); }
+    if (!leadOwners().some((o) => o.toLowerCase() === name.toLowerCase())) { customLeadOwners.push(name); leadDirty = true; leadConfigDirty = true; saveEdits("Added salesperson: " + name); }
     return name;
   }
   function leadUniq(rows, field) {
@@ -6818,7 +6827,7 @@
       if (srcSel.value !== "__new__") { lastSource = srcSel.value; return; }
       const name = (window.prompt("New lead source name:") || "").trim();
       if (name) {
-        if (!allLeadSources().some((s) => s.toLowerCase() === name.toLowerCase())) { customLeadSources.push(name); leadDirty = true; saveEdits("Added lead source: " + name); }
+        if (!allLeadSources().some((s) => s.toLowerCase() === name.toLowerCase())) { customLeadSources.push(name); leadDirty = true; leadConfigDirty = true; saveEdits("Added lead source: " + name); }
         srcSel.innerHTML = allLeadSources().map((s) => `<option${s === name ? " selected" : ""}>${esc(s)}</option>`).join("") + `<option value="__new__">＋ Add new source…</option>`;
         srcSel.value = name; lastSource = name;
       } else { srcSel.value = lastSource; }
@@ -11809,13 +11818,29 @@
       }
       if (e.ovEdits && typeof e.ovEdits === "object") { Object.keys(ovEdits).forEach((k) => delete ovEdits[k]); Object.assign(ovEdits, e.ovEdits); }
       if (e.leadEdits && typeof e.leadEdits === "object") { Object.keys(leadEdits).forEach((k) => delete leadEdits[k]); Object.assign(leadEdits, e.leadEdits); }
-      if (Array.isArray(e.leadAdds)) {
-        leadAdds.length = 0; e.leadAdds.forEach((l) => leadAdds.push(l));
+      // Reconstruct leads from the new per-id MAPS (leadAddsMap/leadArchiveMap/
+      // leadRemovalsMap) unioned with the legacy ARRAYS, so a doc written in
+      // either format loads correctly. Maps win on conflict; a false/absent map
+      // value overrides a stale legacy-array entry.
+      if (e.leadAdds || e.leadAddsMap || e.leadArchive || e.leadArchiveMap || e.leadRemovals || e.leadRemovalsMap) {
+        // Removal tombstones first (array ∪ map).
+        const rmSet = new Set();
+        if (Array.isArray(e.leadRemovals)) e.leadRemovals.forEach((id) => rmSet.add(id));
+        if (e.leadRemovalsMap && typeof e.leadRemovalsMap === "object") Object.keys(e.leadRemovalsMap).forEach((id) => { if (e.leadRemovalsMap[id]) rmSet.add(id); });
+        leadRemovals.length = 0; rmSet.forEach((id) => leadRemovals.push(id));
+        // Added leads: legacy array first, then map upserts (map wins), minus removed.
+        const byId = new Map();
+        if (Array.isArray(e.leadAdds)) e.leadAdds.forEach((l) => { if (l && l.id) byId.set(l.id, l); });
+        if (e.leadAddsMap && typeof e.leadAddsMap === "object") Object.keys(e.leadAddsMap).forEach((id) => { const v = e.leadAddsMap[id]; if (v && typeof v === "object") byId.set(id, v); else byId.delete(id); });
+        leadAdds.length = 0; byId.forEach((l, id) => { if (!rmSet.has(id)) leadAdds.push(l); });
         const ids = leadAdds.map((a) => +String(a.id).replace(/^u/, "")).filter((n) => !isNaN(n));
         leadSeq = ids.length ? Math.max(...ids) + 1 : 0;
+        // Archive set: legacy array ∪ map; an explicit map `false` un-archives.
+        const arSet = new Set();
+        if (Array.isArray(e.leadArchive)) e.leadArchive.forEach((id) => arSet.add(id));
+        if (e.leadArchiveMap && typeof e.leadArchiveMap === "object") Object.keys(e.leadArchiveMap).forEach((id) => { if (e.leadArchiveMap[id]) arSet.add(id); else arSet.delete(id); });
+        leadArchive.length = 0; arSet.forEach((id) => leadArchive.push(id));
       }
-      if (Array.isArray(e.leadRemovals)) { leadRemovals.length = 0; e.leadRemovals.forEach((id) => leadRemovals.push(id)); }
-      if (Array.isArray(e.leadArchive)) { leadArchive.length = 0; e.leadArchive.forEach((id) => leadArchive.push(id)); }
       if (e.leadFiles && typeof e.leadFiles === "object") { Object.keys(leadFiles).forEach((k) => delete leadFiles[k]); Object.assign(leadFiles, e.leadFiles); }
       if (Array.isArray(e.customLeadSources)) { customLeadSources.length = 0; e.customLeadSources.forEach((s) => customLeadSources.push(s)); }
       if (Array.isArray(e.customCities)) { customCities.length = 0; e.customCities.forEach((c) => customCities.push(c)); }
@@ -11994,7 +12019,6 @@
 
   let saveTimer = null;
   let saveInFlight = false; // true only while the debounced save is actually running
-  let leadSaveRetryTimer = null; // retry a leads write that was skipped to avoid clobbering
   function saveEdits(what, immediate) {
     if (!db || !(roleIsAdmin() || hasAnyEditGrant() || canSeePage("leads"))) return;
     clearTimeout(saveTimer);
@@ -12024,16 +12048,10 @@
       // stale snapshot that is missing leads/records another person just added.
       try { const cur = await db.collection("edits").doc("overrides").get({ source: "server" }); serverData = cur.exists ? (cur.data() || {}) : {}; }
       catch (e) { try { const c2 = await db.collection("edits").doc("overrides").get(); serverData = c2.exists ? (c2.data() || {}) : {}; } catch (e2) { serverData = null; } }
-      // Leads live in their OWN document (edits/leads) so the main overrides doc
-      // stays well under Firestore's 1 MB-per-document limit (the "invalid
-      // argument / not saved" failures were the single doc growing past 1 MB).
-      // Re-read the leads doc as the merge base; before migration it is still in
-      // overrides, so fall back to serverData.
-      let serverLeads = null;
-      try { const lc = await db.collection("edits").doc("leads").get({ source: "server" }); serverLeads = lc.exists ? (lc.data() || {}) : {}; }
-      catch (e) { try { const l2 = await db.collection("edits").doc("leads").get(); serverLeads = l2.exists ? (l2.data() || {}) : {}; } catch (e2) { serverLeads = null; } }
-      const leadsMigrated = !!(serverLeads && LEAD_DOC_FIELDS.some((k) => serverLeads[k] !== undefined));
-      const leadBase = leadsMigrated ? serverLeads : serverData; // where the current leads live
+      // Leads are written per-id with set+merge (Firestore deep-merges maps), so
+      // there is no server re-read or merge base to compute here any more — see
+      // the leads write below. This removes the whole "stale snapshot clobbers
+      // everyone's leads" failure mode.
       let mergedLog;
       if (serverData) {
         // Weekly duties are NO LONGER written here — they are saved on their own
@@ -12064,53 +12082,9 @@
         if (serverData.invAdds) wInvAdds = serverData.invAdds;
         if (serverData.invRemovals) wInvRemovals = serverData.invRemovals;
       }
-      // Leads: same protection. If this session never edited leads, write the
-      // SERVER's copy of every lead field back so a save from another area can't
-      // clobber it with our stale snapshot (fixes "leads deleting automatically").
-      let wLeadEdits = leadEdits, wLeadAdds = leadAdds, wLeadRemovals = leadRemovals,
-          wLeadArchive = leadArchive, wLeadFiles = leadFiles,
-          wCustomLeadSources = customLeadSources, wCustomCities = customCities, wCustomLeadOwners = customLeadOwners;
-      if (serverData && !leadDirty) {
-        // This session never touched leads — keep the server's copy verbatim
-        // (read from the leads doc, the current home of leads).
-        if (leadBase.leadEdits) wLeadEdits = leadBase.leadEdits;
-        if (Array.isArray(leadBase.leadAdds)) wLeadAdds = leadBase.leadAdds;
-        if (Array.isArray(leadBase.leadRemovals)) wLeadRemovals = leadBase.leadRemovals;
-        if (Array.isArray(leadBase.leadArchive)) wLeadArchive = leadBase.leadArchive;
-        if (leadBase.leadFiles) wLeadFiles = leadBase.leadFiles;
-        if (Array.isArray(leadBase.customLeadSources)) wCustomLeadSources = leadBase.customLeadSources;
-        if (Array.isArray(leadBase.customCities)) wCustomCities = leadBase.customCities;
-        if (Array.isArray(leadBase.customLeadOwners)) wCustomLeadOwners = leadBase.customLeadOwners;
-      } else if (serverData && leadDirty) {
-        // This session DID edit leads — MERGE our specific changes onto the
-        // server's current copy so we never clobber another person's leads
-        // (adds, stage moves, notes) that landed since we loaded.
-        const uniq = (a, b) => Array.from(new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]));
-        // leadEdits: server's edits + only the keys WE changed.
-        const srvE = (leadBase.leadEdits && typeof leadBase.leadEdits === "object") ? leadBase.leadEdits : {};
-        const mE = Object.assign({}, srvE);
-        leadEditKeysDirty.forEach((k) => { if (k in leadEdits) mE[k] = leadEdits[k]; else delete mE[k]; });
-        wLeadEdits = mE;
-        // leadAdds: server's adds, then upsert/remove only the ones WE touched.
-        const byId = new Map((Array.isArray(leadBase.leadAdds) ? leadBase.leadAdds : []).map((x) => [x.id, x]));
-        leadAddIdsDirty.forEach((id) => { const local = leadAdds.find((x) => x.id === id); if (local) byId.set(id, local); else byId.delete(id); });
-        wLeadAdds = Array.from(byId.values());
-        // leadRemovals: union (removals are permanent, never undone in the UI).
-        wLeadRemovals = uniq(leadBase.leadRemovals, leadRemovalsDirty.length ? leadRemovals : []);
-        // leadArchive: apply only OUR archive/restore toggles onto the server set.
-        const arSet = new Set(Array.isArray(leadBase.leadArchive) ? leadBase.leadArchive : []);
-        leadArchiveDirty.forEach((on, id) => { if (on) arSet.add(id); else arSet.delete(id); });
-        wLeadArchive = Array.from(arSet);
-        // leadFiles: server's files + only the file keys WE added/removed.
-        const srvF = (leadBase.leadFiles && typeof leadBase.leadFiles === "object") ? leadBase.leadFiles : {};
-        const mF = Object.assign({}, srvF);
-        leadFilesDirty.forEach((k) => { if (k in leadFiles) mF[k] = leadFiles[k]; else delete mF[k]; });
-        wLeadFiles = mF;
-        // Custom pick-lists are append-only — union with the server's.
-        wCustomLeadSources = uniq(leadBase.customLeadSources, customLeadSources);
-        wCustomCities = (function () { const seen = new Set(); const out = []; [].concat(Array.isArray(leadBase.customCities) ? leadBase.customCities : [], customCities).forEach((c) => { const k = c && (c.state + "|" + c.city); if (c && !seen.has(k)) { seen.add(k); out.push(c); } }); return out; })();
-        wCustomLeadOwners = uniq(leadBase.customLeadOwners, customLeadOwners);
-      }
+      // Leads are persisted separately below as per-id map keys with set+merge,
+      // so there is no stale-copy writeback or array rebuild here any more — a
+      // write can only ever touch the specific leads this session changed.
       // Payments: same protection. If this session never touched payment data,
       // write the SERVER's copy back so a save from another area (or a stale tab)
       // can't overwrite a fresh import with old rows. Fixes "import overridden".
@@ -12208,42 +12182,28 @@
         if (brochureDirty) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
         if (regDirty) Object.assign(payload, { regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved });
 
-        // LEADS → their own document (edits/leads) so the overrides doc stays
-        // under Firestore's 1 MB cap. Write leads FIRST, then (once they're
-        // safely stored) delete the lead fields from the overrides doc so it
-        // shrinks back under the limit. This one-time migration happens on the
-        // first save after this build ships, then just stays split.
-        let leadsPersisted = leadsMigrated;
-        // GUARD against mass lead deletion ("leads deleting automatically"):
-        // every leads write REPLACES the leadAdds / leadArchive arrays (merge
-        // does not merge arrays), and the merge logic above builds them on top
-        // of `leadBase`. If the leads re-read failed/returned empty, leadBase is
-        // the leads-less overrides doc, so we'd write back only the handful of
-        // leads THIS session touched — wiping everyone else's. Only write when
-        // the base is trustworthy: either the leads doc is already migrated and
-        // was read back with its leads, OR this is the genuine first migration /
-        // empty-system case where BOTH docs were read successfully (so an empty
-        // base really means "no leads yet", not "read failed").
-        const leadBaseTrusted = leadsMigrated || (serverLeads !== null && serverData !== null);
-        if ((leadDirty || !leadsMigrated) && leadBaseTrusted) {
-          const leadPayload = { leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, updatedBy: by, updatedAt: at };
-          await db.collection("edits").doc("leads").set(leadPayload, { merge: true });
-          leadsPersisted = true;
-        } else if ((leadDirty || !leadsMigrated) && !leadBaseTrusted) {
-          // Could not safely persist leads this round — do NOT write (that would
-          // clobber the server's leads) and do NOT strip leads from overrides.
-          // Keep leadDirty so the change retries once a clean read is available.
-          leadsPersisted = false;
-          console.warn("saveEdits: skipped leads write — leads re-read unavailable; protecting server leads, will retry");
-          if (leadDirty) {
-            clearTimeout(leadSaveRetryTimer);
-            leadSaveRetryTimer = setTimeout(() => { if (leadDirty) saveEdits("Lead save retry"); }, 5000);
-          }
-        }
-        // Remove the (now-duplicated) lead fields from overrides so it fits.
-        if (leadsPersisted) {
+        // LEADS → edits/leads, written as per-id MAP keys with set+merge.
+        // Firestore DEEP-MERGES map fields (it only replaces arrays), so this
+        // write touches ONLY the specific leads this session changed and can
+        // never clear, shrink or overwrite the full set — no matter how stale
+        // this tab is or whether a re-read succeeded. THIS is the permanent fix
+        // for "leads deleting automatically". We never clear the per-key dirty
+        // trackers, so every save harmlessly re-asserts our own changes.
+        if (leadDirty) {
           const DEL = firebase.firestore.FieldValue.delete();
-          LEAD_DOC_FIELDS.forEach((k) => { payload[k] = DEL; });
+          const lp = { updatedAt: at, updatedBy: by };
+          if (leadEditKeysDirty.size) { lp.leadEdits = {}; leadEditKeysDirty.forEach((k) => { lp.leadEdits[k] = (k in leadEdits) ? leadEdits[k] : DEL; }); }
+          if (leadAddIdsDirty.size) { lp.leadAddsMap = {}; leadAddIdsDirty.forEach((id) => { const o = leadAdds.find((x) => x.id === id); lp.leadAddsMap[id] = o ? o : DEL; }); }
+          if (leadArchiveDirty.size) { lp.leadArchiveMap = {}; leadArchiveDirty.forEach((on, id) => { lp.leadArchiveMap[id] = !!on; }); }
+          if (leadRemovalsDirty.length) { lp.leadRemovalsMap = {}; leadRemovalsDirty.forEach((id) => { lp.leadRemovalsMap[id] = true; }); }
+          if (leadFilesDirty.size) { lp.leadFiles = {}; leadFilesDirty.forEach((k) => { lp.leadFiles[k] = (k in leadFiles) ? leadFiles[k] : DEL; }); }
+          if (leadConfigDirty) {
+            const AU = firebase.firestore.FieldValue.arrayUnion;
+            if (customLeadSources.length) lp.customLeadSources = AU.apply(null, customLeadSources);
+            if (customLeadOwners.length) lp.customLeadOwners = AU.apply(null, customLeadOwners);
+            if (customCities.length) lp.customCities = AU.apply(null, customCities);
+          }
+          await db.collection("edits").doc("leads").set(lp, { merge: true });
         }
         await db.collection("edits").doc("overrides").set(payload, { merge: true });
         // HR passive modules just persisted — clear their dirty flags and rebase
