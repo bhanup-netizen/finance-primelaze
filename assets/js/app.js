@@ -11994,6 +11994,7 @@
 
   let saveTimer = null;
   let saveInFlight = false; // true only while the debounced save is actually running
+  let leadSaveRetryTimer = null; // retry a leads write that was skipped to avoid clobbering
   function saveEdits(what, immediate) {
     if (!db || !(roleIsAdmin() || hasAnyEditGrant() || canSeePage("leads"))) return;
     clearTimeout(saveTimer);
@@ -12213,10 +12214,31 @@
         // shrinks back under the limit. This one-time migration happens on the
         // first save after this build ships, then just stays split.
         let leadsPersisted = leadsMigrated;
-        if (leadDirty || !leadsMigrated) {
+        // GUARD against mass lead deletion ("leads deleting automatically"):
+        // every leads write REPLACES the leadAdds / leadArchive arrays (merge
+        // does not merge arrays), and the merge logic above builds them on top
+        // of `leadBase`. If the leads re-read failed/returned empty, leadBase is
+        // the leads-less overrides doc, so we'd write back only the handful of
+        // leads THIS session touched — wiping everyone else's. Only write when
+        // the base is trustworthy: either the leads doc is already migrated and
+        // was read back with its leads, OR this is the genuine first migration /
+        // empty-system case where BOTH docs were read successfully (so an empty
+        // base really means "no leads yet", not "read failed").
+        const leadBaseTrusted = leadsMigrated || (serverLeads !== null && serverData !== null);
+        if ((leadDirty || !leadsMigrated) && leadBaseTrusted) {
           const leadPayload = { leadEdits: wLeadEdits, leadAdds: wLeadAdds, leadRemovals: wLeadRemovals, leadArchive: wLeadArchive, leadFiles: wLeadFiles, customLeadSources: wCustomLeadSources, customCities: wCustomCities, customLeadOwners: wCustomLeadOwners, updatedBy: by, updatedAt: at };
           await db.collection("edits").doc("leads").set(leadPayload, { merge: true });
           leadsPersisted = true;
+        } else if ((leadDirty || !leadsMigrated) && !leadBaseTrusted) {
+          // Could not safely persist leads this round — do NOT write (that would
+          // clobber the server's leads) and do NOT strip leads from overrides.
+          // Keep leadDirty so the change retries once a clean read is available.
+          leadsPersisted = false;
+          console.warn("saveEdits: skipped leads write — leads re-read unavailable; protecting server leads, will retry");
+          if (leadDirty) {
+            clearTimeout(leadSaveRetryTimer);
+            leadSaveRetryTimer = setTimeout(() => { if (leadDirty) saveEdits("Lead save retry"); }, 5000);
+          }
         }
         // Remove the (now-duplicated) lead fields from overrides so it fits.
         if (leadsPersisted) {
