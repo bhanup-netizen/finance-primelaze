@@ -5562,6 +5562,8 @@
   // copy of every lead field back instead of ours (mirrors invDirty).
   let leadDirty = false;
   let leadConfigDirty = false; // custom source/city/owner pick-lists changed this session
+  let leadInitialLoaded = false; // true once the first (login) load has applied
+  let leadAddsMaxSeen = 0;       // high-water mark of added-lead count, for the trip-wire
   // Which lead records THIS session actually changed — so a save MERGES our
   // changes onto the server's current copy instead of overwriting the whole
   // blob (which would delete leads/edits other people made meanwhile).
@@ -5865,6 +5867,84 @@
     const i = leadAdds.findIndex((x) => x.id === id); if (i >= 0) { leadAdds.splice(i, 1); leadAddIdsDirty.add(id); }
     leadDirty = true;
     saveEdits("Deleted a lead (super-admin)");
+  }
+
+  // ---- Lead safety net: automatic backups + restore ----------------------
+  // Even though the per-id map write model makes mass deletion structurally
+  // impossible, we keep daily snapshots of the whole leads doc so ANY loss —
+  // from any cause, known or not — is recoverable in seconds.
+  let leadDropAlertShown = false;
+  function leadDropAlert(before, after) {
+    if (leadDropAlertShown) return; leadDropAlertShown = true;
+    const el = document.getElementById("lastUpdated");
+    if (el) { el.style.color = "var(--bad)"; el.textContent = `⚠ Blocked a bad leads update (${before}→${after}). Your leads are safe on screen.`; }
+    if (isAdmin()) window.alert(`⚠ A bad update tried to drop the lead count from ${before} to ${after}.\n\nIt was BLOCKED — your leads are still here. Someone is likely on an old browser tab: ask everyone to refresh (Ctrl+Shift+R) to the latest version. Your data is backed up and recoverable.`);
+  }
+  async function backupLeadsIfDue() {
+    try {
+      if (!db) return;
+      const snap = await db.collection("edits").doc("leads").get();
+      if (!snap || !snap.exists) return;
+      const data = snap.data() || {};
+      const addCount = (data.leadAddsMap ? Object.keys(data.leadAddsMap).length : 0) + (Array.isArray(data.leadAdds) ? data.leadAdds.length : 0);
+      // Never snapshot a suspiciously-empty state over a good backup.
+      if (addCount < 5) return;
+      const day = new Date().toISOString().slice(0, 10);
+      const ref = db.collection("leadBackups").doc(day);
+      const ex = await ref.get();
+      if (ex.exists) return; // already have today's
+      await ref.set({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", addCount, data });
+      // Prune: keep the most recent ~30 daily snapshots.
+      try {
+        const all = await db.collection("leadBackups").get();
+        const ids = all.docs.map((d) => d.id).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
+        if (ids.length > 30) { for (const old of ids.slice(0, ids.length - 30)) { try { await db.collection("leadBackups").doc(old).delete(); } catch (_) {} } }
+      } catch (_) {}
+    } catch (e) { console.warn("lead backup skipped", e && (e.code || e.message)); }
+  }
+  async function backupLeadsNow() {
+    try {
+      const snap = await db.collection("edits").doc("leads").get();
+      if (!snap || !snap.exists) { window.alert("Nothing to back up yet."); return; }
+      const data = snap.data() || {};
+      const addCount = (data.leadAddsMap ? Object.keys(data.leadAddsMap).length : 0) + (Array.isArray(data.leadAdds) ? data.leadAdds.length : 0);
+      const id = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      await db.collection("leadBackups").doc(id).set({ at: Date.now(), by: (sessionUser && sessionUser.email) || "", addCount, data });
+      window.alert("✓ Backup saved (" + addCount + " added leads).");
+    } catch (e) { window.alert("Backup failed: " + (e && (e.code || e.message) || e)); }
+  }
+  async function restoreLeadsFromBackup(id) {
+    if (!isSuperAdmin()) { window.alert("Only a super-admin can restore."); return; }
+    try {
+      const b = await db.collection("leadBackups").doc(id).get();
+      if (!b.exists) { window.alert("That backup no longer exists."); return; }
+      const bd = b.data() || {}; const data = bd.data || {};
+      if (!window.confirm(`Restore leads from backup ${id}?\n\nThis backup has ${bd.addCount || "?"} added leads. It is MERGED onto the current data (nothing already present is deleted). Continue?`)) return;
+      await db.collection("edits").doc("leads").set(data, { merge: true });
+      window.alert("✓ Restored from " + id + ". Reloading…");
+      location.reload();
+    } catch (e) { window.alert("Restore failed: " + (e && (e.code || e.message) || e)); }
+  }
+  async function leadBackupsDialog() {
+    if (!isSuperAdmin()) return;
+    let docs = [];
+    try { const all = await db.collection("leadBackups").get(); docs = all.docs.map((d) => ({ id: d.id, ...(d.data() || {}) })).sort((a, b) => (b.at || 0) - (a.at || 0)); }
+    catch (e) { window.alert("Could not list backups: " + (e && (e.code || e.message) || e)); return; }
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card" style="max-width:560px">
+      <h3>🛟 Lead backups &amp; restore</h3>
+      <p class="t-muted" style="margin:-6px 0 12px">Daily automatic snapshots of all leads. Restore merges a snapshot back (never deletes what's already there).</p>
+      <div style="margin-bottom:12px"><button type="button" class="dl-btn" id="lbNow">📸 Back up now</button></div>
+      <div class="table-wrap" style="max-height:52vh"><table class="lead-table"><thead><tr><th>Backup</th><th class="num">Added leads</th><th>By</th><th></th></tr></thead>
+      <tbody>${docs.length ? docs.map((d) => `<tr><td>${esc(d.id)}</td><td class="num">${esc(String(d.addCount == null ? "?" : d.addCount))}</td><td class="t-muted">${esc(d.by || "")}</td><td><button type="button" class="ghost-btn lb-restore" data-id="${esc(d.id)}">↩ Restore</button></td></tr>`).join("") : `<tr><td colspan="4" class="empty">No backups yet.</td></tr>`}</tbody></table></div>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="lbClose">Close</button></div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("lbClose").onclick = close;
+    document.getElementById("lbNow").onclick = () => { close(); backupLeadsNow(); };
+    wrap.querySelectorAll(".lb-restore").forEach((b) => (b.onclick = () => { close(); restoreLeadsFromBackup(b.dataset.id); }));
   }
   function leadAddNew(obj) {
     const id = "u" + (leadSeq++);
@@ -7379,6 +7459,7 @@
       const fab = document.getElementById("leadFab"); if (fab) fab.onclick = leadAddDialog;
       const tpl = document.getElementById("leadTpl"); if (tpl) tpl.onclick = leadDownloadTemplate;
       const exp = document.getElementById("leadExport"); if (exp) exp.onclick = leadExport;
+      const bkp = document.getElementById("leadBackupsBtn"); if (bkp) bkp.onclick = leadBackupsDialog;
       const up = document.getElementById("leadUpload");
       if (up) up.onchange = (e) => { const f = e.target.files[0]; if (f) leadImport(f); e.target.value = ""; };
     }, 0);
@@ -7421,6 +7502,7 @@
           <button id="leadArchBtn" class="ghost-btn${leadViewArchived ? " active" : ""}" type="button" title="Show/hide archived leads">🗄 ${leadViewArchived ? "Back to active" : "Archived (" + archN + ")"}</button>
           <button id="leadTpl" class="ghost-btn" type="button">⬇ Template</button>
           <button id="leadExport" class="ghost-btn" type="button" title="Download the current leads (with Lead ID) to edit and re-upload">⬇ Download (edit)</button>
+          ${isSuperAdmin() ? `<button id="leadBackupsBtn" class="ghost-btn" type="button" title="Automatic daily backups of all leads — view & restore">🛟 Backups</button>` : ""}
         </div>
       </div>
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:18px 0 8px">
@@ -11578,11 +11660,13 @@
 
     D = await decryptData(key);
     await loadEdits();
+    leadInitialLoaded = true; // arm the leads trip-wire now the real data is in
     await loadWeekly();
     seedServiceTeam();
     seedDemoNames();
     seedHqTargets();
     subscribeEdits(); // live-refresh when anyone else changes the shared data
+    backupLeadsIfDue(); // keep a daily snapshot of all leads (recovery safety net)
   }
 
   // ---- Live sync ----
@@ -11832,14 +11916,30 @@
         const byId = new Map();
         if (Array.isArray(e.leadAdds)) e.leadAdds.forEach((l) => { if (l && l.id) byId.set(l.id, l); });
         if (e.leadAddsMap && typeof e.leadAddsMap === "object") Object.keys(e.leadAddsMap).forEach((id) => { const v = e.leadAddsMap[id]; if (v && typeof v === "object") byId.set(id, v); else byId.delete(id); });
-        leadAdds.length = 0; byId.forEach((l, id) => { if (!rmSet.has(id)) leadAdds.push(l); });
-        const ids = leadAdds.map((a) => +String(a.id).replace(/^u/, "")).filter((n) => !isNaN(n));
-        leadSeq = ids.length ? Math.max(...ids) + 1 : 0;
-        // Archive set: legacy array ∪ map; an explicit map `false` un-archives.
-        const arSet = new Set();
-        if (Array.isArray(e.leadArchive)) e.leadArchive.forEach((id) => arSet.add(id));
-        if (e.leadArchiveMap && typeof e.leadArchiveMap === "object") Object.keys(e.leadArchiveMap).forEach((id) => { if (e.leadArchiveMap[id]) arSet.add(id); else arSet.delete(id); });
-        leadArchive.length = 0; arSet.forEach((id) => leadArchive.push(id));
+        const candAdds = []; byId.forEach((l, id) => { if (!rmSet.has(id)) candAdds.push(l); });
+        // TRIP-WIRE (belt-and-braces on top of the per-id write model): on a LIVE
+        // refresh, refuse to accept a snapshot that makes the added-lead count
+        // collapse — that is the signature of a mass-deletion from a bad/old tab.
+        // Keep the healthy in-memory leads and alert, instead of silently losing
+        // them. The initial login load (leadInitialLoaded=false) is always applied.
+        const drastic = leadInitialLoaded && leadAddsMaxSeen > 20 &&
+          candAdds.length < Math.floor(leadAddsMaxSeen * 0.6) && (leadAddsMaxSeen - candAdds.length) > 15;
+        if (drastic) {
+          console.warn("Leads trip-wire: REFUSED a snapshot that dropped added leads " + leadAddsMaxSeen + " → " + candAdds.length + " (kept current leads)");
+          try { leadDropAlert(leadAddsMaxSeen, candAdds.length); } catch (_) {}
+          // leave leadAdds / leadArchive / leadRemovals as they are (healthy copy)
+        } else {
+          leadRemovals.length = 0; rmSet.forEach((id) => leadRemovals.push(id));
+          leadAdds.length = 0; candAdds.forEach((l) => leadAdds.push(l));
+          const ids = leadAdds.map((a) => +String(a.id).replace(/^u/, "")).filter((n) => !isNaN(n));
+          leadSeq = ids.length ? Math.max(...ids) + 1 : 0;
+          // Archive set: legacy array ∪ map; an explicit map `false` un-archives.
+          const arSet = new Set();
+          if (Array.isArray(e.leadArchive)) e.leadArchive.forEach((id) => arSet.add(id));
+          if (e.leadArchiveMap && typeof e.leadArchiveMap === "object") Object.keys(e.leadArchiveMap).forEach((id) => { if (e.leadArchiveMap[id]) arSet.add(id); else arSet.delete(id); });
+          leadArchive.length = 0; arSet.forEach((id) => leadArchive.push(id));
+          leadAddsMaxSeen = Math.max(leadAddsMaxSeen, candAdds.length);
+        }
       }
       if (e.leadFiles && typeof e.leadFiles === "object") { Object.keys(leadFiles).forEach((k) => delete leadFiles[k]); Object.assign(leadFiles, e.leadFiles); }
       if (Array.isArray(e.customLeadSources)) { customLeadSources.length = 0; e.customLeadSources.forEach((s) => customLeadSources.push(s)); }

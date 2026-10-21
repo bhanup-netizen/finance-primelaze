@@ -78,6 +78,15 @@ service cloud.firestore {
       allow delete: if isAdmin() || isPageEditor();
     }
 
+    // Lead backups — automatic daily snapshots of the leads doc, for recovery.
+    // Any signed-in user may create a snapshot and read them; only admins/super
+    // (via the dashboard's restore tool) delete old ones.
+    match /leadBackups/{doc} {
+      allow read, create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     // MIS — Finance monthly summary documents (one per month). Any signed-in
     // user may read; only admins and page editors may write. Without this rule
     // the "New month" save is denied and nothing persists.
