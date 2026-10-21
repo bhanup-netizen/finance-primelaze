@@ -6491,7 +6491,13 @@
     wireLeadChips();
     const sc = document.getElementById("leadScore"); if (sc) sc.innerHTML = leadScoreboard(stageBase);
     leadSyncFilters(rows0);
-    const main = document.getElementById("leadMain"); if (main) main.innerHTML = leadMainHtml(filtered, rows0, canEditLeads());
+    // In table view, repaint ONLY the <tbody> so the .table-wrap's inner scroll
+    // (and the window scroll) stay put — replacing the whole #leadMain recreates
+    // the scroll container and jumps the list to the top on every edit. Board /
+    // analytics views have no such inner scroll, so rebuild the whole panel.
+    const body = (leadView === "table") ? document.getElementById("leadBody") : null;
+    if (body) { body.innerHTML = leadRows(filtered, canEditLeads()); }
+    else { const main = document.getElementById("leadMain"); if (main) main.innerHTML = leadMainHtml(filtered, rows0, canEditLeads()); }
     const cnt = document.getElementById("leadCount"); if (cnt) cnt.textContent = filtered.length + " of " + rows0.length + (leadViewArchived ? " archived" : " leads");
     // Keep the Stuck / Follow-ups button counts in step with the active filters.
     const sb = document.getElementById("leadStuck"); if (sb) sb.innerHTML = `⚠ Stuck (${leadRowsExcept(rows0, "stuck").filter(leadIsStuck).length})`;
