@@ -10605,7 +10605,7 @@
   //   money   = toBuy × landing
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
-  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, ordered: {}, orderedOn: {}, damaged: {}, cat: "All", status: "all", q: "", lineData: {} };
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, ordered: {}, orderedOn: {}, damaged: {}, hold: {}, cat: "All", status: "all", q: "", lineData: {} };
   // Set true once this session edits inventory. Sticky — so a save from another
   // area (e.g. weekly duties) doesn't overwrite the inventory with this session's
   // stale copy, and vice-versa (single shared edits doc).
@@ -10643,17 +10643,18 @@
   // Keep index-keyed stock/received/issued aligned to item names across a list change.
   function remapEsthStateByName(mutate) {
     const byName = {};
-    (D.esthemaxOrder.items || []).forEach((it, i) => { byName[it.name] = { stock: orderState.stock[i], ordered: orderState.ordered[i], orderedOn: orderState.orderedOn[i], damaged: orderState.damaged[i] }; });
+    (D.esthemaxOrder.items || []).forEach((it, i) => { byName[it.name] = { stock: orderState.stock[i], ordered: orderState.ordered[i], orderedOn: orderState.orderedOn[i], damaged: orderState.damaged[i], hold: orderState.hold[i] }; });
     mutate();
-    const ns = {}, no = {}, nod = {}, nd = {};
+    const ns = {}, no = {}, nod = {}, nd = {}, nh = {};
     (D.esthemaxOrder.items || []).forEach((it, i) => {
       const s = byName[it.name]; if (!s) return;
       if (s.stock != null) ns[i] = s.stock;
       if (s.ordered != null && s.ordered !== "") no[i] = s.ordered;
       if (s.orderedOn) nod[i] = s.orderedOn;
       if (s.damaged != null && s.damaged !== "") nd[i] = s.damaged;
+      if (s.hold) nh[i] = s.hold;
     });
-    orderState.stock = ns; orderState.ordered = no; orderState.orderedOn = nod; orderState.damaged = nd;
+    orderState.stock = ns; orderState.ordered = no; orderState.orderedOn = nod; orderState.damaged = nd; orderState.hold = nh;
   }
   // Base item-name list for a simple line (Celluma / Devices).
   function invSimpleBase(lineId) {
@@ -10788,8 +10789,12 @@
       const toBuy = lot > 1 ? Math.round(need / lot) * lot : need;
       const landing = it.unitUSD * usd * (1 + cus) + it.transport;
       const money = toBuy * landing;
-      const canSell = eff >= it.requiredStock; // enough usable stock to sell
-      return { it, i, current, damaged, ordered, eff, need, lot, toBuy, landing, money, canSell };
+      const autoSell = eff >= it.requiredStock; // enough usable stock to sell (automatic)
+      // Status is set MANUALLY by the admin (hold = "sale" | "hold"); when it has
+      // not been set it falls back to the automatic stock calculation.
+      const manual = orderState.hold[i] || "";
+      const canSell = manual === "sale" ? true : (manual === "hold" ? false : autoSell);
+      return { it, i, current, damaged, ordered, eff, need, lot, toBuy, landing, money, canSell, autoSell, manual };
     });
   }
 
@@ -10882,7 +10887,7 @@
       if (reset) reset.onclick = () => {
         const p = D.esthemaxOrder.params;
         orderState.usdInr = p.usdInr; orderState.customs = p.customsRate;
-        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.ordered = {}; orderState.orderedOn = {}; orderState.damaged = {};
+        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.ordered = {}; orderState.orderedOn = {}; orderState.damaged = {}; orderState.hold = {};
         invDirty = true; saveEdits(); renderTab("order");
       };
       const addBtn = document.getElementById("ordAddBtn");
@@ -10922,7 +10927,7 @@
     return `
       <div class="section-head">
         <h1>Inventory — Esthemax</h1>
-        <p><b>Ordered</b> + <b>Ordered date</b> are filled by Ayush when an order is placed. When it arrives, Viisvesh checks it and adds the received units to <b>Current</b>. <b>Damaged</b> units are removed from usable stock, so sellable = Current − Damaged. Items with usable stock at/above <b>Required</b> are <b>Saleable</b>; others <b>On hold</b>. ${isAdmin() ? "Edit inline, or <b>⬇ Download Excel</b>, fill it, and <b>⬆ Upload Excel</b> back — matched by item name." : "Read-only view."}</p>
+        <p><b>Ordered</b> + <b>Ordered date</b>, received stock in <b>Current</b>, and <b>Damaged</b> are all filled by Ayush. The <b>Status</b> (Saleable / On hold) is now set <b>manually</b> — pick it per item in the Status column. (Leave it on <b>Auto</b> to follow the stock calc: usable = Current − Damaged vs Required.) The <b>6-mo avg</b> is shown for reference. ${isAdmin() ? "Edit inline, or <b>⬇ Download Excel</b>, fill it, and <b>⬆ Upload Excel</b> back — matched by item name." : "Read-only view."}</p>
       </div>
       ${lineSelector}
 
@@ -10964,7 +10969,7 @@
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      ${isAdmin() ? `<div class="muted-note"><b>Ordered</b> / <b>Ordered date</b> = qty ordered & when (Ayush). <b>Current</b> = stock in hand — Viisvesh adds received units here after checking. <b>Damaged</b> is removed from usable stock. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Prefer Excel? <b>⬇ Download Excel</b>, fill it, <b>⬆ Upload Excel</b> back.</div>` : ""}`;
+      ${isAdmin() ? `<div class="muted-note"><b>Ordered</b> / <b>Ordered date</b> = qty ordered & when. <b>Current</b> = stock in hand (add received units here after checking). <b>Damaged</b> is removed from usable stock. <b>Status</b> is set manually (Saleable / On hold), or Auto to follow the stock calc. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Prefer Excel? <b>⬇ Download Excel</b>, fill it, <b>⬆ Upload Excel</b> back.</div>` : ""}`;
   }
 
   function orderPaint() {
@@ -11010,10 +11015,16 @@
         </tr>`;
       }
       const catCls = { JAR: "b-accent", RETAIL: "b-teal", Accessory: "b-neutral", SAMPLE: "b-warn" }[r.it.category] || "b-neutral";
+      // Status is set manually (admin). "Auto" falls back to the stock calc.
+      const holdSel = `<select class="hold-input hold-${r.canSell ? "sale" : "hold"}" data-idx="${r.i}" title="Set this item Saleable or On hold manually">
+          <option value=""${r.manual === "" ? " selected" : ""}>Auto · ${r.autoSell ? "Saleable" : "On hold"}</option>
+          <option value="sale"${r.manual === "sale" ? " selected" : ""}>✅ Saleable</option>
+          <option value="hold"${r.manual === "hold" ? " selected" : ""}>⏸ On hold</option>
+        </select>`;
       return `<tr>
         <td class="t-name">${esc(r.it.name)}</td>
         <td><span class="badge ${catCls}">${esc(r.it.category)}</span></td>
-        <td>${status}</td>
+        <td>${holdSel}</td>
         <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
         <td class="num"><input class="ordered-input" type="number" min="0" data-idx="${r.i}" value="${esc(ordV ?? "")}" style="max-width:64px" placeholder="qty"></td>
@@ -11118,6 +11129,16 @@
         invDirty = true; saveEdits(`Stock · ${(it && it.name) || "item"} → ${orderState.stock[idx]}`);
       };
     });
+    // Status — set Saleable / On hold manually ("" = Auto / follow stock).
+    document.querySelectorAll(".hold-input").forEach((sel) => {
+      sel.onchange = (e) => {
+        const idx = +e.target.dataset.idx, v = e.target.value;
+        if (v) orderState.hold[idx] = v; else delete orderState.hold[idx];
+        orderPaint();
+        const it = D.esthemaxOrder.items[idx];
+        invDirty = true; saveEdits(`Status · ${(it && it.name) || "item"} → ${v === "sale" ? "Saleable" : v === "hold" ? "On hold" : "Auto"}`);
+      };
+    });
     // Ordered — qty ordered from the supplier (Ayush).
     document.querySelectorAll(".ordered-input").forEach((inp) => {
       inp.onchange = (e) => {
@@ -11197,6 +11218,9 @@
         if (dmgV != null) orderState.damaged[i] = dmgV;
         if (cur != null) orderState.stock[i] = cur;
         if (/^\d{4}-\d{2}-\d{2}/.test(ordOn)) orderState.orderedOn[i] = ordOn;
+        // Status column sets the manual hold flag (blank/"auto" clears it).
+        const st = String(g(o, "status") || "").toLowerCase();
+        if (st) { if (/hold/.test(st)) orderState.hold[i] = "hold"; else if (/sale|saleable|sellable/.test(st)) orderState.hold[i] = "sale"; else if (/auto/.test(st)) delete orderState.hold[i]; }
         updated++;
       });
       saveEdits("Imported Esthemax stock sheet");
@@ -11633,12 +11657,13 @@
       });
       if (e.esthOverrides && typeof e.esthOverrides === "object") Object.keys(e.esthOverrides).forEach((k) => { esthOverrides[k] = e.esthOverrides[k]; });
       rebuildEsthItems();
-      if (e.stock || e.ordered || e.orderedOn || e.damaged) {
+      if (e.stock || e.ordered || e.orderedOn || e.damaged || e.hold) {
         D.esthemaxOrder.items.forEach((it, i) => {
           if (e.stock && e.stock[it.name] != null) orderState.stock[i] = e.stock[it.name];
           if (e.ordered && e.ordered[it.name] != null) orderState.ordered[i] = e.ordered[it.name];
           if (e.orderedOn && e.orderedOn[it.name] != null) orderState.orderedOn[i] = e.orderedOn[it.name];
           if (e.damaged && e.damaged[it.name] != null) orderState.damaged[i] = e.damaged[it.name];
+          if (e.hold && e.hold[it.name] != null) orderState.hold[i] = e.hold[it.name];
         });
       }
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
@@ -11970,12 +11995,13 @@
     saveTimer = setTimeout(async () => {
       saveTimer = null; // the pending save is now running — clear it so live-sync isn't blocked
       saveInFlight = true; // but block a remote loadEdits from wiping local state mid-save
-      const stock = {}, ordered = {}, orderedOn = {}, damaged = {};
+      const stock = {}, ordered = {}, orderedOn = {}, damaged = {}, hold = {};
       D.esthemaxOrder.items.forEach((it, i) => {
         if (orderState.stock[i] != null) stock[it.name] = orderState.stock[i];
         if (orderState.ordered[i] != null && orderState.ordered[i] !== "") ordered[it.name] = orderState.ordered[i];
         if (orderState.orderedOn[i]) orderedOn[it.name] = orderState.orderedOn[i];
         if (orderState.damaged[i] != null && orderState.damaged[i] !== "") damaged[it.name] = orderState.damaged[i];
+        if (orderState.hold[i]) hold[it.name] = orderState.hold[i];
       });
       const by = (sessionUser && sessionUser.email) || "";
       const at = Date.now();
@@ -12019,13 +12045,14 @@
       // Inventory: if this session never edited inventory, write back the
       // SERVER's copy so a save from another area doesn't clobber it with our
       // stale snapshot (mirrors the weekly-duties protection).
-      let wStock = stock, wOrdered = ordered, wOrderedOn = orderedOn, wDamaged = damaged;
+      let wStock = stock, wOrdered = ordered, wOrderedOn = orderedOn, wDamaged = damaged, wHold = hold;
       let wInvLines = orderState.lineData, wInvAdds = invAdds, wInvRemovals = invRemovals;
       if (serverData && !invDirty) {
         if (serverData.stock) wStock = serverData.stock;
         if (serverData.ordered) wOrdered = serverData.ordered;
         if (serverData.orderedOn) wOrderedOn = serverData.orderedOn;
         if (serverData.damaged) wDamaged = serverData.damaged;
+        if (serverData.hold) wHold = serverData.hold;
         if (serverData.invLines) wInvLines = serverData.invLines;
         if (serverData.invAdds) wInvAdds = serverData.invAdds;
         if (serverData.invRemovals) wInvRemovals = serverData.invRemovals;
@@ -12169,7 +12196,7 @@
         // (possibly stale) snapshot. This is the real fix for "leads / payments /
         // registration deleting automatically".
         const payload = { seedVersion, hqTargetSeedVersion, weeklyDeptVersion, updatedBy: by, updatedAt: at, log: mergedLog, ...P };
-        if (invDirty) Object.assign(payload, { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
+        if (invDirty) Object.assign(payload, { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, hold: wHold, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
         if (payDirty) Object.assign(payload, { paymentAdds: wPaymentAdds, paySnapshots: wPaySnapshots, payTrack: wPayTrack, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase });
         if (brochureDirty) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
         if (regDirty) Object.assign(payload, { regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved });

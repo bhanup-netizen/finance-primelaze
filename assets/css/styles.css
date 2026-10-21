@@ -152,6 +152,11 @@ a { color: var(--accent); text-decoration: none; }
 .inv-table input[type="number"] { max-width: 60px; }
 .inv-table input[type="date"] { max-width: 138px; font-size: 12px; padding: 3px 6px; }
 .inv-table .ghost-btn { padding: 4px 8px; font-size: 12px; }
+/* Manual Saleable / On hold status selector. */
+.inv-table .hold-input { font-size: 12px; font-weight: 700; padding: 4px 6px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--card); color: var(--fg); cursor: pointer; max-width: 150px; }
+.inv-table .hold-input.hold-sale { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+.inv-table .hold-input.hold-hold { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
 /* Outstanding Payment report — compact columns to reduce horizontal scroll. */
 .pay-report { font-size: 11.5px; }
 .pay-report th, .pay-report td { padding: 3px 6px; vertical-align: top; line-height: 1.25; }
