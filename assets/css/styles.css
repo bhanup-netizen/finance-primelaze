@@ -1316,6 +1316,20 @@ tr.ind-done .ind-check span { color: var(--good); }
 .lead-table th:nth-child(7), .lead-table td:nth-child(7) { width: 8%; }   /* Stage */
 .lead-table th:nth-child(8), .lead-table td:nth-child(8) { width: 10%; }  /* Updated */
 .lead-table th:nth-child(9), .lead-table td:nth-child(9) { width: 26%; }  /* Lead journey */
+/* Admin view has an extra leading checkbox column (bulk-select), so every
+   data column shifts right by one. Restate the fixed widths offset by one —
+   these are more specific than the rules above, so they win for admins while
+   the view-only (9-column) layout keeps the rules above. */
+.lead-table.has-sel th:nth-child(1), .lead-table.has-sel td:nth-child(1) { width: 34px; } /* ☑ select */
+.lead-table.has-sel th:nth-child(2), .lead-table.has-sel td:nth-child(2) { width: 13%; }  /* Lead */
+.lead-table.has-sel th:nth-child(3), .lead-table.has-sel td:nth-child(3) { width: 8%; }   /* Mobile */
+.lead-table.has-sel th:nth-child(4), .lead-table.has-sel td:nth-child(4) { width: 10%; }  /* Location */
+.lead-table.has-sel th:nth-child(5), .lead-table.has-sel td:nth-child(5) { width: 8%; }   /* Source */
+.lead-table.has-sel th:nth-child(6), .lead-table.has-sel td:nth-child(6) { width: 7%; }   /* Product */
+.lead-table.has-sel th:nth-child(7), .lead-table.has-sel td:nth-child(7) { width: 10%; }  /* Owner */
+.lead-table.has-sel th:nth-child(8), .lead-table.has-sel td:nth-child(8) { width: 8%; }   /* Stage */
+.lead-table.has-sel th:nth-child(9), .lead-table.has-sel td:nth-child(9) { width: 10%; }  /* Updated */
+.lead-table.has-sel th:nth-child(10), .lead-table.has-sel td:nth-child(10) { width: 26%; } /* Lead journey */
 .lead-updated { font-size: 11px; color: var(--text-2); }
 .lead-name { font-weight: 700; }
 .lead-table .t-muted { font-size: 11px; }
@@ -1335,6 +1349,8 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 
 /* Row states */
 .lead-table tr.lead-overdue td:nth-child(9) { color: var(--lst-lost); font-weight: 700; }
+.lead-table.has-sel tr.lead-overdue td:nth-child(9) { color: inherit; font-weight: inherit; }
+.lead-table.has-sel tr.lead-overdue td:nth-child(10) { color: var(--lst-lost); font-weight: 700; }
 .lead-table tr.lead-won { background: color-mix(in srgb, var(--lst-sold) 8%, transparent); }
 
 /* Mini action buttons */

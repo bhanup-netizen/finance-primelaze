@@ -6442,7 +6442,7 @@
   function leadMainHtml(filtered, rows0, admin) {
     if (leadView === "board") return leadBoardHtml(filtered, admin);
     if (leadView === "analytics") return leadAnalyticsHtml(filtered);
-    return `<div class="table-wrap"><table class="lead-table">
+    return `<div class="table-wrap"><table class="lead-table${admin ? " has-sel" : ""}">
         <thead><tr>
           ${admin ? `<th class="lead-selcell"><input type="checkbox" id="leadSelAll" title="Select all shown"></th>` : ""}
           <th>Lead</th><th>Mobile</th><th>Location</th><th>Source</th><th>Product</th>
