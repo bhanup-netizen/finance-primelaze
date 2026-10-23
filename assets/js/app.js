@@ -133,6 +133,7 @@
     { id: "prices", label: "Pricing", group: "Finance", render: renderPricing },
     { id: "companyprice", label: "🧮 Price Calculator", group: "Finance", render: renderCompanyPrice },
     { id: "quotation", label: "🧾 Quotation", group: "Finance", render: renderQuotation },
+    { id: "mou", label: "📝 MoU", group: "Finance", render: renderMoU },
     { id: "expense", label: "Expense", group: "Finance", render: renderExpense },
     { id: "mis", label: "📊 MIS", group: "Finance", render: renderMIS },
     { id: "weeklyFin", label: "Duties", group: "Finance", render: () => renderWeekly("Finance") },
@@ -10329,6 +10330,275 @@
     let area = document.getElementById("printArea");
     if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
     area.innerHTML = buildQuotationPrint(q);
+    document.body.classList.add("printing");
+    const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(() => window.print(), 40);
+  }
+
+  /* ================= MoU — Sales & Service Agreement maker =================
+     Create the Memorandum of Understanding (sales & service agreement) for a
+     device sale, fill the buyer / product / price / payment schedule, and
+     download a ready-to-sign PDF. Each MoU is one document in the Firestore
+     "mous" collection (persists & syncs for everyone), mirroring the quotation
+     maker. Everyone signed-in can create & download; you can edit/delete the
+     ones you created (admins can edit any). */
+  function mouStore() { return db ? db.collection("mous") : null; }
+  let localMous = [];       // in-memory fallback when Firebase isn't available
+  let mouListCache = [];    // last loaded list (for the next-number suggestion)
+  const MOU_SIGNATORY = { name: "Dhinesh Ramalingam", role: "Director", company: "Primelaze Private Limited" };
+  const rupM = (n) => n == null || n === "" || isNaN(+n) ? "—" : "₹" + Math.round(+n).toLocaleString("en-IN");
+  // MoU number format matches the signed PDFs: FY prefix (e.g. 202627) + 3 digits.
+  function mouPrefix() { const y = (typeof hqYears === "function" ? hqYears()[0] : 2026) || 2026; return "" + y + String((y + 1) % 100).padStart(2, "0"); }
+  function mouNextNo() {
+    const pre = mouPrefix();
+    let max = 0;
+    mouListCache.forEach((m) => { const s = String(m.no || ""); if (s.indexOf(pre) === 0) { const n = parseInt(s.slice(pre.length).replace(/\D/g, ""), 10); if (!isNaN(n) && n > max) max = n; } });
+    return pre + String(max + 1).padStart(3, "0");
+  }
+  function canEditMou(m) { return roleIsAdmin() || isSuperAdmin() || (m && m.createdBy && sessionUser && m.createdBy === sessionUser.email); }
+
+  // The numbered clauses, with the buyer's product / warranty / price / delivery
+  // filled in. The last two are the mandatory Delayed-Payment and Warranty-
+  // Conditions clauses. "__PAYMENT__" is replaced by the payment-schedule table.
+  function mouClauseList(m) {
+    const prod = (m.product || "the machine").trim();
+    const warr = (m.warrantyYears || "1").toString().trim();
+    const amc = m.amcYears ? ` Additionally, ${esc(m.amcYears)} years of AMC is included.` : "";
+    const weeks = (m.deliveryWeeks || "four to six").trim();
+    const price = (m.price != null && m.price !== "") ? ("Rs. " + Math.round(+m.price).toLocaleString("en-IN") + "/-") : "Rs. __________";
+    const words = m.priceWords ? ` (${m.priceWords})` : "";
+    const gst = (m.gstPct != null && m.gstPct !== "") ? (m.gstPct + "%") : "5%";
+    return [
+      { t: "SERVICES TO BE RENDERED", b: `The service provider will provide ${warr} Year Warranty on ${prod} from the date of installation. During the Warranty period of ${warr} year, no additional cost will be paid for any service / repair / replacement.${amc}` },
+      { b: `In case of any malfunction with the machine, the company shall provide service in the form of technical visits within 24 to 72 hours.` },
+      { b: `In case no repair is possible even within 72 hours, the company will provide a replacement machine within 48–72 hours, subject to delivery time and stock availability.` },
+      { b: `There will be delivery of the device within ${weeks} weeks of booking.` },
+      { b: `No additional cost for any part at the time of machine handover, without which the machine cannot be used to full capacity.` },
+      { t: "TRAINING", b: `Company will provide proper training on ${prod} from our Application specialist for the doctor as well as the therapist, and if required will collaborate with other users to provide advanced training. Parties shall work together cooperatively.` },
+      { t: "PRICING", b: `The final price of the machine ${prod} is ${price}${words} + ${gst} GST at the clinic doorstep.` },
+      { t: "PAYMENT TERMS", b: "__PAYMENT__" },
+      { t: "Marketing Support", b: `Standard device standees + patient leaflets will be given along with the machine at the time of delivery or sent via courier later, subject to availability. A device-installation celebration activity will also be conducted at the clinic.` },
+      { t: "Environmental Conditions", b: `All PRIMELAZE equipment is tropicalized for trouble-free operation. However, to derive the maximum out of your equipment we recommend that the equipment site be air-conditioned and, additionally, that proper earthing as per our specifications is provided through a qualified electrician.` },
+      { b: `It is not the intent of this MOU to restrict the Parties to this Agreement from their involvement or participation with any other public or private individuals, agencies, or organizations.` },
+      { t: "Governing Law and Jurisdiction", b: `The Parties agree that this Agreement shall be governed by the State and/or Country in which both Parties do business. In the event that the Parties do business in different States and/or Countries, this Agreement shall be governed by Pondicherry, India law.` },
+      { t: "Delayed Payment", b: `If the buyer fails to make payment within the agreed timeline specified in the MoU, additional interest will be charged on the outstanding amount at the rate mutually agreed upon by both parties.` },
+      { t: "Warranty Conditions", b: `If any payment remains outstanding for more than three months beyond the agreed due date, the company reserves the right to suspend warranty coverage until the outstanding payment is settled, subject to the terms of the agreement and applicable law.` },
+    ];
+  }
+
+  function renderMoU() {
+    setTimeout(initMouUI, 0);
+    return `
+      <div class="section-head">
+        <h1>📝 MoU Maker — Sales &amp; Service Agreement</h1>
+        <p>Create the device sale MoU (buyer, product, price, warranty &amp; payment schedule) and download a ready-to-sign PDF — including the standard terms plus the Delayed-Payment and Warranty-Conditions clauses. Everyone can create &amp; download; you can edit or delete the MoUs you created (admins can edit any).</p>
+      </div>
+      <div class="controls"><button id="newMouBtn" class="dl-btn" type="button">＋ New MoU</button></div>
+      <div id="mouForm"></div>
+      <div id="mouList"><div class="empty">Loading…</div></div>`;
+  }
+
+  function mouPayRow(p, i) {
+    p = p || {};
+    return `<div class="q-item mou-pay" data-i="${i}">
+      <input class="mp-amt" type="number" min="0" step="any" placeholder="Amount ₹" value="${esc(p.amount ?? "")}" style="max-width:130px">
+      <input class="mp-desc" placeholder="Description (e.g. On booking / At delivery)" value="${esc(p.desc || "")}">
+      <input class="mp-mode" placeholder="Mode" value="${esc(p.mode || "")}" style="max-width:110px">
+      <input class="mp-date" type="text" placeholder="Date (e.g. Nov 1st week)" value="${esc(p.date || "")}" style="max-width:150px">
+      <button type="button" class="ghost-btn mp-del" title="Remove">✕</button>
+    </div>`;
+  }
+
+  function mouFormHtml(m) {
+    m = m || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const pays = (m.payments && m.payments.length ? m.payments : [{ amount: "", desc: "", mode: "", date: "" }]);
+    const payRows = pays.map((p, i) => mouPayRow(p, i)).join("");
+    return `
+      <div class="card" style="margin-bottom:20px">
+        <h2 style="margin-top:0">${m.id ? "Edit" : "New"} MoU</h2>
+        <form id="mForm" class="admin-form">
+          <div class="ch-grid">
+            <label class="ord-field"><span>MoU No.</span><input id="mNo" value="${esc(m.no || mouNextNo())}"></label>
+            <label class="ord-field"><span>Date</span><input id="mDate" type="date" value="${esc(m.date || today)}"></label>
+            <label class="ord-field"><span>Product / machine</span><input id="mProduct" value="${esc(m.product || "")}" placeholder="e.g. Celluma Nova"></label>
+            <label class="ord-field"><span>Complimentary (optional)</span><input id="mComp" value="${esc(m.complimentary || "")}" placeholder="e.g. suitcase & trolley"></label>
+          </div>
+          <div class="ch-grid">
+            <label class="ord-field"><span>Buyer name</span><input id="mBuyer" value="${esc(m.buyerName || "")}" placeholder="Dr. Name"></label>
+            <label class="ord-field"><span>Buyer city / state</span><input id="mBuyerLoc" value="${esc(m.buyerLoc || "")}" placeholder="City, State"></label>
+            <label class="ord-field" style="grid-column:1/-1"><span>Buyer full address</span><textarea id="mBuyerAddr" rows="2" placeholder="Full address for the agreement">${esc(m.buyerAddr || "")}</textarea></label>
+          </div>
+          <div class="ch-grid">
+            <label class="ord-field"><span>Warranty (years)</span><input id="mWarr" value="${esc(m.warrantyYears || "1")}" placeholder="1"></label>
+            <label class="ord-field"><span>AMC (years, optional)</span><input id="mAmc" value="${esc(m.amcYears || "")}" placeholder="e.g. 3"></label>
+            <label class="ord-field"><span>Delivery (weeks, words)</span><input id="mWeeks" value="${esc(m.deliveryWeeks || "four to six")}" placeholder="four to six"></label>
+          </div>
+          <div class="ch-grid">
+            <label class="ord-field"><span>Price ₹ (before GST or as agreed)</span><input id="mPrice" type="number" min="0" step="any" value="${esc(m.price ?? "")}" placeholder="275000"></label>
+            <label class="ord-field"><span>GST %</span><input id="mGst" type="number" min="0" step="any" value="${esc(m.gstPct != null ? m.gstPct : 5)}"></label>
+            <label class="ord-field"><span>Price in words (optional)</span><input id="mWords" value="${esc(m.priceWords || "")}" placeholder="Two Lakh Seventy-Five Thousand"></label>
+          </div>
+          <div class="perm-group">
+            <div class="perm-title">Payment schedule <button type="button" class="linkish" id="mAddPay">+ add row</button></div>
+            <div class="q-head mou-pay-head"><span>Amount ₹</span><span>Description</span><span>Mode</span><span>Date</span><span></span></div>
+            <div id="mPays">${payRows}</div>
+          </div>
+          <label class="ord-field"><span>Extra terms / notes (optional — added after clause 14)</span><textarea id="mExtra" rows="2">${esc(m.extraTerms || "")}</textarea></label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button type="submit" class="dl-btn">${m.id ? "Save changes" : "Create MoU"}</button>
+            <button type="button" class="ghost-btn" id="mCancel">Cancel</button>
+          </div>
+          <div id="mMsg" class="lock-error" style="min-height:16px"></div>
+        </form>
+      </div>`;
+  }
+
+  function readMouForm() {
+    const payments = Array.from(document.querySelectorAll("#mPays .mou-pay")).map((r) => ({
+      amount: r.querySelector(".mp-amt").value.trim(),
+      desc: r.querySelector(".mp-desc").value.trim(),
+      mode: r.querySelector(".mp-mode").value.trim(),
+      date: r.querySelector(".mp-date").value.trim(),
+    })).filter((p) => p.amount || p.desc || p.date);
+    return {
+      no: $("#mNo").value.trim(), date: $("#mDate").value,
+      product: $("#mProduct").value.trim(), complimentary: $("#mComp").value.trim(),
+      buyerName: $("#mBuyer").value.trim(), buyerLoc: $("#mBuyerLoc").value.trim(), buyerAddr: $("#mBuyerAddr").value.trim(),
+      warrantyYears: $("#mWarr").value.trim(), amcYears: $("#mAmc").value.trim(), deliveryWeeks: $("#mWeeks").value.trim(),
+      price: $("#mPrice").value.trim(), gstPct: $("#mGst").value.trim() === "" ? 5 : parseFloat($("#mGst").value), priceWords: $("#mWords").value.trim(),
+      payments, extraTerms: $("#mExtra").value,
+    };
+  }
+
+  function openMouForm(existing) {
+    $("#mouForm").innerHTML = mouFormHtml(existing);
+    const wirePay = () => { document.querySelectorAll(".mp-del").forEach((b) => b.onclick = () => b.closest(".mou-pay").remove()); };
+    wirePay();
+    $("#mAddPay").onclick = () => { const box = $("#mPays"); box.insertAdjacentHTML("beforeend", mouPayRow({}, box.children.length)); wirePay(); };
+    $("#mCancel").onclick = () => { $("#mouForm").innerHTML = ""; };
+    $("#mForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = $("#mMsg"); msg.style.color = ""; msg.textContent = "";
+      const data = readMouForm();
+      if (!data.no || !data.buyerName || !data.product) { msg.style.color = "var(--bad)"; msg.textContent = "MoU No., Buyer name and Product are required."; return; }
+      data.createdBy = (sessionUser && sessionUser.email) || "";
+      try {
+        const store = mouStore();
+        if (store) {
+          if (existing && existing.id) await store.doc(existing.id).set(data, { merge: true });
+          else { data.createdAt = Date.now(); await store.add(data); }
+        } else {
+          if (existing && existing.id) { const idx = localMous.findIndex((x) => x.id === existing.id); if (idx >= 0) localMous[idx] = { ...data, id: existing.id }; }
+          else localMous.unshift({ ...data, id: "local-" + localMous.length, createdAt: Date.now() });
+        }
+        $("#mouForm").innerHTML = "";
+        loadMous();
+      } catch (err) { msg.style.color = "var(--bad)"; msg.textContent = "Save failed: " + (err.message || err); }
+    };
+  }
+
+  function initMouUI() {
+    const nb = document.getElementById("newMouBtn");
+    if (nb) nb.onclick = () => openMouForm(null);
+    loadMous();
+  }
+
+  async function loadMous() {
+    const box = document.getElementById("mouList");
+    if (!box) return;
+    let list = [];
+    try {
+      const store = mouStore();
+      if (store) { const snap = await store.orderBy("createdAt", "desc").get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
+      else list = localMous.slice();
+    } catch (e) {
+      try { const snap = await mouStore().get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
+      catch (e2) { box.innerHTML = `<div class="empty">Could not load MoUs (${esc(e2.message || "" + e2)}).</div>`; return; }
+    }
+    mouListCache = list.slice();
+    if (!list.length) { box.innerHTML = `<div class="empty">No MoUs yet. Click “New MoU” to create one.</div>`; return; }
+    const rows = list.map((m) => {
+      const mine = canEditMou(m);
+      const admin = mine ? `<button class="ghost-btn m-edit" data-id="${esc(m.id)}">Edit</button> <button class="ghost-btn m-rm" data-id="${esc(m.id)}">Delete</button>` : "";
+      return `<tr>
+        <td class="t-name">${esc(m.no || "—")}</td>
+        <td>${esc(m.date || "—")}</td>
+        <td>${esc(m.buyerName || "—")}${m.buyerLoc ? `<div class="cell-sub">${esc(m.buyerLoc)}</div>` : ""}</td>
+        <td>${esc(m.product || "—")}</td>
+        <td class="num">${m.price ? rupM(m.price) : "—"}</td>
+        <td><button class="ghost-btn m-pdf" data-id="${esc(m.id)}">⤓ PDF</button> ${admin}</td>
+      </tr>`;
+    }).join("");
+    box.innerHTML = `<div class="block"><h2>Saved MoUs</h2>${table(["MoU No.", "Date", "Buyer", "Product", "Price", ""].map((h) => `<th>${h}</th>`).join(""), rows)}</div>`;
+    const byId = (id) => list.find((x) => x.id === id);
+    box.querySelectorAll(".m-pdf").forEach((b) => b.onclick = () => downloadMouPdf(byId(b.dataset.id)));
+    box.querySelectorAll(".m-edit").forEach((b) => b.onclick = () => openMouForm(byId(b.dataset.id)));
+    box.querySelectorAll(".m-rm").forEach((b) => b.onclick = async () => {
+      if (!window.confirm("Delete this MoU?")) return;
+      try { const store = mouStore(); if (store) await store.doc(b.dataset.id).delete(); else localMous = localMous.filter((x) => x.id !== b.dataset.id); loadMous(); }
+      catch (e) { window.alert("Delete failed: " + (e.message || e)); }
+    });
+  }
+
+  function mouDateWords(d) {
+    if (!d) return "____________";
+    const dt = new Date(d + "T00:00:00"); if (isNaN(dt)) return esc(d);
+    const day = dt.getDate(), mon = dt.toLocaleString("en-GB", { month: "long" }), yr = dt.getFullYear();
+    const suf = (day % 10 === 1 && day !== 11) ? "st" : (day % 10 === 2 && day !== 12) ? "nd" : (day % 10 === 3 && day !== 13) ? "rd" : "th";
+    return day + suf + " " + mon + " " + yr;
+  }
+
+  function buildMouPrint(m) {
+    const clauses = mouClauseList(m);
+    const payTable = `<table class="mou-ptable"><thead><tr><th class="num">Amount (INR)</th><th>Description</th><th>Mode</th><th>Date</th></tr></thead><tbody>${(m.payments || []).map((p) => `<tr><td class="num">${p.amount ? Math.round(+p.amount).toLocaleString("en-IN") : "—"}</td><td>${esc(p.desc || "")}</td><td>${esc(p.mode || "")}</td><td>${esc(p.date || "")}</td></tr>`).join("") || `<tr><td colspan="4">As mutually agreed.</td></tr>`}</tbody></table>
+      <p class="mou-note">* The company holds the right to deny service in case of non-payment of the dues within the defined time.</p>`;
+    const clauseHtml = clauses.map((c) => {
+      const body = c.b === "__PAYMENT__" ? payTable : esc(c.b);
+      return `<li>${c.t ? `<b>${esc(c.t)}.</b> ` : ""}${body}</li>`;
+    }).join("");
+    const comp = m.complimentary ? ` and will also receive ${esc(m.complimentary)} as complimentary` : "";
+    return `
+      <div class="p-section ch-print mou-print">
+        <div class="ch-letterhead">
+          <div class="ch-logo">${challanLogo()}</div>
+          <div class="ch-co">
+            <div class="ch-co-name">${esc(QUOTE_LH.name)}</div>
+            <div class="ch-co-line">${esc(QUOTE_LH.addr)}</div>
+            <div class="ch-co-line">Mobile ${esc(QUOTE_LH.phone)} &nbsp;·&nbsp; ${esc(QUOTE_LH.email)} &nbsp;·&nbsp; ${esc(QUOTE_LH.web)}</div>
+            <div class="ch-co-line">GSTIN ${esc(QUOTE_LH.gstin)} &nbsp;·&nbsp; Bank: ${esc(QUOTE_BANK.bank)}, A/c ${esc(QUOTE_BANK.acc)}, IFSC ${esc(QUOTE_BANK.ifsc)}</div>
+          </div>
+        </div>
+        <div class="ch-title">SALES AND SERVICE AGREEMENT</div>
+        <p class="mou-intro">This Memorandum of Understanding (the “MOU”) No: (${esc(m.no || "—")}) is entered on ${mouDateWords(m.date)}, by and between:</p>
+        <p class="mou-party"><b>Primelaze Private Limited</b>, with an address of 306, Bharathiar Salai, Ashok Nagar, Lawspet, Puducherry – 605008, GSTIN: ${esc(QUOTE_LH.gstin)}, and</p>
+        <p class="mou-party"><b>${esc(m.buyerName || "____________")}</b>${m.buyerAddr ? ", " + esc(m.buyerAddr) : (m.buyerLoc ? " (" + esc(m.buyerLoc) + ")" : "")}, also individually referred to as “Party”, and collectively “the Parties.”</p>
+        <p class="mou-whereas">WHEREAS, the Party ${esc(m.buyerName || "the buyer")} desires to enter into an agreement to purchase <b>${esc(m.product || "the machine")}</b> from Primelaze Private Limited${comp}.</p>
+        <p class="mou-whereas">WHEREAS, the Parties desire to memorialize certain terms and conditions of their anticipated endeavour; Objectives. The Parties agree as follows:</p>
+        <ol class="mou-clauses">${clauseHtml}</ol>
+        ${m.extraTerms ? `<div class="mou-extra"><b>Additional terms:</b><br>${esc(m.extraTerms).replace(/\n/g, "<br>")}</div>` : ""}
+        <p class="mou-close">The Parties agree to the terms and conditions set forth above as demonstrated by their signatures as follows:</p>
+        <div class="mou-signs">
+          <div class="mou-sign">
+            ${challanSign()}
+            <div class="mou-sign-name">${esc(MOU_SIGNATORY.name)}</div>
+            <div class="mou-sign-role">${esc(MOU_SIGNATORY.role)}, ${esc(MOU_SIGNATORY.company)}</div>
+          </div>
+          <div class="mou-sign">
+            <div class="mou-sign-line">&nbsp;</div>
+            <div class="mou-sign-name">${esc(m.buyerName || "____________")}</div>
+            <div class="mou-sign-role">Buyer${m.buyerLoc ? " · " + esc(m.buyerLoc) : ""}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function downloadMouPdf(m) {
+    if (!m) return;
+    let area = document.getElementById("printArea");
+    if (!area) { area = document.createElement("div"); area.id = "printArea"; document.body.appendChild(area); }
+    area.innerHTML = buildMouPrint(m);
     document.body.classList.add("printing");
     const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);

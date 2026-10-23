@@ -411,6 +411,14 @@ td[contenteditable="true"]:focus { outline: 2px solid var(--accent); outline-off
   .q-item .q-desc { grid-column: 1 / -1; }
   .q-head { display: none; }
 }
+/* MoU payment-schedule rows: Amount · Description · Mode · Date · remove */
+.q-item.mou-pay { grid-template-columns: 130px 1fr 110px 150px 36px; }
+.mou-pay-head { display: grid; grid-template-columns: 130px 1fr 110px 150px 36px; gap: 8px; font-size: 11px; color: var(--text-2); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; margin: 2px 0 6px; }
+@media (max-width: 680px) {
+  .q-item.mou-pay { grid-template-columns: 1fr 1fr 40px; }
+  .q-item.mou-pay .mp-desc { grid-column: 1 / -1; }
+  .mou-pay-head { display: none; }
+}
 .q-item input {
   padding: 8px 11px; border-radius: 9px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); font-family: inherit; font-size: 14px; width: 100%;
@@ -1136,6 +1144,23 @@ tr.ind-done .ind-check span { color: var(--good); }
   #printArea .q-bank { flex: 1 1 36%; font-size: 10.5px; border: 1px solid #ccc; border-radius: 4px; padding: 8px 10px; line-height: 1.6; height: fit-content; }
   #printArea .q-bank b, #printArea .q-terms b { color: #c0202a; }
   #printArea .q-thanks { text-align: center; font-weight: 700; color: #2a2ab0; margin-top: 14px; }
+  /* MoU (Sales & Service Agreement) print */
+  #printArea .mou-intro, #printArea .mou-party, #printArea .mou-whereas { font-size: 10.5px; margin: 6px 0; line-height: 1.5; }
+  #printArea .mou-clauses { margin: 8px 0 8px 18px; padding: 0; font-size: 10.5px; }
+  #printArea .mou-clauses li { margin: 5px 0; line-height: 1.5; break-inside: avoid; }
+  #printArea .mou-clauses b { color: #c0202a; }
+  #printArea .mou-ptable { width: 100%; margin: 5px 0; }
+  #printArea .mou-ptable th { background: #c0202a; color: #fff; }
+  #printArea .mou-note { font-size: 9.5px; color: #555; margin: 3px 0 0; }
+  #printArea .mou-extra { font-size: 10.5px; margin: 8px 0; padding: 7px 9px; border: 1px solid #ccc; border-radius: 4px; break-inside: avoid; }
+  #printArea .mou-extra b { color: #c0202a; }
+  #printArea .mou-close { font-size: 10.5px; margin: 10px 0 6px; }
+  #printArea .mou-signs { display: flex; justify-content: space-between; gap: 30px; margin-top: 26px; break-inside: avoid; }
+  #printArea .mou-sign { flex: 1; text-align: center; }
+  #printArea .mou-sign-line { border-top: 1px solid #333; margin: 30px 10px 4px; }
+  #printArea .mou-sign img { display: inline-block; margin: 2px 0; max-height: 48px; }
+  #printArea .mou-sign-name { font-weight: 700; color: #111; font-size: 11px; margin-top: 4px; border-top: 1px solid #333; padding-top: 3px; }
+  #printArea .mou-sign-role { font-size: 9.5px; color: #555; }
 }
 
 /* ============================================================

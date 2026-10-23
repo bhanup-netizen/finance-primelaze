@@ -87,6 +87,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // MoUs — sales & service agreements. Same model as quotations: any signed-in
+    // user may read/download and create/update; admins & page editors delete.
+    match /mous/{doc} {
+      allow read, create, update: if isSignedIn();
+      allow delete: if isAdmin() || isPageEditor();
+    }
+
     // MIS — Finance monthly summary documents (one per month). Any signed-in
     // user may read; only admins and page editors may write. Without this rule
     // the "New month" save is denied and nothing persists.
