@@ -53,7 +53,13 @@
   const canSeePage = (id) => {
     if (id === "passwords") return isSuperAdmin(); // account passwords: super admin only
     if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
-    if (id === "travelpolicy") return roleIsAdmin() || isSuperAdmin(); // travel policy: admin only
+    // Travel policy: hidden by default, but visible to admins AND to any user
+    // explicitly granted access to it (View or Edit) in their permissions.
+    if (id === "travelpolicy") {
+      return roleIsAdmin() || isSuperAdmin()
+        || canEditPage("travelpolicy")
+        || (Array.isArray(perms.pages) && perms.pages.includes("travelpolicy"));
+    }
     if (id === "demoflow") return canSeePage("demo"); // demo process guide: same access as Demo Machines
     // Calendar, Activity Board and Help are inner views of the "Casovil CRM" (leads) tab.
     if (id === "admin") {
@@ -9040,7 +9046,7 @@
     ["Mobile &amp; Internet", "mobile"],
   ];
   function renderTravelPolicy() {
-    if (!(roleIsAdmin() || isSuperAdmin())) return `<div class="section-head"><h1>✈ Travel Policy</h1><p>This policy is visible to admins only.</p></div>`;
+    if (!canSeePage("travelpolicy")) return `<div class="section-head"><h1>✈ Travel Policy</h1><p>You don't have access to this page. Ask the admin to grant you access to “Travel Policy”.</p></div>`;
     const head = `<th>Entitlement</th>` + TRAVEL_ROLES.map((r) => `<th class="num">${esc(r.label)}</th>`).join("");
     const body = TRAVEL_ROWS.map(([label, k]) => `<tr><td class="t-name">${label}</td>${TRAVEL_ROLES.map((r) => `<td class="num">${esc(r[k] || "—")}</td>`).join("")}</tr>`).join("");
     return `
