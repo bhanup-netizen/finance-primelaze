@@ -10989,7 +10989,11 @@
   //   money   = toBuy × landing
   // live as the user edits FX / customs / current stock / lot sizes.
   const MOQ_JAR = 25, MOQ_RETAIL = 50;
-  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stock: {}, ordered: {}, orderedOn: {}, damaged: {}, hold: {}, cat: "All", status: "all", q: "", lineData: {} };
+  // Stock & damaged are tracked per office: Pondy (py) + Zirakpur (zk). Total
+  // current = py + zk; total damaged (non-usable) = dmgPy + dmgZk; usable =
+  // total current − total damaged. Legacy single `stock`/`damaged` maps are
+  // migrated into the Pondy columns on load.
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stockPy: {}, stockZk: {}, dmgPy: {}, dmgZk: {}, ordered: {}, orderedOn: {}, hold: {}, cat: "All", status: "all", q: "", lineData: {} };
   // Set true once this session edits inventory. Sticky — so a save from another
   // area (e.g. weekly duties) doesn't overwrite the inventory with this session's
   // stale copy, and vice-versa (single shared edits doc).
@@ -11027,18 +11031,20 @@
   // Keep index-keyed stock/received/issued aligned to item names across a list change.
   function remapEsthStateByName(mutate) {
     const byName = {};
-    (D.esthemaxOrder.items || []).forEach((it, i) => { byName[it.name] = { stock: orderState.stock[i], ordered: orderState.ordered[i], orderedOn: orderState.orderedOn[i], damaged: orderState.damaged[i], hold: orderState.hold[i] }; });
+    (D.esthemaxOrder.items || []).forEach((it, i) => { byName[it.name] = { spy: orderState.stockPy[i], szk: orderState.stockZk[i], dpy: orderState.dmgPy[i], dzk: orderState.dmgZk[i], ordered: orderState.ordered[i], orderedOn: orderState.orderedOn[i], hold: orderState.hold[i] }; });
     mutate();
-    const ns = {}, no = {}, nod = {}, nd = {}, nh = {};
+    const nspy = {}, nszk = {}, ndpy = {}, ndzk = {}, no = {}, nod = {}, nh = {};
     (D.esthemaxOrder.items || []).forEach((it, i) => {
       const s = byName[it.name]; if (!s) return;
-      if (s.stock != null) ns[i] = s.stock;
+      if (s.spy != null) nspy[i] = s.spy;
+      if (s.szk != null) nszk[i] = s.szk;
+      if (s.dpy != null && s.dpy !== "") ndpy[i] = s.dpy;
+      if (s.dzk != null && s.dzk !== "") ndzk[i] = s.dzk;
       if (s.ordered != null && s.ordered !== "") no[i] = s.ordered;
       if (s.orderedOn) nod[i] = s.orderedOn;
-      if (s.damaged != null && s.damaged !== "") nd[i] = s.damaged;
       if (s.hold) nh[i] = s.hold;
     });
-    orderState.stock = ns; orderState.ordered = no; orderState.orderedOn = nod; orderState.damaged = nd; orderState.hold = nh;
+    orderState.stockPy = nspy; orderState.stockZk = nszk; orderState.dmgPy = ndpy; orderState.dmgZk = ndzk; orderState.ordered = no; orderState.orderedOn = nod; orderState.hold = nh;
   }
   // Base item-name list for a simple line (Celluma / Devices).
   function invSimpleBase(lineId) {
@@ -11163,10 +11169,14 @@
   function orderCompute() {
     const usd = orderState.usdInr, cus = orderState.customs;
     return D.esthemaxOrder.items.map((it, i) => {
-      const current = orderState.stock[i] != null ? orderState.stock[i] : it.currentStock;
-      const damaged = Number(orderState.damaged[i]) || 0;
+      const py = Number(orderState.stockPy[i]) || 0, zk = Number(orderState.stockZk[i]) || 0;
+      const hasStock = orderState.stockPy[i] != null || orderState.stockZk[i] != null;
+      const current = hasStock ? (py + zk) : it.currentStock;      // total current = Pondy + Zirakpur
+      const dpy = Number(orderState.dmgPy[i]) || 0, dzk = Number(orderState.dmgZk[i]) || 0;
+      const damaged = dpy + dzk;                                    // total non-usable (damaged)
+      const usable = Math.max(0, current - damaged);               // total usable across offices
       const ordered = orderState.ordered[i];
-      const eff = Math.max(0, current - damaged);   // sellable = current − damaged
+      const eff = usable;                                           // sellable = usable
       const need = Math.max(0, Math.round((it.requiredStock - eff) * 100) / 100);
       const lot = moqFor(it.category) || 1;
       // round-to-nearest lot: 37→25, 38→50 (jar); 51→50, 76→100 (retail)
@@ -11178,7 +11188,7 @@
       // not been set it falls back to the automatic stock calculation.
       const manual = orderState.hold[i] || "";
       const canSell = manual === "sale" ? true : (manual === "hold" ? false : autoSell);
-      return { it, i, current, damaged, ordered, eff, need, lot, toBuy, landing, money, canSell, autoSell, manual };
+      return { it, i, py, zk, current, dpy, dzk, damaged, usable, ordered, eff, need, lot, toBuy, landing, money, canSell, autoSell, manual };
     });
   }
 
@@ -11271,7 +11281,7 @@
       if (reset) reset.onclick = () => {
         const p = D.esthemaxOrder.params;
         orderState.usdInr = p.usdInr; orderState.customs = p.customsRate;
-        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stock = {}; orderState.ordered = {}; orderState.orderedOn = {}; orderState.damaged = {}; orderState.hold = {};
+        orderState.moqJar = MOQ_JAR; orderState.moqRetail = MOQ_RETAIL; orderState.stockPy = {}; orderState.stockZk = {}; orderState.dmgPy = {}; orderState.dmgZk = {}; orderState.ordered = {}; orderState.orderedOn = {}; orderState.hold = {};
         invDirty = true; saveEdits(); renderTab("order");
       };
       const addBtn = document.getElementById("ordAddBtn");
@@ -11311,7 +11321,7 @@
     return `
       <div class="section-head">
         <h1>Inventory — Esthemax</h1>
-        <p><b>Ordered</b> + <b>Ordered date</b>, received stock in <b>Current</b>, and <b>Damaged</b> are all filled by Ayush. The <b>Status</b> (Saleable / On hold) is now set <b>manually</b> — pick it per item in the Status column. (Leave it on <b>Auto</b> to follow the stock calc: usable = Current − Damaged vs Required.) The <b>6-mo avg</b> is shown for reference. ${isAdmin() ? "Edit inline, or <b>⬇ Download Excel</b>, fill it, and <b>⬆ Upload Excel</b> back — matched by item name." : "Read-only view."}</p>
+        <p><b>Ordered</b> + <b>Ordered date</b>, received stock (<b>Pondy</b> &amp; <b>Zirakpur</b> offices) and damaged units (<b>Dmg·Py</b> / <b>Dmg·Zk</b>) are filled by Ayush. <b>Total</b> = Pondy + Zirakpur; <b>Non-usable</b> = total damaged; <b>Usable</b> = Total − Non-usable. The <b>Status</b> (Saleable / On hold) is set <b>manually</b> — or leave it on <b>Auto</b> (usable ≥ Required). The <b>6-mo avg</b> is shown for reference. ${isAdmin() ? "Edit inline, or <b>⬇ Download Excel</b>, fill it, and <b>⬆ Upload Excel</b> back — matched by item name." : "Read-only view."}</p>
       </div>
       ${lineSelector}
 
@@ -11347,13 +11357,16 @@
           <thead><tr>
             ${isAdmin()
               ? `<th>Item</th><th>Category</th><th>Status</th><th class="num">6-mo avg</th>
-                 <th class="num">Required</th><th class="num" title="Qty ordered from supplier (filled by Ayush)">Ordered</th><th title="Date the order was placed">Ordered date</th><th class="num" title="Damaged units — removed from usable stock">Damaged</th><th class="num" title="Stock in hand (received into store)">Current</th><th class="num">To Buy</th><th></th>`
-              : `<th>Product</th><th class="num">Current</th><th class="num">Damaged</th><th class="num">Ordered</th><th>Status</th>`}
+                 <th class="num">Required</th><th class="num" title="Qty ordered from supplier">Ordered</th><th title="Date the order was placed">Ordered date</th>
+                 <th class="num" title="Current stock at Pondy office">Pondy</th><th class="num" title="Current stock at Zirakpur office">Zirakpur</th><th class="num" title="Total current = Pondy + Zirakpur">Total</th>
+                 <th class="num" title="Damaged units at Pondy">Dmg·Py</th><th class="num" title="Damaged units at Zirakpur">Dmg·Zk</th><th class="num" title="Total non-usable (damaged) across offices">Non-usable</th><th class="num" title="Total usable = Total current − Non-usable">Usable</th>
+                 <th class="num">To Buy</th><th></th>`
+              : `<th>Product</th><th class="num">Pondy</th><th class="num">Zirakpur</th><th class="num">Total</th><th class="num">Usable</th><th class="num">Non-usable</th><th class="num">Ordered</th><th>Status</th>`}
           </tr></thead>
           <tbody id="orderBody"></tbody>
         </table>
       </div>
-      ${isAdmin() ? `<div class="muted-note"><b>Ordered</b> / <b>Ordered date</b> = qty ordered & when. <b>Current</b> = stock in hand (add received units here after checking). <b>Damaged</b> is removed from usable stock. <b>Status</b> is set manually (Saleable / On hold), or Auto to follow the stock calc. To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Prefer Excel? <b>⬇ Download Excel</b>, fill it, <b>⬆ Upload Excel</b> back.</div>` : ""}`;
+      ${isAdmin() ? `<div class="muted-note"><b>Pondy</b> &amp; <b>Zirakpur</b> = current stock in hand at each office; <b>Total</b> adds them. <b>Dmg·Py / Dmg·Zk</b> = damaged at each office; <b>Non-usable</b> = their total; <b>Usable</b> = Total − Non-usable (this drives Saleable / To Buy). To Buy rounds the shortfall to the nearest minimum-order lot (JAR ${orderState.moqJar} / Retail ${orderState.moqRetail}); “need” shows the raw shortfall. Prefer Excel? <b>⬇ Download Excel</b>, fill it, <b>⬆ Upload Excel</b> back.</div>` : ""}`;
   }
 
   function orderPaint() {
@@ -11370,7 +11383,7 @@
     const money = filtered.reduce((s, r) => s + r.money, 0);
     const canSell = filtered.filter((r) => r.canSell).length;
     const totalOrdered = filtered.reduce((s, r) => s + (Number(orderState.ordered[r.i]) || 0), 0);
-    const totalDamaged = filtered.reduce((s, r) => s + (Number(orderState.damaged[r.i]) || 0), 0);
+    const totalDamaged = filtered.reduce((s, r) => s + (r.damaged || 0), 0);
     const admin = isAdmin();
     const kpis = [
       { cls: "k-good", label: "Saleable", value: inr(canSell), note: `of ${filtered.length} shown` },
@@ -11387,13 +11400,18 @@
       const status = r.canSell
         ? `<span class="badge b-good">Saleable</span>`
         : `<span class="badge b-warn">On hold</span>`;
-      const ordV = orderState.ordered[r.i], ordOn = orderState.orderedOn[r.i], dmgV = orderState.damaged[r.i];
+      const ordV = orderState.ordered[r.i], ordOn = orderState.orderedOn[r.i];
+      const pyV = orderState.stockPy[r.i], zkV = orderState.stockZk[r.i], dpyV = orderState.dmgPy[r.i], dzkV = orderState.dmgZk[r.i];
+      const dash = (v) => (v == null || v === "" ? "—" : esc(v));
       if (!admin) {
-        // View: Product · Current · Damaged · Ordered · Status.
+        // View: Product · Pondy · Zirakpur · Total · Usable · Non-usable · Ordered · Status.
         return `<tr>
           <td class="t-name">${esc(r.it.name)}</td>
-          <td class="num">${inr(r.current)}</td>
-          <td class="num">${dmgV == null || dmgV === "" ? "—" : esc(dmgV)}</td>
+          <td class="num">${dash(pyV)}</td>
+          <td class="num">${dash(zkV)}</td>
+          <td class="num"><b>${inr(r.current)}</b></td>
+          <td class="num">${inr(r.usable)}</td>
+          <td class="num">${r.damaged ? inr(r.damaged) : "—"}</td>
           <td class="num">${ordV == null || ordV === "" ? "—" : esc(ordV)}${ordOn ? `<div class="cell-note">${esc(fmtDate(ordOn))}</div>` : ""}</td>
           <td>${status}</td>
         </tr>`;
@@ -11405,20 +11423,26 @@
           <option value="sale"${r.manual === "sale" ? " selected" : ""}>✅ Saleable</option>
           <option value="hold"${r.manual === "hold" ? " selected" : ""}>⏸ On hold</option>
         </select>`;
+      const numIn = (cls, v) => `<input class="${cls}" type="number" min="0" data-idx="${r.i}" value="${esc(v ?? "")}" style="max-width:56px" placeholder="0">`;
       return `<tr>
         <td class="t-name">${esc(r.it.name)}</td>
         <td><span class="badge ${catCls}">${esc(r.it.category)}</span></td>
         <td>${holdSel}</td>
         <td class="num">${isNum(r.it.sixMoAvg) ? r.it.sixMoAvg.toFixed(1) : "—"}</td>
         <td class="num">${inr(r.it.requiredStock)}</td>
-        <td class="num"><input class="ordered-input" type="number" min="0" data-idx="${r.i}" value="${esc(ordV ?? "")}" style="max-width:64px" placeholder="qty"></td>
+        <td class="num"><input class="ordered-input" type="number" min="0" data-idx="${r.i}" value="${esc(ordV ?? "")}" style="max-width:56px" placeholder="qty"></td>
         <td><input class="orderedon-input" type="date" data-idx="${r.i}" value="${esc(ordOn || "")}"></td>
-        <td class="num"><input class="damaged-input" type="number" min="0" data-idx="${r.i}" value="${esc(dmgV ?? "")}" style="max-width:64px" placeholder="dmg"></td>
-        <td class="num"><input class="stock-input" type="number" data-idx="${r.i}" value="${r.current}" /></td>
+        <td class="num">${numIn("esth-py", pyV)}</td>
+        <td class="num">${numIn("esth-zk", zkV)}</td>
+        <td class="num"><b>${inr(r.current)}</b></td>
+        <td class="num">${numIn("esth-dpy", dpyV)}</td>
+        <td class="num">${numIn("esth-dzk", dzkV)}</td>
+        <td class="num">${r.damaged ? inr(r.damaged) : "0"}</td>
+        <td class="num"><b>${inr(r.usable)}</b></td>
         <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
         <td style="white-space:nowrap"><button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
       </tr>`;
-    }).join("") || `<tr><td colspan="${admin ? 11 : 5}" class="empty">No matching items.</td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? 16 : 8}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
     if (bEl) {
       bEl.innerHTML = body; orderBindStockInputs();
@@ -11430,39 +11454,54 @@
   }
 
   // Simple stock log for Devices / Celluma (no reorder maths, no money).
+  // Current stock & damaged are tracked per office (Pondy / Zirakpur), with
+  // auto Total current, Non-usable (damaged) and Usable columns — like Esthemax.
+  // Legacy single stock/damaged values are shown under Pondy.
   function simpleInvRows(items, data, q, admin) {
+    const pick = (d, nf, of) => (d[nf] != null && d[nf] !== "") ? d[nf] : (of && d[of] != null && d[of] !== "" ? d[of] : "");
     return items.filter((n) => !q || n.toLowerCase().includes(q)).map((name) => {
       const d = data[name] || {};
-      const stockCell = admin
-        ? `<input class="inv-simple stock-input" data-item="${esc(name)}" data-f="stock" type="number" min="0" value="${esc(d.stock == null ? "" : d.stock)}">`
-        : (d.stock == null || d.stock === "" ? "—" : esc(d.stock));
+      const py = pick(d, "stockPy", "stock"), zk = pick(d, "stockZk"), dpy = pick(d, "dmgPy", "damaged"), dzk = pick(d, "dmgZk");
+      const total = (Number(py) || 0) + (Number(zk) || 0);
+      const nonUse = (Number(dpy) || 0) + (Number(dzk) || 0);
+      const usable = Math.max(0, total - nonUse);
+      const numIn = (f, v) => `<input class="inv-simple" data-item="${esc(name)}" data-f="${f}" type="number" min="0" value="${esc(v === "" ? "" : v)}" style="max-width:56px" placeholder="0">`;
+      const ro = (v) => (v === "" || v == null ? "—" : esc(v));
       const statusCell = admin
-        ? `<select class="inv-simple demo-select" data-item="${esc(name)}" data-f="status" style="max-width:160px"><option value="">—</option>${INV_STATUS.map((s) => `<option${d.status === s ? " selected" : ""}>${s}</option>`).join("")}</select>`
+        ? `<select class="inv-simple demo-select" data-item="${esc(name)}" data-f="status" style="max-width:150px"><option value="">—</option>${INV_STATUS.map((s) => `<option${d.status === s ? " selected" : ""}>${s}</option>`).join("")}</select>`
         : (d.status || "—");
-      // Ordered (qty) + Ordered date + Damaged — visible to everyone.
       const ordCell = admin
-        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="ordered" type="number" min="0" value="${esc(d.ordered == null ? "" : d.ordered)}" style="max-width:64px" placeholder="qty">`
-        : (d.ordered == null || d.ordered === "" ? "—" : esc(d.ordered));
+        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="ordered" type="number" min="0" value="${esc(d.ordered == null ? "" : d.ordered)}" style="max-width:56px" placeholder="qty">`
+        : ro(d.ordered);
       const ordOnCell = admin
         ? `<input class="inv-simple" data-item="${esc(name)}" data-f="orderedOn" type="date" value="${esc(d.orderedOn || "")}">`
         : (d.orderedOn ? esc(fmtDate(d.orderedOn)) : "—");
-      const dmgCell = admin
-        ? `<input class="inv-simple" data-item="${esc(name)}" data-f="damaged" type="number" min="0" value="${esc(d.damaged == null ? "" : d.damaged)}" style="max-width:64px" placeholder="dmg">`
-        : (d.damaged == null || d.damaged === "" ? "—" : esc(d.damaged));
       const actionTd = admin ? `<td style="white-space:nowrap"><button class="ghost-btn inv-edit" data-item="${esc(name)}">Edit</button> <button class="ghost-btn danger inv-del" data-item="${esc(name)}">Delete</button></td>` : "";
-      return `<tr><td class="t-name">${esc(name)}</td><td class="num">${stockCell}</td><td class="num">${ordCell}</td><td>${ordOnCell}</td><td class="num">${dmgCell}</td><td>${statusCell}</td>${actionTd}</tr>`;
-    }).join("") || `<tr><td colspan="${6 + (admin ? 1 : 0)}" class="empty">No items.</td></tr>`;
+      if (!admin) {
+        return `<tr><td class="t-name">${esc(name)}</td><td class="num">${ro(py)}</td><td class="num">${ro(zk)}</td><td class="num"><b>${total}</b></td><td class="num">${usable}</td><td class="num">${nonUse || "—"}</td><td class="num">${ro(d.ordered)}</td><td>${statusCell}</td></tr>`;
+      }
+      return `<tr><td class="t-name">${esc(name)}</td>
+        <td class="num">${numIn("stockPy", py)}</td><td class="num">${numIn("stockZk", zk)}</td><td class="num"><b>${total}</b></td>
+        <td class="num">${numIn("dmgPy", dpy)}</td><td class="num">${numIn("dmgZk", dzk)}</td><td class="num">${nonUse || "0"}</td><td class="num"><b>${usable}</b></td>
+        <td class="num">${ordCell}</td><td>${ordOnCell}</td><td>${statusCell}</td>${actionTd}</tr>`;
+    }).join("") || `<tr><td colspan="${admin ? 12 : 8}" class="empty">No items.</td></tr>`;
   }
 
   function wireSimpleInv(lineId) {
     if (!isAdmin()) return;
     const data = orderState.lineData[lineId] = orderState.lineData[lineId] || {};
+    const NUM_FIELDS = ["stockPy", "stockZk", "dmgPy", "dmgZk", "ordered"];
     document.querySelectorAll(".inv-simple").forEach((el) => {
       el.onchange = () => {
         const rec = data[el.dataset.item] = data[el.dataset.item] || {};
-        const numF = el.dataset.f === "stock" || el.dataset.f === "ordered" || el.dataset.f === "damaged";
+        const numF = NUM_FIELDS.indexOf(el.dataset.f) >= 0;
         rec[el.dataset.f] = numF ? (el.value === "" ? "" : Math.max(0, parseFloat(el.value) || 0)) : el.value;
         invDirty = true; saveEdits(`${el.dataset.item} · ${el.dataset.f} → ${el.value || "—"}`);
+        // Re-render so the Total / Usable / Non-usable columns update live.
+        if (["stockPy", "stockZk", "dmgPy", "dmgZk"].indexOf(el.dataset.f) >= 0) {
+          const b = document.getElementById("simpleInvBody");
+          if (b) { const items = invSimpleItems(lineId); b.innerHTML = simpleInvRows(items, data, orderState.q, true); wireSimpleInv(lineId); }
+        }
       };
     });
     const addBtn = document.getElementById("invAddBtn");
@@ -11496,23 +11535,29 @@
       </div>
       <div class="controls"><input id="ordSearch" class="search" type="search" placeholder="Search ${line.id === "celluma" ? "variant" : "machine"}…" value="${esc(orderState.q)}">${admin ? `<button id="invAddBtn" class="dl-btn" type="button">＋ Add ${line.id === "celluma" ? "variant" : "device"}</button>` : ""}</div>
       <div class="table-wrap"><table class="inv-table">
-        <thead><tr><th>Item</th><th class="num">Current stock</th><th class="num">Ordered</th><th>Ordered date</th><th class="num">Damaged</th><th>Status</th>${admin ? `<th></th>` : ""}</tr></thead>
+        <thead><tr>${admin
+          ? `<th>Item</th><th class="num" title="Current stock at Pondy">Pondy</th><th class="num" title="Current stock at Zirakpur">Zirakpur</th><th class="num" title="Total current = Pondy + Zirakpur">Total</th><th class="num" title="Damaged at Pondy">Dmg·Py</th><th class="num" title="Damaged at Zirakpur">Dmg·Zk</th><th class="num" title="Total non-usable (damaged)">Non-usable</th><th class="num" title="Total usable = Total − Non-usable">Usable</th><th class="num">Ordered</th><th>Ordered date</th><th>Status</th><th></th>`
+          : `<th>Item</th><th class="num">Pondy</th><th class="num">Zirakpur</th><th class="num">Total</th><th class="num">Usable</th><th class="num">Non-usable</th><th class="num">Ordered</th><th>Status</th>`}</tr></thead>
         <tbody id="simpleInvBody">${simpleInvRows(items, data, orderState.q, admin)}</tbody>
       </table></div>
-      ${admin ? `<div class="muted-note"><b>Ordered</b> + <b>Ordered date</b> = order placed; <b>Current stock</b> = in hand; <b>Damaged</b> = removed from usable stock — for each ${line.id === "celluma" ? "Celluma variant" : "machine"}. Use <b>＋ Add</b>, or <b>Edit</b> / <b>Delete</b> per row. Saved for everyone.</div>` : ""}`;
+      ${admin ? `<div class="muted-note"><b>Pondy</b> + <b>Zirakpur</b> = current stock in hand at each office (Total adds them). <b>Dmg·Py / Dmg·Zk</b> = damaged (non-usable) at each office; <b>Usable</b> = Total − Non-usable. Use <b>＋ Add</b>, or <b>Edit</b> / <b>Delete</b> per row. Saved for everyone.</div>` : ""}`;
   }
 
   function orderBindStockInputs() {
-    document.querySelectorAll(".stock-input").forEach((inp) => {
+    // Per-office current stock (Pondy / Zirakpur) and per-office damaged.
+    const bindEsthNum = (cls, map, label) => document.querySelectorAll("." + cls).forEach((inp) => {
       inp.onchange = (e) => {
-        const idx = +e.target.dataset.idx;
-        const v = parseFloat(e.target.value);
-        orderState.stock[idx] = isNaN(v) ? 0 : v;
+        const idx = +e.target.dataset.idx, v = parseFloat(e.target.value);
+        orderState[map][idx] = e.target.value === "" ? "" : (isNaN(v) ? 0 : Math.max(0, v));
         orderPaint();
         const it = D.esthemaxOrder.items[idx];
-        invDirty = true; saveEdits(`Stock · ${(it && it.name) || "item"} → ${orderState.stock[idx]}`);
+        invDirty = true; saveEdits(`${label} · ${(it && it.name) || "item"} → ${orderState[map][idx]}`);
       };
     });
+    bindEsthNum("esth-py", "stockPy", "Pondy stock");
+    bindEsthNum("esth-zk", "stockZk", "Zirakpur stock");
+    bindEsthNum("esth-dpy", "dmgPy", "Pondy damaged");
+    bindEsthNum("esth-dzk", "dmgZk", "Zirakpur damaged");
     // Status — set Saleable / On hold manually ("" = Auto / follow stock).
     document.querySelectorAll(".hold-input").forEach((sel) => {
       sel.onchange = (e) => {
@@ -11536,18 +11581,9 @@
     document.querySelectorAll(".orderedon-input").forEach((inp) => {
       inp.onchange = (e) => { orderState.orderedOn[+e.target.dataset.idx] = e.target.value; invDirty = true; saveEdits("Updated order date"); };
     });
-    // Damaged — removed from usable stock.
-    document.querySelectorAll(".damaged-input").forEach((inp) => {
-      inp.onchange = (e) => {
-        const v = parseFloat(e.target.value);
-        orderState.damaged[+e.target.dataset.idx] = e.target.value === "" ? "" : (isNaN(v) ? "" : Math.max(0, v));
-        orderPaint();
-        invDirty = true; saveEdits("Updated damaged qty");
-      };
-    });
   }
   // ---- Esthemax stock Excel: download the sheet / upload the filled sheet ----
-  const INV_XLS_HEADERS = ["Item", "Category", "Status", "6-mo avg", "Required", "Ordered", "Ordered date", "Damaged", "Current", "To Buy"];
+  const INV_XLS_HEADERS = ["Item", "Category", "Status", "6-mo avg", "Required", "Ordered", "Ordered date", "Pondy", "Zirakpur", "Total current", "Pondy damaged", "Zirakpur damaged", "Non-usable", "Usable", "To Buy"];
   function invExportExcel() {
     const rows = orderCompute();
     const aoa = [INV_XLS_HEADERS];
@@ -11555,8 +11591,10 @@
     rows.forEach((r) => aoa.push([
       r.it.name, r.it.category, r.canSell ? "Saleable" : "On hold",
       isNum(r.it.sixMoAvg) ? +r.it.sixMoAvg.toFixed(1) : "", r.it.requiredStock,
-      val(orderState.ordered[r.i]), orderState.orderedOn[r.i] || "", val(orderState.damaged[r.i]),
-      r.current, Math.round(r.toBuy),
+      val(orderState.ordered[r.i]), orderState.orderedOn[r.i] || "",
+      val(orderState.stockPy[r.i]), val(orderState.stockZk[r.i]), r.current,
+      val(orderState.dmgPy[r.i]), val(orderState.dmgZk[r.i]), r.damaged, r.usable,
+      Math.round(r.toBuy),
     ]));
     const fname = "esthemax_stock_" + new Date().toISOString().slice(0, 10) + ".xlsx";
     if (window.XLSX) {
@@ -11595,12 +11633,19 @@
         const i = idxByName[nm];
         if (i == null) { unknown++; return; }
         const ordV = num(g(o, "ordered", "orderedqty", "onorder"));
-        const dmgV = num(g(o, "damaged", "damage"));
-        const cur = num(g(o, "current", "currentstock", "stock"));
+        const pyV = num(g(o, "pondy", "pondystock", "pondycurrent"));
+        const zkV = num(g(o, "zirakpur", "zirakpurstock", "zirakpurcurrent", "zirakpr"));
+        const dpyV = num(g(o, "pondydamaged", "damagedpondy", "dmgpondy"));
+        const dzkV = num(g(o, "zirakpurdamaged", "damagedzirakpur", "dmgzirakpur"));
+        // Back-compat: an old sheet with single "Current" / "Damaged" → Pondy.
+        const curLegacy = num(g(o, "current", "currentstock", "totalcurrent", "stock"));
+        const dmgLegacy = num(g(o, "damaged", "damage"));
         const ordOn = String(g(o, "ordereddate", "orderdate", "orderedon") || "").slice(0, 10);
         if (ordV != null) orderState.ordered[i] = ordV;
-        if (dmgV != null) orderState.damaged[i] = dmgV;
-        if (cur != null) orderState.stock[i] = cur;
+        if (pyV != null) orderState.stockPy[i] = pyV; else if (zkV == null && curLegacy != null) orderState.stockPy[i] = curLegacy;
+        if (zkV != null) orderState.stockZk[i] = zkV;
+        if (dpyV != null) orderState.dmgPy[i] = dpyV; else if (dzkV == null && dmgLegacy != null) orderState.dmgPy[i] = dmgLegacy;
+        if (dzkV != null) orderState.dmgZk[i] = dzkV;
         if (/^\d{4}-\d{2}-\d{2}/.test(ordOn)) orderState.orderedOn[i] = ordOn;
         // Status column sets the manual hold flag (blank/"auto" clears it).
         const st = String(g(o, "status") || "").toLowerCase();
@@ -12043,13 +12088,21 @@
       });
       if (e.esthOverrides && typeof e.esthOverrides === "object") Object.keys(e.esthOverrides).forEach((k) => { esthOverrides[k] = e.esthOverrides[k]; });
       rebuildEsthItems();
-      if (e.stock || e.ordered || e.orderedOn || e.damaged || e.hold) {
+      if (e.stockPy || e.stockZk || e.dmgPy || e.dmgZk || e.stock || e.ordered || e.orderedOn || e.damaged || e.hold) {
         D.esthemaxOrder.items.forEach((it, i) => {
-          if (e.stock && e.stock[it.name] != null) orderState.stock[i] = e.stock[it.name];
-          if (e.ordered && e.ordered[it.name] != null) orderState.ordered[i] = e.ordered[it.name];
-          if (e.orderedOn && e.orderedOn[it.name] != null) orderState.orderedOn[i] = e.orderedOn[it.name];
-          if (e.damaged && e.damaged[it.name] != null) orderState.damaged[i] = e.damaged[it.name];
-          if (e.hold && e.hold[it.name] != null) orderState.hold[i] = e.hold[it.name];
+          const nm = it.name;
+          // Per-office current stock. Legacy single `stock` migrates into Pondy
+          // whenever no Pondy value exists yet (independent of Zirakpur).
+          if (e.stockPy && e.stockPy[nm] != null) orderState.stockPy[i] = e.stockPy[nm];
+          else if (e.stock && e.stock[nm] != null) orderState.stockPy[i] = e.stock[nm];
+          if (e.stockZk && e.stockZk[nm] != null) orderState.stockZk[i] = e.stockZk[nm];
+          // Per-office damaged. Legacy single `damaged` migrates into Pondy.
+          if (e.dmgPy && e.dmgPy[nm] != null) orderState.dmgPy[i] = e.dmgPy[nm];
+          else if (e.damaged && e.damaged[nm] != null) orderState.dmgPy[i] = e.damaged[nm];
+          if (e.dmgZk && e.dmgZk[nm] != null) orderState.dmgZk[i] = e.dmgZk[nm];
+          if (e.ordered && e.ordered[nm] != null) orderState.ordered[i] = e.ordered[nm];
+          if (e.orderedOn && e.orderedOn[nm] != null) orderState.orderedOn[i] = e.orderedOn[nm];
+          if (e.hold && e.hold[nm] != null) orderState.hold[i] = e.hold[nm];
         });
       }
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
@@ -12413,12 +12466,14 @@
     saveTimer = setTimeout(async () => {
       saveTimer = null; // the pending save is now running — clear it so live-sync isn't blocked
       saveInFlight = true; // but block a remote loadEdits from wiping local state mid-save
-      const stock = {}, ordered = {}, orderedOn = {}, damaged = {}, hold = {};
+      const stockPy = {}, stockZk = {}, dmgPy = {}, dmgZk = {}, ordered = {}, orderedOn = {}, hold = {};
       D.esthemaxOrder.items.forEach((it, i) => {
-        if (orderState.stock[i] != null) stock[it.name] = orderState.stock[i];
+        if (orderState.stockPy[i] != null && orderState.stockPy[i] !== "") stockPy[it.name] = orderState.stockPy[i];
+        if (orderState.stockZk[i] != null && orderState.stockZk[i] !== "") stockZk[it.name] = orderState.stockZk[i];
+        if (orderState.dmgPy[i] != null && orderState.dmgPy[i] !== "") dmgPy[it.name] = orderState.dmgPy[i];
+        if (orderState.dmgZk[i] != null && orderState.dmgZk[i] !== "") dmgZk[it.name] = orderState.dmgZk[i];
         if (orderState.ordered[i] != null && orderState.ordered[i] !== "") ordered[it.name] = orderState.ordered[i];
         if (orderState.orderedOn[i]) orderedOn[it.name] = orderState.orderedOn[i];
-        if (orderState.damaged[i] != null && orderState.damaged[i] !== "") damaged[it.name] = orderState.damaged[i];
         if (orderState.hold[i]) hold[it.name] = orderState.hold[i];
       });
       const by = (sessionUser && sessionUser.email) || "";
@@ -12457,13 +12512,15 @@
       // Inventory: if this session never edited inventory, write back the
       // SERVER's copy so a save from another area doesn't clobber it with our
       // stale snapshot (mirrors the weekly-duties protection).
-      let wStock = stock, wOrdered = ordered, wOrderedOn = orderedOn, wDamaged = damaged, wHold = hold;
+      let wStockPy = stockPy, wStockZk = stockZk, wDmgPy = dmgPy, wDmgZk = dmgZk, wOrdered = ordered, wOrderedOn = orderedOn, wHold = hold;
       let wInvLines = orderState.lineData, wInvAdds = invAdds, wInvRemovals = invRemovals;
       if (serverData && !invDirty) {
-        if (serverData.stock) wStock = serverData.stock;
+        if (serverData.stockPy) wStockPy = serverData.stockPy;
+        if (serverData.stockZk) wStockZk = serverData.stockZk;
+        if (serverData.dmgPy) wDmgPy = serverData.dmgPy;
+        if (serverData.dmgZk) wDmgZk = serverData.dmgZk;
         if (serverData.ordered) wOrdered = serverData.ordered;
         if (serverData.orderedOn) wOrderedOn = serverData.orderedOn;
-        if (serverData.damaged) wDamaged = serverData.damaged;
         if (serverData.hold) wHold = serverData.hold;
         if (serverData.invLines) wInvLines = serverData.invLines;
         if (serverData.invAdds) wInvAdds = serverData.invAdds;
@@ -12564,7 +12621,7 @@
         // (possibly stale) snapshot. This is the real fix for "leads / payments /
         // registration deleting automatically".
         const payload = { seedVersion, hqTargetSeedVersion, weeklyDeptVersion, updatedBy: by, updatedAt: at, log: mergedLog, ...P };
-        if (invDirty) Object.assign(payload, { stock: wStock, ordered: wOrdered, orderedOn: wOrderedOn, damaged: wDamaged, hold: wHold, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
+        if (invDirty) Object.assign(payload, { stockPy: wStockPy, stockZk: wStockZk, dmgPy: wDmgPy, dmgZk: wDmgZk, ordered: wOrdered, orderedOn: wOrderedOn, hold: wHold, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
         if (payDirty) Object.assign(payload, { paymentAdds: wPaymentAdds, paySnapshots: wPaySnapshots, payTrack: wPayTrack, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase });
         if (brochureDirty) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
         if (regDirty) Object.assign(payload, { regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved });
