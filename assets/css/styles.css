@@ -72,6 +72,20 @@ body {
 }
 a { color: var(--accent); text-decoration: none; }
 
+/* ---------- Auto-update banner ---------- */
+.ver-update-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+  background: #1f2937; color: #fff; padding: 10px 16px; font-size: 14px;
+  box-shadow: 0 -2px 12px rgba(0,0,0,.25);
+}
+.ver-update-bar button {
+  background: #C1272D; color: #fff; border: 0; border-radius: 7px;
+  padding: 7px 16px; font-weight: 700; cursor: pointer; font-size: 14px;
+}
+.ver-update-bar button:hover { filter: brightness(1.08); }
+.ver-update-bar .ver-update-hint { opacity: .75; font-size: 12.5px; }
+
 /* ---------- Top bar ---------- */
 .topbar {
   position: sticky; top: 0; z-index: 30;

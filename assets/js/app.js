@@ -13634,7 +13634,45 @@
     }
   }
 
+  // ---- Auto-update checker --------------------------------------------------
+  // The site is on GitHub Pages, which doesn't honour custom no-cache headers,
+  // so a long-open tab can keep running an old build and features "stop working"
+  // until a manual hard refresh. This polls the live index.html (cache-busted)
+  // and, when a newer app.js version has been deployed, shows a one-click
+  // "Update now" bar — so nobody is silently stuck on a stale version.
+  function showUpdateBanner(newVerFull) {
+    if (document.getElementById("verUpdateBar")) return;
+    const nv = "v" + String(newVerFull).split("-").pop();
+    const bar = document.createElement("div");
+    bar.id = "verUpdateBar";
+    bar.className = "ver-update-bar";
+    bar.innerHTML = `<span>🔄 A new version (${esc(nv)}) is available.</span> <button type="button" id="verUpdateBtn">Update now</button> <span class="ver-update-hint">or press Ctrl&nbsp;+&nbsp;Shift&nbsp;+&nbsp;R</span>`;
+    document.body.appendChild(bar);
+    document.getElementById("verUpdateBtn").onclick = () => {
+      try { location.reload(); } catch (e) { location.href = location.pathname + "?r=" + Date.now(); }
+    };
+  }
+  function startVersionWatch() {
+    const running = window.__RUNNING_APPVER || "";
+    if (!running || !window.fetch) return;
+    let done = false;
+    const check = () => {
+      if (done) return;
+      fetch("index.html?cb=" + Date.now(), { cache: "no-store" })
+        .then((r) => (r.ok ? r.text() : ""))
+        .then((t) => {
+          const m = t && t.match(/app\.js\?v=([0-9]+-[0-9]+)/);
+          if (m && m[1] !== running) { done = true; showUpdateBanner(m[1]); }
+        })
+        .catch(() => {});
+    };
+    setTimeout(check, 20000);                 // first check ~20s after load
+    setInterval(check, 5 * 60 * 1000);        // then every 5 minutes
+    window.addEventListener("focus", check);  // and whenever the tab regains focus
+  }
+
   // boot: theme applies immediately; Firebase drives access.
   initTheme();
   initAuthGate();
+  startVersionWatch();
 })();
