@@ -8472,7 +8472,18 @@
       ${(O.checklist || []).map((g, i) => `<div class="block" style="margin-top:14px">
           <h3 style="margin:0 0 8px">${ed ? mkText(ed, `offline.checklist.${i}.group`, g.group) : esc(g.group)}</h3>
           ${mkRowsTable(ed, `offline.checklist.${i}.items`, g.items, [["item", "Item"], ["who", "Assigned to"]])}</div>`).join("")}
-      ${ed ? `<button type="button" class="mini-btn mk-add" data-path="offline.checklist" data-tmpl="cgroup" style="margin-top:8px">＋ Add checklist group</button>` : ""}`;
+      ${ed ? `<button type="button" class="mini-btn mk-add" data-path="offline.checklist" data-tmpl="cgroup" style="margin-top:8px">＋ Add checklist group</button>` : ""}
+
+      <h2 style="margin-top:28px">Conference visitor forms — collection &amp; numbering</h2>
+      <div class="callout teal" style="margin-top:12px">For <b>every conference</b>, one salesperson is assigned the responsibility of <b>collecting and sharing all visitor forms on the same day</b>.</div>
+      <div class="block" style="margin-top:12px">
+        <ol class="soc-addr">
+          <li><b>Number every form in sequence</b> — e.g. 1–20, 21–30, and so on — to maintain proper records and avoid any confusion.</li>
+          <li>The assigned salesperson must <b>collect and share all visitor forms in the Conference WhatsApp group by the end of the conference</b>.</li>
+          <li><b>No visitor form should be missed</b> — all forms must be shared clearly and in the correct sequence.</li>
+        </ol>
+        <div class="muted-note">This keeps proper records of conference visitors and ensures all leads are shared on time. <span class="t-muted">— Process set by Sparsha.</span></div>
+      </div>`;
   }
 
   /* ================= LEAD COLLECTION ================= */
