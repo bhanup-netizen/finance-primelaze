@@ -333,9 +333,9 @@
   // One-time removals of SEED_SERVICE_TEAM people an admin deleted but the seed
   // used to keep re-adding. Applied once when SEED_VERSION bumps, then remembered
   // in seedRemovedEmpIds so they stay gone (and can be re-added manually later).
-  const SEED_REMOVE_SERVICE_EMPIDS = ["PLM0098"]; // Viisvesh S — removed by HR
+  const SEED_REMOVE_SERVICE_EMPIDS = ["PLM0098", "PLM0094"]; // Viisvesh S; Brajeshkumar Veeramuthu — removed
   // Bump whenever the seed definitions above change so the reconcile re-applies once.
-  const SEED_VERSION = 4;
+  const SEED_VERSION = 5;
   let seedVersion = 0; // last applied seed version, restored from the edits doc
   function seedServiceTeam() {
     if (!(roleIsAdmin() || hasAnyEditGrant())) return; // only writers seed + persist
