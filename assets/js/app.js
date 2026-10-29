@@ -6635,35 +6635,40 @@
       </div>
 
       <div class="lp-card">
-        <h3>🧮 Qualify every lead — BANT</h3>
-        <ul class="lp-roles">
-          <li><b>B — Budget:</b> can they fund it? which product tier?</li>
-          <li><b>A — Authority:</b> are we talking to the decision-maker?</li>
-          <li><b>N — Need:</b> what problem / which machine or consumable?</li>
-          <li><b>T — Timeline:</b> buying now, this quarter, or exploring?</li>
-        </ul>
-        <div class="lp-tiers">
-          <span class="lp-tier lp-hot">🔴 Hot — ready / urgent → act now, assign immediately</span>
-          <span class="lp-tier lp-warm">🟡 Warm — interested, needs nurture → scheduled follow-ups</span>
-          <span class="lp-tier lp-cold">⚪ Cold — early / just browsing → nurture list</span>
-        </div>
-      </div>
-
-      <div class="lp-card">
         <h3>👥 Roles &amp; ownership</h3>
         <ul class="lp-roles">
           <li><b>Collection &amp; WhatsApp-group sharing:</b> Sparsha.</li>
           <li><b>Pipeline entry in Bigin</b> (≤8 working hrs, source-tagged, file attached): Mayank.</li>
           <li><b>Validation</b> (next working day, email + Bigin, files present): Sparsha.</li>
-          <li><b>Service pipeline:</b> created &amp; managed by <b>Vikas</b> or the sales team → if Vikas absent <b>Sparsha</b> → if both absent <b>Avedan</b>.</li>
-          <li><b>Consumable pipeline:</b> created by the <b>sales team</b> or <b>Vikas</b> → if Vikas absent <b>Sparsha</b> → then <b>Avedan</b>.</li>
         </ul>
+      </div>
+
+      <div class="lp-card">
+        <h3>🧾 Who creates which pipeline</h3>
+        <ul class="lp-roles">
+          <li><b>Esthemax &amp; device (machine) pipeline — company leads:</b> entered by <b>Mayank</b>. If Mayank is on leave → <b>Sparsha</b>; if both are on leave → <b>Avedan</b>.</li>
+          <li><b>Consumable &amp; service pipeline:</b> created by <b>Vikas</b>; backup <b>Sparsha</b> → then <b>Avedan</b>.</li>
+        </ul>
+      </div>
+
+      <div class="lp-card">
+        <h3>📬 Per-channel entry &amp; routing</h3>
+        <div class="table-wrap"><table class="lp-table">
+          <thead><tr><th>Channel</th><th>Who sends it in</th><th>Who enters / backup</th></tr></thead>
+          <tbody>
+            <tr><td><b>🌐 Website forms</b> — Contact &amp; Book-a-Demo</td><td>Auto → leads@primelaze.com</td><td>Mayank enters · Sparsha validates</td></tr>
+            <tr><td><b>📞 Phone +91 97013 82034 (Arjun)</b></td><td>Arjun posts every enquiry in the WhatsApp group with a screenshot</td><td>Sparsha collects → Mayank enters</td></tr>
+            <tr><td><b>💬 Casovil WhatsApp / Phone +91 86109 96995 (Lubdha)</b></td><td>Lubdha updates Mayank (cc Sparsha)</td><td>Mayank enters · Sparsha backup</td></tr>
+            <tr><td><b>📧 Casovil email — sales@casovil.com (Sparsha)</b></td><td>Sparsha updates Mayank</td><td>Mayank enters</td></tr>
+            <tr><td><b>🎪 Conferences / events</b></td><td>Sparsha appoints a point-of-contact at the event; that person shares the visitor forms (with photo) on WhatsApp to Sparsha</td><td>Sparsha passes to Mayank → Mayank enters in Bigin / Primelaze CRM. If Mayank is overloaded / unavailable, Sparsha enters.</td></tr>
+          </tbody>
+        </table></div>
       </div>
 
       <div class="lp-card">
         <h3>🛟 Backup &amp; escalation</h3>
         <ul class="lp-roles">
-          <li><b>Sparsha ⇄ Vikas</b> cover for each other; if <b>both are unavailable → Avedan</b>.</li>
+          <li><b>If Mayank is on leave → Sparsha</b> enters the pipelines; if <b>both Mayank &amp; Sparsha are on leave → Avedan</b>.</li>
           <li><b>No pipeline in 8 working hours?</b> Sparsha flags it to Mayank; if still open the next morning, escalate to Arjun.</li>
           <li><b>No file = not validated.</b> Every lead must carry its source screenshot / email before it counts as done.</li>
         </ul>

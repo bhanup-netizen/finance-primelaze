@@ -29,7 +29,7 @@ window.SOCIAL_SEED = {
     { platform: "Email", brand: "Primelaze", id: "hr@primelaze.com",             fn: "HR",      owner: "Sandeepika (HR)", note: "HR & Careers (careers form via FormSubmit + mailto)" },
     { platform: "Email", brand: "Casovil",   id: "sales@casovil.com",            fn: "Sales",   owner: "Sparsha",         note: "Sales & orders (contact form + mailto)" },
     // Phone / WhatsApp — only the numbers on the live sites.
-    { platform: "Phone",    brand: "Primelaze", id: "+91 97013 82034", fn: "Sales",    owner: "Vikas",           note: "General, Sales & Support — the main number shown site-wide" },
+    { platform: "Phone",    brand: "Primelaze", id: "+91 97013 82034", fn: "Sales",    owner: "Arjun",           note: "General, Sales & Support — the main number shown site-wide. Arjun posts every enquiry in the WhatsApp group with a screenshot → Mayank enters" },
     { platform: "Phone",    brand: "Primelaze", id: "+91 78459 13001", fn: "HR",       owner: "Sandeepika (HR)", note: "HR & Careers" },
     { platform: "WhatsApp", brand: "Primelaze", id: "+91 99155 59151", fn: "WhatsApp", owner: "Sparsha",         note: "Site-wide WhatsApp chat button + all wa.me links" },
     { platform: "Phone",    brand: "Casovil",   id: "+91 86109 96995", fn: "Sales",    owner: "Lubdha",          note: "Call & orders — shown site-wide on casovil.com" },

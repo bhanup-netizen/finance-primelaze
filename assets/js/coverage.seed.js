@@ -8,7 +8,7 @@
    backups start blank for Marketing to assign. Fully editable.
    ============================================================ */
 window.COVERAGE_SEED = {
-  version: 7,
+  version: 8,
   note: "Two parts: who POSTS content, and who MANAGES DMs, messages, calls & emails. Each row has an owner, a backup (for leave), and the action they must do. Contacts match the live primelaze.com & casovil.com sites (verified from source): Primelaze leads@ + hr@, +91 97013 82034 (General/Sales/Support), +91 78459 13001 (HR), WhatsApp +91 99155 59151; Casovil sales@casovil.com + +91 86109 96995. Editable by Marketing/Admin — saves for everyone.",
   rows: [
     // ---------- PART 1 · Who posts (content) ----------
@@ -26,12 +26,12 @@ window.COVERAGE_SEED = {
     { id: "d1",  part: "dm", channel: "Instagram", account: "DMs, comments & story replies (all brands)", primary: "Sparsha", backup: "", notes: "Reply within 1 hr (working hrs); qualify & pass hot leads to Mayank." },
     { id: "d2",  part: "dm", channel: "Facebook",  account: "Page messages & comments (all brands)",      primary: "Sparsha", backup: "", notes: "Reply within 1 hr; qualify & forward leads to Mayank." },
     { id: "d3",  part: "dm", channel: "WhatsApp",  account: "Primelaze — +91 99155 59151 (site-wide chat button)", primary: "Vikas", backup: "", notes: "Floating WhatsApp chat on every Primelaze page. Answer within 1 hr; share brochure/pricing; capture lead → Mayank." },
-    { id: "d4",  part: "dm", channel: "WhatsApp",  account: "Casovil — +91 86109 96995 (Lubdha)",         primary: "Lubdha", backup: "", notes: "Floating WhatsApp chat + wa.me links on every Casovil page. Answer within 1 hr; share brochure/pricing; capture order → Mayank." },
-    { id: "d6",  part: "dm", channel: "Phone",     account: "Primelaze — +91 97013 82034 (★ website, site-wide)", primary: "Arjun", backup: "", notes: "★ On the public website — General, Sales & Support (the main number shown site-wide). Attend calls; log the enquiry; follow up; pass lead → leads@." },
+    { id: "d4",  part: "dm", channel: "WhatsApp",  account: "Casovil — +91 86109 96995 (Lubdha)",         primary: "Lubdha", backup: "", notes: "Floating WhatsApp chat + wa.me links on every Casovil page. Answer within 1 hr; share brochure/pricing. Lubdha updates Mayank (cc Sparsha) → Mayank enters, Sparsha backup." },
+    { id: "d6",  part: "dm", channel: "Phone",     account: "Primelaze — +91 97013 82034 (website, site-wide)", primary: "Arjun", backup: "", notes: "General, Sales & Support — the main number shown site-wide. Arjun posts every enquiry in the WhatsApp group with a screenshot → Sparsha → Mayank enters." },
     { id: "d7",  part: "dm", channel: "Phone",     account: "Primelaze HR / Careers — +91 78459 13001",   primary: "Sandeepika (HR)", backup: "", notes: "HR / careers line. Attend HR / careers calls." },
-    { id: "d8",  part: "dm", channel: "Phone",     account: "Casovil — +91 86109 96995 (Lubdha)",         primary: "Lubdha", backup: "", notes: "Click-to-call button on every Casovil page. Attend & follow up order enquiries; log → Mayank." },
+    { id: "d8",  part: "dm", channel: "Phone",     account: "Casovil — +91 86109 96995 (Lubdha)",         primary: "Lubdha", backup: "", notes: "Click-to-call button on every Casovil page. Attend & follow up order enquiries. Lubdha updates Mayank (cc Sparsha) → Mayank enters, Sparsha backup." },
     { id: "d9c", part: "dm", channel: "Email",     account: "leads@primelaze.com",                        primary: "Mayank", backup: "", notes: "On the public website — General, Sales & Support. Contact & Book-a-Demo forms + mailto all land here. Create the Bigin pipeline within 8 working hrs (holiday → next morning), tag the source & attach the file. Mayank has access." },
-    { id: "d10", part: "dm", channel: "Email",     account: "sales@casovil.com",                         primary: "Sparsha", backup: "", notes: "Public Casovil sales/orders inbox + destination for all casovil.com contact-form enquiries & order emails. Reply within 4 working hrs; qualify & log the lead." },
+    { id: "d10", part: "dm", channel: "Email",     account: "sales@casovil.com",                         primary: "Sparsha", backup: "", notes: "Public Casovil sales/orders inbox + destination for all casovil.com contact-form enquiries & order emails. Reply within 4 working hrs; Sparsha updates Mayank → Mayank enters." },
     { id: "d12", part: "dm", channel: "Email",     account: "hr@primelaze.com",                          primary: "Sandeepika (HR)", backup: "", notes: "Careers / job applications only. Reply within 24 hrs." },
     { id: "d14", part: "dm", channel: "Instagram", account: "Casovil — @casovil.world (DMs & comments)",  primary: "Sparsha", backup: "", notes: "Reply within 1 hr (working hrs); qualify & pass hot leads → Mayank. (Profile posted by Buzzfied agency — see Posts.)" },
     { id: "d15", part: "dm", channel: "Indiamart", account: "Buyer enquiries — 7339513001",               primary: "Sparsha", backup: "", notes: "Respond to buyer enquiries; qualify; log the lead." },
