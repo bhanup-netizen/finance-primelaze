@@ -23,12 +23,13 @@ window.SOCIAL_SEED = {
     // Websites
     { platform: "Website", brand: "Primelaze", id: "primelaze.com", link: "https://primelaze.com", owner: "Vikas", note: "Company website" },
     { platform: "Website", brand: "Casovil",   id: "casovil.com",   link: "https://casovil.com",   owner: "Vikas", note: "E-commerce / orders site" },
-    // Emails
-    { platform: "Email", brand: "Primelaze", id: "calls@primelaze.com",        fn: "Sales",   owner: "Sparsha",         note: "General & Sales enquiries (contact, demo, brochure forms)" },
-    { platform: "Email", brand: "Primelaze", id: "salessupport@primelaze.com", fn: "Sales",   owner: "Sparsha",         note: "Sales support (support portal)" },
-    { platform: "Email", brand: "Primelaze", id: "servicesupport@primelaze.com", fn: "Service", owner: "Vikas", note: "Service / technical support" },
-    { platform: "Email", brand: "Primelaze", id: "hr@primelaze.com",           fn: "HR",      owner: "Sandeepika (HR)", note: "HR & Careers (job applications)" },
-    { platform: "Email", brand: "Primelaze", id: "info@primelaze.com",         fn: "General", owner: "Sparsha",         note: "General info (support portal)" },
+    // Emails — ★ marks the three addresses configured on the public website.
+    { platform: "Email", brand: "Primelaze", id: "leads@primelaze.com",          fn: "Sales",   owner: "Mayank",          note: "★ Website lead hub — every website lead enquiry lands here; Mayank creates the Bigin pipeline. (Mayank has access.)" },
+    { platform: "Email", brand: "Primelaze", id: "salessupport@primelaze.com",   fn: "Sales",   owner: "Sparsha",         note: "★ On the website — Sales support (support portal)" },
+    { platform: "Email", brand: "Primelaze", id: "servicesupport@primelaze.com", fn: "Service", owner: "Vikas",           note: "★ On the website — Service / technical support" },
+    { platform: "Email", brand: "Primelaze", id: "calls@primelaze.com",          fn: "Sales",   owner: "Sparsha",         note: "Enquiry inbox — not a public website form destination (site now routes to leads@)" },
+    { platform: "Email", brand: "Primelaze", id: "hr@primelaze.com",             fn: "HR",      owner: "Sandeepika (HR)", note: "HR & Careers (job applications)" },
+    { platform: "Email", brand: "Primelaze", id: "info@primelaze.com",           fn: "General", owner: "Sparsha",         note: "General info / catch-all (internal)" },
     { platform: "Email", brand: "Casovil",   id: "sales@casovil.com",          fn: "Sales",   owner: "Sparsha",         note: "Sales & orders — contact form + cart" },
     { platform: "Email", brand: "Casovil",   id: "info@casovil.com",           fn: "General", owner: "Sparsha",         note: "General enquiries (catch-all)" },
     { platform: "Email", brand: "Casovil",   id: "itsupport@primelaze.com",    fn: "Admin",   owner: "Bhanu",           note: "Admin login only — order-management backend" },

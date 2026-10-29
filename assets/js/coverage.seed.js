@@ -8,8 +8,8 @@
    backups start blank for Marketing to assign. Fully editable.
    ============================================================ */
 window.COVERAGE_SEED = {
-  version: 4,
-  note: "Two parts: who POSTS content, and who MANAGES DMs, messages, calls & emails. Each row has an owner, a backup (for leave), and the action they must do. Contact numbers/emails match the live Primelaze & Casovil sites. Editable by Marketing/Admin — saves for everyone.",
+  version: 5,
+  note: "Two parts: who POSTS content, and who MANAGES DMs, messages, calls & emails. Each row has an owner, a backup (for leave), and the action they must do. ★ marks the three email addresses configured on the public website (leads@, salessupport@, servicesupport@). Editable by Marketing/Admin — saves for everyone.",
   rows: [
     // ---------- PART 1 · Who posts (content) ----------
     { id: "p1",  part: "post", channel: "Instagram", account: "Primelaze — @primelazemeditech", primary: "Rashmi + Avedan", backup: "", notes: "Post per approved calendar (3–5/week + daily stories); community-manage." },
@@ -32,14 +32,15 @@ window.COVERAGE_SEED = {
     { id: "d7",  part: "dm", channel: "Phone",     account: "Primelaze HR / Careers — +91 78459 13001",   primary: "Sandeepika (HR)", backup: "", notes: "HR / careers line. Attend HR / careers calls." },
     { id: "d8",  part: "dm", channel: "Phone",     account: "Casovil — +91 86109 96995 (Lubdha)",         primary: "Lubdha", backup: "", notes: "Click-to-call button on every Casovil page. Attend & follow up order enquiries; log → Mayank." },
     { id: "d9",  part: "dm", channel: "Email",     account: "calls@primelaze.com",                       primary: "Sparsha", backup: "", notes: "Reply within 4 working hrs; qualify; log the lead." },
-    { id: "d9b", part: "dm", channel: "Email",     account: "salessupport@primelaze.com (main inbox)",   primary: "Vikas", backup: "", notes: "Single main Primelaze inbox — ALL sales, demo, brochure & service/support enquiries (Contact & Book-a-Demo forms, Download-Brochure popup). Also the Support-portal admin login. Reply within 4 working hrs; qualify & log." },
+    { id: "d9c", part: "dm", channel: "Email",     account: "leads@primelaze.com (★ website lead hub)",   primary: "Mayank", backup: "", notes: "★ On the website. Every website lead enquiry lands here. Create the Bigin pipeline within 8 working hrs (holiday → next morning), tag the source & attach the file. Mayank has access." },
+    { id: "d9b", part: "dm", channel: "Email",     account: "salessupport@primelaze.com (★ on website)", primary: "Sparsha", backup: "", notes: "★ On the website — Sales support (support portal). Reply within 4 working hrs; qualify & forward to leads@." },
     { id: "d10", part: "dm", channel: "Email",     account: "sales@casovil.com",                         primary: "Sparsha", backup: "", notes: "Public Casovil sales/orders inbox + destination for all casovil.com contact-form enquiries & order emails. Reply within 4 working hrs; qualify & log the lead." },
     { id: "d10b",part: "dm", channel: "Email",     account: "itsupport@primelaze.com (backend admin — NOT public)", primary: "IT / internal", backup: "", notes: "Admin login for the Casovil order-management backend only. Never shown on the public site; internal use." },
-    { id: "d11", part: "dm", channel: "Email",     account: "servicesupport@primelaze.com",              primary: "Vikas", backup: "", notes: "Reply within 4 working hrs; raise a service ticket." },
+    { id: "d11", part: "dm", channel: "Email",     account: "servicesupport@primelaze.com (★ on website)", primary: "Vikas", backup: "", notes: "★ On the website — Service / technical support. Reply within 4 working hrs; raise a service ticket." },
     { id: "d12", part: "dm", channel: "Email",     account: "hr@primelaze.com",                          primary: "Sandeepika (HR)", backup: "", notes: "Careers / job applications only. Reply within 24 hrs." },
     { id: "d13", part: "dm", channel: "Email",     account: "info@primelaze.com",                        primary: "Sparsha", backup: "", notes: "Reply within 4 working hrs; route to the right person." },
     { id: "d14", part: "dm", channel: "Instagram", account: "Casovil — @casovil.world (DMs & comments)",  primary: "Sparsha", backup: "", notes: "Reply within 1 hr (working hrs); qualify & pass hot leads → Mayank. (Profile posted by Buzzfied agency — see Posts.)" },
     { id: "d15", part: "dm", channel: "Indiamart", account: "Buyer enquiries — 7339513001",               primary: "Sparsha", backup: "", notes: "Respond to buyer enquiries; qualify; log the lead." },
-    { id: "d16", part: "dm", channel: "Lead entry", account: "Bigin / Casovil Dashboard",                 primary: "Mayank", backup: "", notes: "Enter every qualified lead within 24 hrs, tagged by source." },
+    { id: "d16", part: "dm", channel: "Lead entry", account: "Bigin / Casovil Dashboard",                 primary: "Mayank", backup: "Sparsha → Avedan", notes: "Create the pipeline within 8 working hrs (holiday → next morning), tagged by source, with the file attached. Sparsha validates the next working day." },
   ],
 };
