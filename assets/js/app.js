@@ -11004,7 +11004,16 @@
   // current = py + zk; total damaged (non-usable) = dmgPy + dmgZk; usable =
   // total current − total damaged. Legacy single `stock`/`damaged` maps are
   // migrated into the Pondy columns on load.
-  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stockPy: {}, stockZk: {}, dmgPy: {}, dmgZk: {}, ordered: {}, orderedOn: {}, hold: {}, cat: "All", status: "all", q: "", lineData: {} };
+  const orderState = { usdInr: null, customs: null, moqJar: null, moqRetail: null, stockPy: {}, stockZk: {}, dmgPy: {}, dmgZk: {}, ordered: {}, orderedOn: {}, hold: {}, moves: {}, cat: "All", status: "all", q: "", lineData: {} };
+  // Zoho-style stock movement log: every stock change recorded as a transaction.
+  const INV_MOVE_TYPES = [
+    { key: "in", label: "IN — received / added", short: "IN", cls: "b-good" },
+    { key: "out", label: "OUT — issued / sold", short: "OUT", cls: "b-bad" },
+    { key: "damaged", label: "DAMAGED — mark non-usable", short: "DMG", cls: "b-warn" },
+    { key: "transfer", label: "TRANSFER — Pondy ↔ Zirakpur", short: "XFER", cls: "b-accent" },
+    { key: "adjust", label: "ADJUST — correct the count", short: "ADJ", cls: "b-neutral" },
+  ];
+  const INV_OFFNAME = { py: "Pondy", zk: "Zirakpur" };
   // Set true once this session edits inventory. Sticky — so a save from another
   // area (e.g. weekly duties) doesn't overwrite the inventory with this session's
   // stale copy, and vice-versa (single shared edits doc).
@@ -11451,7 +11460,7 @@
         <td class="num">${r.damaged ? inr(r.damaged) : "0"}</td>
         <td class="num"><b>${inr(r.usable)}</b></td>
         <td class="num ${r.toBuy > 0 ? "buy-pos" : ""}">${inr(Math.round(r.toBuy))}${r.toBuy !== r.need ? `<div class="cell-note" style="font-weight:600">need ${inr(Math.round(r.need))}</div>` : ""}</td>
-        <td style="white-space:nowrap"><button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
+        <td style="white-space:nowrap"><button class="ghost-btn esth-moves" data-idx="${r.i}" title="Stock movement log (in / out / transfer / adjust)">📋${(orderState.moves[r.it.name] && orderState.moves[r.it.name].length) ? ` ${orderState.moves[r.it.name].length}` : ""}</button> <button class="ghost-btn esth-edit" data-item="${esc(r.it.name)}">Edit</button> <button class="ghost-btn danger esth-del" data-item="${esc(r.it.name)}">Delete</button></td>
       </tr>`;
     }).join("") || `<tr><td colspan="${admin ? 16 : 8}" class="empty">No matching items.</td></tr>`;
     const bEl = document.getElementById("orderBody");
@@ -11487,7 +11496,8 @@
       const ordOnCell = admin
         ? `<input class="inv-simple" data-item="${esc(name)}" data-f="orderedOn" type="date" value="${esc(d.orderedOn || "")}">`
         : (d.orderedOn ? esc(fmtDate(d.orderedOn)) : "—");
-      const actionTd = admin ? `<td style="white-space:nowrap"><button class="ghost-btn inv-edit" data-item="${esc(name)}">Edit</button> <button class="ghost-btn danger inv-del" data-item="${esc(name)}">Delete</button></td>` : "";
+      const mvN = (d.moves && d.moves.length) ? ` ${d.moves.length}` : "";
+      const actionTd = admin ? `<td style="white-space:nowrap"><button class="ghost-btn inv-moves" data-item="${esc(name)}" title="Stock movement log (in / out / transfer / adjust)">📋${mvN}</button> <button class="ghost-btn inv-edit" data-item="${esc(name)}">Edit</button> <button class="ghost-btn danger inv-del" data-item="${esc(name)}">Delete</button></td>` : "";
       if (!admin) {
         return `<tr><td class="t-name">${esc(name)}</td><td class="num">${ro(py)}</td><td class="num">${ro(zk)}</td><td class="num"><b>${total}</b></td><td class="num">${usable}</td><td class="num">${nonUse || "—"}</td><td class="num">${ro(d.ordered)}</td><td>${statusCell}</td></tr>`;
       }
@@ -11519,6 +11529,7 @@
     if (addBtn) addBtn.onclick = () => invAddSimple(lineId);
     document.querySelectorAll(".inv-edit").forEach((b) => (b.onclick = () => invEditSimple(lineId, b.dataset.item)));
     document.querySelectorAll(".inv-del").forEach((b) => (b.onclick = () => invDeleteSimple(lineId, b.dataset.item)));
+    document.querySelectorAll(".inv-moves").forEach((b) => (b.onclick = () => invMoveDialog(simpleMoveModel(lineId, b.dataset.item), isAdmin(), (desc) => { invDirty = true; saveEdits(desc); }, () => { const bx = document.getElementById("simpleInvBody"); if (bx) { bx.innerHTML = simpleInvRows(invSimpleItems(lineId), data, orderState.q, isAdmin()); wireSimpleInv(lineId); } })));
   }
 
   function renderSimpleInventory(line) {
@@ -11554,7 +11565,119 @@
       ${admin ? `<div class="muted-note"><b>Pondy</b> + <b>Zirakpur</b> = current stock in hand at each office (Total adds them). <b>Dmg·Py / Dmg·Zk</b> = damaged (non-usable) at each office; <b>Usable</b> = Total − Non-usable. Use <b>＋ Add</b>, or <b>Edit</b> / <b>Delete</b> per row. Saved for everyone.</div>` : ""}`;
   }
 
+  // Model backing the movement dialog for an Esthemax item (index i, name nm).
+  function esthMoveModel(i, nm) {
+    const g = (m) => +orderState[m][i] || 0;
+    const s = (m, v) => { orderState[m][i] = Math.max(0, v); };
+    return {
+      name: nm,
+      cur: () => ({ py: g("stockPy"), zk: g("stockZk"), dpy: g("dmgPy"), dzk: g("dmgZk") }),
+      getStock: (o) => g(o === "py" ? "stockPy" : "stockZk"),
+      setStock: (o, v) => s(o === "py" ? "stockPy" : "stockZk", v),
+      getDmg: (o) => g(o === "py" ? "dmgPy" : "dmgZk"),
+      setDmg: (o, v) => s(o === "py" ? "dmgPy" : "dmgZk", v),
+      moves: () => (orderState.moves[nm] = orderState.moves[nm] || []),
+    };
+  }
+  // Model backing the movement dialog for a simple (Celluma / Devices) item.
+  function simpleMoveModel(lineId, name) {
+    orderState.lineData[lineId] = orderState.lineData[lineId] || {};
+    const d = orderState.lineData[lineId][name] = orderState.lineData[lineId][name] || {};
+    const gv = (nf, of) => { const v = d[nf]; if (v != null && v !== "") return +v || 0; if (of && d[of] != null && d[of] !== "") return +d[of] || 0; return 0; };
+    return {
+      name,
+      cur: () => ({ py: gv("stockPy", "stock"), zk: gv("stockZk"), dpy: gv("dmgPy", "damaged"), dzk: gv("dmgZk") }),
+      getStock: (o) => (o === "py" ? gv("stockPy", "stock") : gv("stockZk")),
+      setStock: (o, v) => { d[o === "py" ? "stockPy" : "stockZk"] = Math.max(0, v); },
+      getDmg: (o) => (o === "py" ? gv("dmgPy", "damaged") : gv("dmgZk")),
+      setDmg: (o, v) => { d[o === "py" ? "dmgPy" : "dmgZk"] = Math.max(0, v); },
+      moves: () => (d.moves = d.moves || []),
+    };
+  }
+  // Zoho-style "record a stock movement" dialog with per-item history. Recording
+  // a movement updates the per-office stock AND appends an audit entry.
+  function invMoveDialog(model, isEd, save, repaint) {
+    const fmtDT = (at) => at ? new Date(at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "";
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    document.body.appendChild(wrap);
+    const applyMove = (type, office, toOffice, qty) => {
+      if (type === "in") model.setStock(office, model.getStock(office) + qty);
+      else if (type === "out") model.setStock(office, model.getStock(office) - qty);
+      else if (type === "damaged") model.setDmg(office, model.getDmg(office) + qty);
+      else if (type === "transfer") { model.setStock(office, model.getStock(office) - qty); model.setStock(toOffice, model.getStock(toOffice) + qty); }
+      else if (type === "adjust") model.setStock(office, qty);
+    };
+    const render = () => {
+      const c = model.cur();
+      const total = c.py + c.zk, dmg = c.dpy + c.dzk, usable = Math.max(0, total - dmg);
+      const moves = model.moves();
+      const moveRows = moves.slice().reverse().map((m) => {
+        const t = INV_MOVE_TYPES.find((x) => x.key === m.type) || { short: m.type, cls: "b-neutral" };
+        const where = m.type === "transfer" ? `${esc(m.office)} → ${esc(m.toOffice)}` : esc(m.office || "");
+        return `<tr><td>${fmtDT(m.at)}</td><td><span class="badge ${t.cls}">${esc(t.short)}</span></td><td class="num">${esc(String(m.qty))}</td><td>${where}</td><td>${esc(m.note || "")}</td><td class="t-muted">${esc(typeof wkShortName === "function" ? wkShortName(m.by) : (m.by || ""))}</td></tr>`;
+      }).join("") || `<tr><td colspan="6" class="t-muted">No movements logged yet.</td></tr>`;
+      wrap.innerHTML = `<div class="lead-modal-card" style="width:min(820px,100%)">
+        <h3>📋 ${esc(model.name)} — stock movements</h3>
+        <div class="stat-row" style="margin:8px 0 12px">
+          <div class="stat"><b>${total}</b><span>Total in stock</span></div>
+          <div class="stat"><b>${c.py}</b><span>Pondy</span></div>
+          <div class="stat"><b>${c.zk}</b><span>Zirakpur</span></div>
+          <div class="stat k-good"><b>${usable}</b><span>Usable</span></div>
+          <div class="stat k-bad"><b>${dmg}</b><span>Non-usable</span></div>
+        </div>
+        ${isEd ? `<div class="broch-form">
+          <div class="broch-form-h">Record stock movement</div>
+          <div class="ch-grid">
+            <label class="ord-field"><span>Type</span><select id="imType" class="select">${INV_MOVE_TYPES.map((t) => `<option value="${t.key}">${esc(t.label)}</option>`).join("")}</select></label>
+            <label class="ord-field"><span id="imOfficeLbl">Office</span><select id="imOffice" class="select"><option value="py">Pondy</option><option value="zk">Zirakpur</option></select></label>
+            <label class="ord-field" id="imToWrap" hidden><span>To office</span><select id="imTo" class="select"><option value="zk">Zirakpur</option><option value="py">Pondy</option></select></label>
+            <label class="ord-field"><span id="imQtyLbl">Quantity</span><input id="imQty" type="number" min="0" placeholder="qty"></label>
+          </div>
+          <label class="ord-field" style="margin-top:8px"><span>Note / reason</span><input id="imNote" type="text" placeholder="e.g. received from supplier · issued to Dr. X · damaged in transit · stock-count correction"></label>
+          <button type="button" class="dl-btn" id="imRec" style="margin-top:10px">Record movement</button>
+        </div>` : ""}
+        <h4 style="margin:16px 0 4px">Movement history</h4>
+        <div class="table-wrap"><table class="cprice-table"><thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th>Office</th><th>Note</th><th>By</th></tr></thead><tbody>${moveRows}</tbody></table></div>
+        <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="imClose">Close</button></div>
+      </div>`;
+      wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
+      document.getElementById("imClose").onclick = () => wrap.remove();
+      if (isEd) {
+        const typeSel = document.getElementById("imType");
+        const sync = () => {
+          const t = typeSel.value;
+          document.getElementById("imToWrap").hidden = t !== "transfer";
+          document.getElementById("imOfficeLbl").textContent = t === "transfer" ? "From office" : "Office";
+          document.getElementById("imQtyLbl").textContent = t === "adjust" ? "Set count to" : "Quantity";
+        };
+        typeSel.onchange = sync; sync();
+        document.getElementById("imRec").onclick = () => {
+          const type = typeSel.value;
+          const office = document.getElementById("imOffice").value;
+          const toEl = document.getElementById("imTo");
+          const toOffice = toEl ? toEl.value : "";
+          const qty = Math.abs(parseFloat(document.getElementById("imQty").value) || 0);
+          const note = document.getElementById("imNote").value.trim();
+          if (type !== "adjust" && !qty) { window.alert("Enter a quantity."); return; }
+          if (type === "transfer" && office === toOffice) { window.alert("Choose two different offices for a transfer."); return; }
+          applyMove(type, office, toOffice, qty);
+          model.moves().push({ id: "m" + Date.now(), at: Date.now(), by: (sessionUser && sessionUser.email) || "", type, qty, office: INV_OFFNAME[office] || office, toOffice: type === "transfer" ? (INV_OFFNAME[toOffice] || toOffice) : "", note });
+          save(`${model.name} · ${type} ${qty || ""}`.trim());
+          render();
+          try { repaint && repaint(); } catch (e2) {}
+        };
+      }
+    };
+    render();
+  }
+
   function orderBindStockInputs() {
+    // Esthemax: per-item stock-movement log button.
+    document.querySelectorAll(".esth-moves").forEach((b) => (b.onclick = () => {
+      const i = +b.dataset.idx, it = D.esthemaxOrder.items[i]; if (!it) return;
+      invMoveDialog(esthMoveModel(i, it.name), isAdmin(), (desc) => { invDirty = true; saveEdits(desc); }, orderPaint);
+    }));
     // Per-office current stock (Pondy / Zirakpur) and per-office damaged.
     const bindEsthNum = (cls, map, label) => document.querySelectorAll("." + cls).forEach((inp) => {
       inp.onchange = (e) => {
@@ -12116,6 +12239,7 @@
           if (e.hold && e.hold[nm] != null) orderState.hold[i] = e.hold[nm];
         });
       }
+      if (e.invMovesE && typeof e.invMovesE === "object") orderState.moves = e.invMovesE;
       if (e.hqTargets) Object.keys(e.hqTargets).forEach((k) => { hqEdits[k] = e.hqTargets[k]; });
       if (e.demo) ["current", "status", "movement", "packing"].forEach((k) => Object.assign(demoEdits[k], e.demo[k] || {}));
       if (e.demoAdds) {
@@ -12487,6 +12611,9 @@
         if (orderState.orderedOn[i]) orderedOn[it.name] = orderState.orderedOn[i];
         if (orderState.hold[i]) hold[it.name] = orderState.hold[i];
       });
+      // Esthemax stock-movement log (name-keyed arrays).
+      const invMovesE = {};
+      Object.keys(orderState.moves || {}).forEach((nm) => { const a = orderState.moves[nm]; if (Array.isArray(a) && a.length) invMovesE[nm] = a; });
       const by = (sessionUser && sessionUser.email) || "";
       const at = Date.now();
       const tabLabel = (TABS.find((t) => t.id === currentTab) || {}).label || currentTab;
@@ -12523,7 +12650,7 @@
       // Inventory: if this session never edited inventory, write back the
       // SERVER's copy so a save from another area doesn't clobber it with our
       // stale snapshot (mirrors the weekly-duties protection).
-      let wStockPy = stockPy, wStockZk = stockZk, wDmgPy = dmgPy, wDmgZk = dmgZk, wOrdered = ordered, wOrderedOn = orderedOn, wHold = hold;
+      let wStockPy = stockPy, wStockZk = stockZk, wDmgPy = dmgPy, wDmgZk = dmgZk, wOrdered = ordered, wOrderedOn = orderedOn, wHold = hold, wInvMovesE = invMovesE;
       let wInvLines = orderState.lineData, wInvAdds = invAdds, wInvRemovals = invRemovals;
       if (serverData && !invDirty) {
         if (serverData.stockPy) wStockPy = serverData.stockPy;
@@ -12533,6 +12660,7 @@
         if (serverData.ordered) wOrdered = serverData.ordered;
         if (serverData.orderedOn) wOrderedOn = serverData.orderedOn;
         if (serverData.hold) wHold = serverData.hold;
+        if (serverData.invMovesE) wInvMovesE = serverData.invMovesE;
         if (serverData.invLines) wInvLines = serverData.invLines;
         if (serverData.invAdds) wInvAdds = serverData.invAdds;
         if (serverData.invRemovals) wInvRemovals = serverData.invRemovals;
@@ -12632,7 +12760,7 @@
         // (possibly stale) snapshot. This is the real fix for "leads / payments /
         // registration deleting automatically".
         const payload = { seedVersion, hqTargetSeedVersion, weeklyDeptVersion, updatedBy: by, updatedAt: at, log: mergedLog, ...P };
-        if (invDirty) Object.assign(payload, { stockPy: wStockPy, stockZk: wStockZk, dmgPy: wDmgPy, dmgZk: wDmgZk, ordered: wOrdered, orderedOn: wOrderedOn, hold: wHold, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
+        if (invDirty) Object.assign(payload, { stockPy: wStockPy, stockZk: wStockZk, dmgPy: wDmgPy, dmgZk: wDmgZk, ordered: wOrdered, orderedOn: wOrderedOn, hold: wHold, invMovesE: wInvMovesE, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
         if (payDirty) Object.assign(payload, { paymentAdds: wPaymentAdds, paySnapshots: wPaySnapshots, payTrack: wPayTrack, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase });
         if (brochureDirty) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
         if (regDirty) Object.assign(payload, { regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved });
