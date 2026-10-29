@@ -6567,8 +6567,68 @@
   }
   function wireLeadAnalytics() { /* read-only view — no interactions to wire */ }
 
-  // Dispatcher — renders the active view (table / board / analytics) into #leadMain.
+  // Lead collection & pipeline SOP for Primelaze — who collects from each source,
+  // who creates the Bigin pipeline, the 8-hour rule, validation and backups.
+  function leadProcessHtml() {
+    const mail = `<a class="linkish" href="mailto:leads@primelaze.com">leads@primelaze.com</a>`;
+    const flow = `Email to ${mail} (with screenshot or email) → <b>Mayank</b> creates the Pipeline in <b>Bigin within 8 hours</b> (if it's a holiday, by the next morning) and <b>attaches the file</b> → <b>next day Sparsha validates</b> on email &amp; Bigin that the pipeline was created, with the files.`;
+    const sources = [
+      ["📧 Sales Support email", "salessupport@primelaze.com", "Vikas"],
+      ["💬 WhatsApp", "+91 99155 59151", "Vikas"],
+      ["💬 Arjun / Dhinesh", "Esthemax &amp; machine-leads WhatsApp group", "Arjun / Dhinesh"],
+      ["📱 Social & marketplaces", "Instagram, Facebook, YouTube, Pinterest, IndiaMart, etc.", "Sparsha"],
+    ];
+    const srcRows = sources.map((s) => `<tr><td><b>${s[0]}</b></td><td>${s[1]}</td><td>${esc(s[2])}</td><td>${flow}</td></tr>`).join("");
+    return `<div class="lead-process">
+      <div class="lp-card lp-hero">
+        <h3>📥 Central leads mailbox</h3>
+        <p>Every lead — from any source — is emailed to ${mail}. This is the single intake point so nothing is missed and everything is traceable.</p>
+      </div>
+      <div class="lp-card">
+        <h3>🔁 The standard flow (every source)</h3>
+        <ol class="lp-steps">
+          <li>The source owner <b>collects</b> the lead (screenshot / details).</li>
+          <li><b>Emails it to ${mail}</b> with the screenshot or forwarded email.</li>
+          <li><b>Mayank creates the Pipeline in Bigin within 8 hours</b> (holiday → next morning) and <b>attaches the file</b>.</li>
+          <li><b>The next day, Sparsha validates</b> on email &amp; Bigin that the pipeline was created, with the files.</li>
+        </ol>
+      </div>
+      <div class="lp-card">
+        <h3>📋 Sources → who collects → what happens</h3>
+        <div class="table-wrap"><table class="lp-table">
+          <thead><tr><th>Source</th><th>Channel</th><th>Collected by</th><th>Then</th></tr></thead>
+          <tbody>${srcRows}</tbody>
+        </table></div>
+      </div>
+      <div class="lp-card">
+        <h3>👥 Roles</h3>
+        <ul class="lp-roles">
+          <li><b>Collection &amp; WhatsApp-group sharing:</b> Sparsha (leads collected and shared in the WhatsApp group).</li>
+          <li><b>Bigin pipeline creation:</b> Mayank — within 8 hours, holiday → next morning, always attach the file.</li>
+          <li><b>Validation (next day, email + Bigin, with files):</b> Sparsha.</li>
+          <li><b>Backup:</b> Vikas.</li>
+        </ul>
+      </div>
+      <div class="lp-card">
+        <h3>🛟 Backup &amp; cover</h3>
+        <ul class="lp-roles">
+          <li><b>Sparsha ⇄ Vikas</b> are each other's backup.</li>
+          <li>If <b>both are unavailable → Avedan</b> covers.</li>
+        </ul>
+      </div>
+      <div class="lp-card">
+        <h3>🧾 Pipeline ownership</h3>
+        <ul class="lp-roles">
+          <li><b>Service pipeline:</b> created &amp; managed by <b>Vikas</b> or the sales team. If Vikas is absent → <b>Sparsha</b>; if both absent → <b>Avedan</b>.</li>
+          <li><b>Consumable pipeline:</b> created by the <b>sales team</b> or <b>Vikas</b>. If Vikas is absent → <b>Sparsha</b>; then → <b>Avedan</b>.</li>
+        </ul>
+      </div>
+    </div>`;
+  }
+
+  // Dispatcher — renders the active view (table / board / analytics / process) into #leadMain.
   function leadMainHtml(filtered, rows0, admin) {
+    if (leadView === "process") return leadProcessHtml();
     if (leadView === "board") return leadBoardHtml(filtered, admin);
     if (leadView === "analytics") return leadAnalyticsHtml(filtered);
     return `<div class="table-wrap"><table class="lead-table${admin ? " has-sel" : ""}">
@@ -6584,6 +6644,7 @@
   function wireLeadMain() {
     if (leadView === "board") wireLeadBoard();
     else if (leadView === "analytics") wireLeadAnalytics();
+    else if (leadView === "process") { /* static SOP — nothing to wire */ }
     else wireLeadRowEdits();
   }
 
@@ -7563,6 +7624,7 @@
             <button type="button" class="lvt${leadView === "table" ? " active" : ""}" data-lv="table" title="Table view">☰ Table</button>
             <button type="button" class="lvt${leadView === "board" ? " active" : ""}" data-lv="board" title="Kanban board — drag cards between stages">▦ Board</button>
             <button type="button" class="lvt${leadView === "analytics" ? " active" : ""}" data-lv="analytics" title="Analytics — funnel, sources, owners and trend">📊 Analytics</button>
+            <button type="button" class="lvt${leadView === "process" ? " active" : ""}" data-lv="process" title="Lead collection & pipeline process (who collects, 8-hour Bigin rule, validation, backups)">📋 Process</button>
           </div>
           <span class="tag" id="leadCount">${leadFiltered(rows0).length} of ${rows0.length}${leadViewArchived ? " archived" : " leads"}</span>
         </div>
