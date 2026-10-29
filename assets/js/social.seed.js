@@ -31,7 +31,7 @@ window.SOCIAL_SEED = {
     // Phone / WhatsApp — only the numbers on the live sites.
     { platform: "Phone",    brand: "Primelaze", id: "+91 97013 82034", fn: "Sales",    owner: "Arjun",           note: "General, Sales & Support — the main number shown site-wide. Arjun posts every enquiry in the WhatsApp group with a screenshot → Mayank enters" },
     { platform: "Phone",    brand: "Primelaze", id: "+91 78459 13001", fn: "HR",       owner: "Sandeepika (HR)", note: "HR & Careers" },
-    { platform: "WhatsApp", brand: "Primelaze", id: "+91 99155 59151", fn: "WhatsApp", owner: "Sparsha",         note: "Site-wide WhatsApp chat button + all wa.me links" },
+    { platform: "WhatsApp", brand: "Primelaze", id: "+91 99155 59151", fn: "WhatsApp", owner: "Vikas",           note: "Site-wide WhatsApp chat button + all wa.me links" },
     { platform: "Phone",    brand: "Casovil",   id: "+91 86109 96995", fn: "Sales",    owner: "Lubdha",          note: "Call & orders — shown site-wide on casovil.com" },
     { platform: "WhatsApp", brand: "Casovil",   id: "+91 86109 96995", fn: "Sales",    owner: "Lubdha",          note: "Casovil WhatsApp chat button + all wa.me links" },
     // Instagram — posting owner (company: Rashmi + Avedan; agency brands: the agency)
