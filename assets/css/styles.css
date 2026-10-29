@@ -1857,3 +1857,13 @@ tr.lead-row-sel > td { background: var(--accent-soft); }
 .lp-table th, .lp-table td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .lp-table th { background: var(--accent-soft); color: var(--fg); font-weight: 700; white-space: nowrap; }
 .lp-table td:last-child { color: var(--muted); line-height: 1.4; }
+.lp-muted { color: var(--muted); font-size: .84rem; }
+.lp-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin-top: 12px; }
+.lp-flow-step { background: var(--card); border: 1px solid var(--accent); color: var(--fg); font-weight: 700;
+  font-size: .8rem; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+.lp-flow-arrow { color: var(--accent); font-weight: 800; }
+.lp-tiers { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.lp-tier { padding: 8px 12px; border-radius: 9px; font-weight: 600; font-size: .86rem; border: 1px solid var(--border); }
+.lp-tier.lp-hot { background: rgba(220, 38, 38, .10); border-color: rgba(220, 38, 38, .35); }
+.lp-tier.lp-warm { background: rgba(217, 160, 10, .12); border-color: rgba(217, 160, 10, .4); }
+.lp-tier.lp-cold { background: var(--accent-soft); }

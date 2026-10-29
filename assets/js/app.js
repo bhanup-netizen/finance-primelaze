@@ -153,7 +153,6 @@
     { id: "offline", label: "Offline Marketing", group: "Marketing", render: renderOffline },
     { id: "weeklyOffline", label: "Offline Duties", group: "Marketing", render: () => renderWeekly("Offline Marketing") },
     { id: "telemarketing", label: "Lead Collection", group: "Marketing", render: renderTelemarketing },
-    { id: "weeklyLead", label: "Lead Duties", group: "Marketing", render: () => renderWeekly("Lead Collection") },
     { id: "passwords", label: "🔑 Passwords", group: "Marketing", render: renderPasswords },
     // Admin & Logistics
     { id: "registration", label: "Registration", group: "Admin & Logistics", render: renderReg },
@@ -6567,60 +6566,117 @@
   }
   function wireLeadAnalytics() { /* read-only view — no interactions to wire */ }
 
-  // Lead collection & pipeline SOP for Primelaze — who collects from each source,
-  // who creates the Bigin pipeline, the 8-hour rule, validation and backups.
+  // Lead collection & pipeline plan for Primelaze — built on standard lead-
+  // management practice (speed-to-lead, one source of truth, qualify → route →
+  // follow up → measure) and the real Primelaze channels from the Coverage
+  // Matrix. Shown both on CRM › Leads (Process view) and Marketing › Lead
+  // Collection, so there is ONE agreed plan.
   function leadProcessHtml() {
     const mail = `<a class="linkish" href="mailto:leads@primelaze.com">leads@primelaze.com</a>`;
-    const flow = `Email to ${mail} (with screenshot or email) → <b>Mayank</b> creates the Pipeline in <b>Bigin within 8 hours</b> (if it's a holiday, by the next morning) and <b>attaches the file</b> → <b>next day Sparsha validates</b> on email &amp; Bigin that the pipeline was created, with the files.`;
+    // Capture → Log → Qualify → Create pipeline → Follow up → Validate → Measure
+    const steps = ["📥 Capture", "📧 Log to leads@", "🧮 Qualify", "🗂 Create pipeline", "📞 Follow&nbsp;up", "✅ Validate", "📊 Measure"];
+    const flowStrip = `<div class="lp-flow">${steps.map((s, i) => `<span class="lp-flow-step">${s}</span>${i < steps.length - 1 ? `<span class="lp-flow-arrow">→</span>` : ""}`).join("")}</div>`;
+    // Response-time standards (tiered). First reply to the CUSTOMER is fast;
+    // pipeline creation & validation follow Primelaze's agreed rule.
+    const slas = [
+      ["First reply to the customer — WhatsApp / DM / social / chat", "Within <b>1 working hour</b>", "Channel owner"],
+      ["First reply to the customer — email", "Within <b>4 working hours</b>", "Channel owner"],
+      ["First reply — phone enquiry", "Answer live; if missed, <b>call back the same working day</b>", "Arjun / sales"],
+      ["Create the pipeline in Bigin (with the file attached)", "Within <b>8 working hours</b> · holiday → next working morning", "Mayank"],
+      ["Validate pipeline on email &amp; Bigin (files present)", "<b>Next working day</b>", "Sparsha"],
+    ];
+    const slaRows = slas.map((s) => `<tr><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td></tr>`).join("");
+    // Where leads come from → who collects → how to route. All route the same
+    // way (the standard flow), so the last column is the single rule.
     const sources = [
       ["📧 Sales Support email", "salessupport@primelaze.com", "Vikas"],
       ["💬 WhatsApp", "+91 99155 59151", "Vikas"],
-      ["💬 Arjun / Dhinesh", "Esthemax &amp; machine-leads WhatsApp group", "Arjun / Dhinesh"],
-      ["📱 Social & marketplaces", "Instagram, Facebook, YouTube, Pinterest, IndiaMart, etc.", "Sparsha"],
+      ["💬 Esthemax &amp; machine leads", "Arjun / Dhinesh WhatsApp group", "Arjun / Dhinesh"],
+      ["📱 Social &amp; marketplaces", "Instagram, Facebook, YouTube, Pinterest, IndiaMart", "Sparsha"],
+      ["🌐 Website", "Contact &amp; Book-a-Demo forms, site WhatsApp &amp; phone, brochure popup", "Channel owner (per Coverage Matrix)"],
     ];
-    const srcRows = sources.map((s) => `<tr><td><b>${s[0]}</b></td><td>${s[1]}</td><td>${esc(s[2])}</td><td>${flow}</td></tr>`).join("");
+    const srcRows = sources.map((s) => `<tr><td><b>${s[0]}</b></td><td>${s[1]}</td><td>${esc(s[2])}</td></tr>`).join("");
     return `<div class="lead-process">
       <div class="lp-card lp-hero">
-        <h3>📥 Central leads mailbox</h3>
-        <p>Every lead — from any source — is emailed to ${mail}. This is the single intake point so nothing is missed and everything is traceable.</p>
+        <h3>📥 One mailbox, one pipeline, one source of truth</h3>
+        <p>Every lead — whatever the source — is emailed to ${mail} and ends up as a <b>pipeline in Bigin</b>, tagged by source. Single intake means nothing is missed, every lead is traceable, and we can measure what works.</p>
+        ${flowStrip}
       </div>
+
       <div class="lp-card">
-        <h3>🔁 The standard flow (every source)</h3>
+        <h3>🔁 The standard flow — every lead, every source</h3>
         <ol class="lp-steps">
-          <li>The source owner <b>collects</b> the lead (screenshot / details).</li>
-          <li><b>Emails it to ${mail}</b> with the screenshot or forwarded email.</li>
-          <li><b>Mayank creates the Pipeline in Bigin within 8 hours</b> (holiday → next morning) and <b>attaches the file</b>.</li>
-          <li><b>The next day, Sparsha validates</b> on email &amp; Bigin that the pipeline was created, with the files.</li>
+          <li><b>Capture</b> the lead the moment it arrives — take a screenshot / note the details. <span class="lp-muted">Reply to the customer inside the SLA below; speed wins deals.</span></li>
+          <li><b>Log it</b>: email to ${mail} with the screenshot or forwarded enquiry.</li>
+          <li><b>Qualify</b> it (BANT, below) and mark it 🔴 Hot / 🟡 Warm / ⚪ Cold.</li>
+          <li><b>Mayank creates the pipeline in Bigin within 8 working hours</b> (holiday → next working morning), tags the <b>source</b>, and <b>attaches the file</b>.</li>
+          <li><b>Follow up</b> on the agreed cadence until the lead is won or closed-lost.</li>
+          <li><b>Sparsha validates the next working day</b> — confirms on email &amp; Bigin that the pipeline exists, with files.</li>
+          <li><b>Measure</b> — review the Analytics tab weekly (see KPIs below).</li>
         </ol>
       </div>
+
       <div class="lp-card">
-        <h3>📋 Sources → who collects → what happens</h3>
+        <h3>⏱ Response-time standards (SLA)</h3>
         <div class="table-wrap"><table class="lp-table">
-          <thead><tr><th>Source</th><th>Channel</th><th>Collected by</th><th>Then</th></tr></thead>
+          <thead><tr><th>Step</th><th>Standard</th><th>Owner</th></tr></thead>
+          <tbody>${slaRows}</tbody>
+        </table></div>
+        <p class="lp-muted" style="margin:8px 0 0">Industry rule of thumb: the faster the first touch, the higher the chance of connecting — treat a hot lead in minutes, not hours.</p>
+      </div>
+
+      <div class="lp-card">
+        <h3>📋 Sources → who collects (all route the same way)</h3>
+        <div class="table-wrap"><table class="lp-table">
+          <thead><tr><th>Source</th><th>Channel / handle</th><th>Collected by</th></tr></thead>
           <tbody>${srcRows}</tbody>
         </table></div>
+        <p class="lp-muted" style="margin:8px 0 0">Every row then follows the standard flow: email ${mail} → Mayank creates the Bigin pipeline (≤8 working hrs, + file) → Sparsha validates next working day.</p>
       </div>
+
       <div class="lp-card">
-        <h3>👥 Roles</h3>
+        <h3>🧮 Qualify every lead — BANT</h3>
         <ul class="lp-roles">
-          <li><b>Collection &amp; WhatsApp-group sharing:</b> Sparsha (leads collected and shared in the WhatsApp group).</li>
-          <li><b>Bigin pipeline creation:</b> Mayank — within 8 hours, holiday → next morning, always attach the file.</li>
-          <li><b>Validation (next day, email + Bigin, with files):</b> Sparsha.</li>
-          <li><b>Backup:</b> Vikas.</li>
+          <li><b>B — Budget:</b> can they fund it? which product tier?</li>
+          <li><b>A — Authority:</b> are we talking to the decision-maker?</li>
+          <li><b>N — Need:</b> what problem / which machine or consumable?</li>
+          <li><b>T — Timeline:</b> buying now, this quarter, or exploring?</li>
+        </ul>
+        <div class="lp-tiers">
+          <span class="lp-tier lp-hot">🔴 Hot — ready / urgent → act now, assign immediately</span>
+          <span class="lp-tier lp-warm">🟡 Warm — interested, needs nurture → scheduled follow-ups</span>
+          <span class="lp-tier lp-cold">⚪ Cold — early / just browsing → nurture list</span>
+        </div>
+      </div>
+
+      <div class="lp-card">
+        <h3>👥 Roles &amp; ownership</h3>
+        <ul class="lp-roles">
+          <li><b>Collection &amp; WhatsApp-group sharing:</b> Sparsha.</li>
+          <li><b>Pipeline entry in Bigin</b> (≤8 working hrs, source-tagged, file attached): Mayank.</li>
+          <li><b>Validation</b> (next working day, email + Bigin, files present): Sparsha.</li>
+          <li><b>Service pipeline:</b> created &amp; managed by <b>Vikas</b> or the sales team → if Vikas absent <b>Sparsha</b> → if both absent <b>Avedan</b>.</li>
+          <li><b>Consumable pipeline:</b> created by the <b>sales team</b> or <b>Vikas</b> → if Vikas absent <b>Sparsha</b> → then <b>Avedan</b>.</li>
         </ul>
       </div>
+
       <div class="lp-card">
-        <h3>🛟 Backup &amp; cover</h3>
+        <h3>🛟 Backup &amp; escalation</h3>
         <ul class="lp-roles">
-          <li><b>Sparsha ⇄ Vikas</b> are each other's backup.</li>
-          <li>If <b>both are unavailable → Avedan</b> covers.</li>
+          <li><b>Sparsha ⇄ Vikas</b> cover for each other; if <b>both are unavailable → Avedan</b>.</li>
+          <li><b>No pipeline in 8 working hours?</b> Sparsha flags it to Mayank; if still open the next morning, escalate to Arjun.</li>
+          <li><b>No file = not validated.</b> Every lead must carry its source screenshot / email before it counts as done.</li>
         </ul>
       </div>
+
       <div class="lp-card">
-        <h3>🧾 Pipeline ownership</h3>
+        <h3>📊 KPIs — review weekly on the Analytics tab</h3>
         <ul class="lp-roles">
-          <li><b>Service pipeline:</b> created &amp; managed by <b>Vikas</b> or the sales team. If Vikas is absent → <b>Sparsha</b>; if both absent → <b>Avedan</b>.</li>
-          <li><b>Consumable pipeline:</b> created by the <b>sales team</b> or <b>Vikas</b>. If Vikas is absent → <b>Sparsha</b>; then → <b>Avedan</b>.</li>
+          <li><b>First-response time</b> — target ≤ 1 hr (chat/DM) / ≤ 4 hrs (email).</li>
+          <li><b>Speed-to-pipeline</b> — target ≤ 8 working hours from intake to Bigin.</li>
+          <li><b>Validation rate</b> — target 100% of leads validated with file attached.</li>
+          <li><b>Leads by source &amp; conversion to Sold</b> — double down on what converts.</li>
+          <li><b>Stuck leads</b> — anything sitting too long in one stage (see the ⚠ Stuck filter).</li>
         </ul>
       </div>
     </div>`;
@@ -8608,16 +8664,18 @@
           ${tbl(["Type", "Email / Number", "Owner", "Purpose"], rows)}</div>`;
       }).join("") + `<div class="muted-note">Logins are on the 🔑 Passwords tab (super admin only).</div>`
       : "";
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-goto]").forEach((a) => (a.onclick = () => go(a.dataset.goto)));
+    }, 0);
     return `
       <div class="section-head">
         <h1>Lead Collection</h1>
-        <p>Every enquiry across all four brands — DMs, WhatsApp, calls and forms — collected, qualified and passed to sales.</p>
+        <p>The agreed plan for capturing, qualifying and routing every enquiry across all brands — built on standard lead-management practice and the real Primelaze channels.</p>
       </div>
-      <div class="callout teal">Owned by <b>${esc(T.owner || "—")}</b> — ${esc(T.note || "")}</div>
-      ${(T.flow || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">How a lead is collected</h3><ol class="soc-addr">${T.flow.map((s) => `<li>${esc(s)}</li>`).join("")}</ol></div>` : ""}
-      ${(T.sources || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Where Sparsha collects leads from</h3><ul class="soc-addr">${T.sources.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
+      ${leadProcessHtml()}
+      <div class="section-title" style="margin:22px 0 6px"><h2 style="margin:0">📇 All inbound channels &amp; contacts</h2></div>
+      <p class="muted-note" style="margin:0 0 4px">The live inboxes, phone numbers and WhatsApp lines a lead can land on. Full channel owners &amp; backups are on the <a class="linkish" data-goto="coverage">Coverage Matrix</a>.</p>
       ${acctSection}
-      ${(T.standards || []).length ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Standards</h3><ul class="soc-addr">${T.standards.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div>` : ""}
       ${L.owner ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Lead entry <span class="t-muted" style="font-weight:400">· ${esc(L.owner)}</span></h3>
         <p style="margin:0 0 8px;color:var(--text-2)">${esc(L.note || "")}</p>
         ${tbl(["Leads for", "Entered in"], routeRows)}</div>` : ""}`;
