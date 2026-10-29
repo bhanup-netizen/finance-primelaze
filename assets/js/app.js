@@ -8842,6 +8842,11 @@
   let brochureDirty = false;    // this session changed brochure data
   let brochureNeedsReseed = false;
   let brochureSeq = brochures.reduce((m, r) => Math.max(m, +String(r.id).replace(/\D/g, "") || 0), 0) + 1;
+  const brochRemovedIds = new Set(); // ids this session deleted (so a merge drops them)
+  // Every brochure needs a stable id so saves can merge by id instead of
+  // replacing the whole array (which would drop another person's brochures).
+  function ensureBrochureIds() { brochures.forEach((b) => { if (b && (b.id == null || b.id === "")) b.id = "br" + (brochureSeq++); }); }
+  ensureBrochureIds();
   const brochTot = (r) => (+r.zk || 0) + (+r.pondy || 0) + (+r.event || 0);
 
   const brochRup = (n) => "₹" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-IN");
@@ -8942,6 +8947,7 @@
       b.onclick = () => {
         const r = brochures[+b.dataset.i]; if (!r) return;
         if (!window.confirm("Remove brochure “" + (r.name || "") + "”?")) return;
+        if (r.id != null) brochRemovedIds.add(r.id);
         brochures.splice(+b.dataset.i, 1); brochureDirty = true;
         saveEdits("Brochure removed"); renderTab("brochures");
       };
@@ -12216,7 +12222,9 @@
       } catch (le) { console.warn("leads doc read failed", le); }
       if (pre == null && !Object.keys(e).length) return;
       // Rebuild admin-managed inventory items BEFORE stock/eta (which key by name→index).
-      ["esthemax", "devices", "celluma"].forEach((k) => {
+      // Skip while this session has unsaved inventory edits so a live refresh
+      // can't drop a just-added item before it's saved (merge-on-save reconciles).
+      if (!invDirty) ["esthemax", "devices", "celluma"].forEach((k) => {
         if (e.invAdds && Array.isArray(e.invAdds[k])) invAdds[k] = e.invAdds[k];
         if (e.invRemovals && Array.isArray(e.invRemovals[k])) invRemovals[k] = e.invRemovals[k];
       });
@@ -12283,15 +12291,20 @@
         }
       });
       // Brochure stock — keep stored data when it is current-version, else re-seed.
-      if (typeof e.brochureVersion === "number") brochureVersion = e.brochureVersion;
-      if (Array.isArray(e.brochures) && brochureVersion >= (BROCHURE.version || 1)) {
-        brochures = e.brochures;
-      } else {
-        brochures = JSON.parse(JSON.stringify(BROCHURE.rows || []));
-        brochureVersion = BROCHURE.version || 1;
-        brochureNeedsReseed = true;
+      // Don't overwrite brochures while this session has unsaved brochure edits
+      // (a live refresh would wipe them); the merge-on-save reconciles instead.
+      if (!brochureDirty) {
+        if (typeof e.brochureVersion === "number") brochureVersion = e.brochureVersion;
+        if (Array.isArray(e.brochures) && brochureVersion >= (BROCHURE.version || 1)) {
+          brochures = e.brochures;
+        } else {
+          brochures = JSON.parse(JSON.stringify(BROCHURE.rows || []));
+          brochureVersion = BROCHURE.version || 1;
+          brochureNeedsReseed = true;
+        }
+        brochureSeq = brochures.reduce((m, r) => Math.max(m, +String(r.id).replace(/\D/g, "") || 0), 0) + 1;
+        ensureBrochureIds();
       }
-      brochureSeq = brochures.reduce((m, r) => Math.max(m, +String(r.id).replace(/\D/g, "") || 0), 0) + 1;
       if (!inductionDirty && e.induction && typeof e.induction === "object" && Array.isArray(e.induction.phases)) { induction = e.induction; const iids = indAllItems().concat(induction.phases, induction.flow || []).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); indSeq = Math.max(indSeq, ...(iids.length ? iids : [0])) + 1; }
       if (e.coverage && typeof e.coverage === "object" && Array.isArray(e.coverage.rows)) {
         const CUR = COVERAGE_SEED.version || 1;
@@ -12664,6 +12677,19 @@
         if (serverData.invLines) wInvLines = serverData.invLines;
         if (serverData.invAdds) wInvAdds = serverData.invAdds;
         if (serverData.invRemovals) wInvRemovals = serverData.invRemovals;
+      } else if (serverData && invDirty) {
+        // invAdds / invRemovals are ARRAYS (Firestore replaces them on write), so
+        // a stale save could drop items another person added. UNION ours with the
+        // server's current lists per line so nothing is lost. (The stock-number
+        // maps above deep-merge safely on their own.)
+        const uniBy = (a, b, keyf) => { const seen = new Set(), out = []; [].concat(Array.isArray(a) ? a : [], Array.isArray(b) ? b : []).forEach((x) => { const k = keyf(x); if (k && !seen.has(k)) { seen.add(k); out.push(x); } }); return out; };
+        const nameKey = (x) => (typeof x === "string" ? x : String((x && x.name) || "")).toLowerCase().trim();
+        const sa = serverData.invAdds || {}, sr = serverData.invRemovals || {};
+        wInvAdds = {}; wInvRemovals = {};
+        ["esthemax", "devices", "celluma"].forEach((ln) => {
+          wInvAdds[ln] = uniBy(sa[ln], (invAdds || {})[ln], nameKey);
+          wInvRemovals[ln] = uniBy(sr[ln], (invRemovals || {})[ln], (x) => String(x || "").toLowerCase().trim());
+        });
       }
       // Leads are persisted separately below as per-id map keys with set+merge,
       // so there is no stale-copy writeback or array rebuild here any more — a
@@ -12681,12 +12707,26 @@
         if (typeof serverData.payHideAll === "boolean") wPayHideAll = serverData.payHideAll;
         if (typeof serverData.payHideBase === "boolean") wPayHideBase = serverData.payHideBase;
       }
-      // Brochure stock: same protection — write the server's copy back unless
-      // this session actually changed the brochure data.
-      let wBrochures = brochures, wBrochureVersion = brochureVersion;
+      // Brochure stock: brochures live in ONE array, which Firestore REPLACES on
+      // write — so a stale/concurrent save used to drop other people's brochures
+      // & movements. Now: if we didn't touch it, write the server's copy back; if
+      // we did, MERGE our brochures onto the server's current list BY ID (ours win
+      // for ids we changed, server's kept for ids we didn't, our deletions dropped)
+      // so nothing is ever clobbered. If the re-read failed, skip the write.
+      let wBrochures = brochures, wBrochureVersion = brochureVersion, brochureSafe = true;
       if (serverData && !brochureDirty) {
         if (Array.isArray(serverData.brochures)) wBrochures = serverData.brochures;
         if (typeof serverData.brochureVersion === "number") wBrochureVersion = serverData.brochureVersion;
+      } else if (serverData && brochureDirty) {
+        ensureBrochureIds();
+        const byId = new Map();
+        (Array.isArray(serverData.brochures) ? serverData.brochures : []).forEach((b) => { if (b && b.id != null) byId.set(b.id, b); });
+        brochures.forEach((b) => { if (b && b.id != null) byId.set(b.id, b); });
+        brochRemovedIds.forEach((id) => byId.delete(id));
+        wBrochures = Array.from(byId.values());
+        if (typeof serverData.brochureVersion === "number") wBrochureVersion = Math.max(brochureVersion || 0, serverData.brochureVersion);
+      } else if (!serverData && brochureDirty) {
+        brochureSafe = false; // re-read failed — don't risk clobbering the list
       }
       // Registration: same protection as leads. If this session never touched
       // registration, write the SERVER's copy back so a save from another module
@@ -12762,7 +12802,7 @@
         const payload = { seedVersion, hqTargetSeedVersion, weeklyDeptVersion, updatedBy: by, updatedAt: at, log: mergedLog, ...P };
         if (invDirty) Object.assign(payload, { stockPy: wStockPy, stockZk: wStockZk, dmgPy: wDmgPy, dmgZk: wDmgZk, ordered: wOrdered, orderedOn: wOrderedOn, hold: wHold, invMovesE: wInvMovesE, invLines: wInvLines, invAdds: wInvAdds, invRemovals: wInvRemovals });
         if (payDirty) Object.assign(payload, { paymentAdds: wPaymentAdds, paySnapshots: wPaySnapshots, payTrack: wPayTrack, payClearBefore: wPayClearBefore, payHideAll: wPayHideAll, payHideBase: wPayHideBase });
-        if (brochureDirty) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
+        if (brochureDirty && brochureSafe) Object.assign(payload, { brochures: wBrochures, brochureVersion: wBrochureVersion });
         if (regDirty) Object.assign(payload, { regDocs: wRegDocs, regTrack: wRegTrack, regItemEdits: wRegItemEdits, regAdds: wRegAdds, regMoved: wRegMoved });
 
         // LEADS → edits/leads, written as per-id MAP keys with set+merge.
