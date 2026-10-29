@@ -6586,16 +6586,6 @@
       ["Validate pipeline on email &amp; Bigin (files present)", "<b>Next working day</b>", "Sparsha"],
     ];
     const slaRows = slas.map((s) => `<tr><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td></tr>`).join("");
-    // Where leads come from → who collects → how to route. All route the same
-    // way (the standard flow), so the last column is the single rule.
-    const sources = [
-      ["🌐 Website forms", "Contact &amp; Book-a-Demo (go straight to leads@primelaze.com)", "Auto → Mayank"],
-      ["💬 WhatsApp", "+91 99155 59151 (Primelaze) · +91 86109 96995 (Casovil)", "Vikas / Lubdha"],
-      ["📞 Phone", "+91 97013 82034 (Primelaze, site-wide)", "Sales (Arjun)"],
-      ["💬 Esthemax &amp; machine leads", "Arjun / Dhinesh WhatsApp group", "Arjun / Dhinesh"],
-      ["📱 Social &amp; marketplaces", "Instagram, Facebook, YouTube, Pinterest, IndiaMart", "Sparsha"],
-    ];
-    const srcRows = sources.map((s) => `<tr><td><b>${s[0]}</b></td><td>${s[1]}</td><td>${esc(s[2])}</td></tr>`).join("");
     return `<div class="lead-process">
       <div class="lp-card lp-hero">
         <h3>📥 One mailbox, one pipeline, one source of truth</h3>
@@ -6608,7 +6598,6 @@
         <ol class="lp-steps">
           <li><b>Capture</b> the lead the moment it arrives — take a screenshot / note the details. <span class="lp-muted">Reply to the customer inside the SLA below; speed wins deals.</span></li>
           <li><b>Log it</b>: email to ${mail} with the screenshot or forwarded enquiry.</li>
-          <li><b>Qualify</b> it (BANT, below) and mark it 🔴 Hot / 🟡 Warm / ⚪ Cold.</li>
           <li><b>Mayank creates the pipeline in Bigin within 8 working hours</b> (holiday → next working morning), tags the <b>source</b>, and <b>attaches the file</b>.</li>
           <li><b>Follow up</b> on the agreed cadence until the lead is won or closed-lost.</li>
           <li><b>Sparsha validates the next working day</b> — confirms on email &amp; Bigin that the pipeline exists, with files.</li>
@@ -6625,14 +6614,6 @@
         <p class="lp-muted" style="margin:8px 0 0">Industry rule of thumb: the faster the first touch, the higher the chance of connecting — treat a hot lead in minutes, not hours.</p>
       </div>
 
-      <div class="lp-card">
-        <h3>📋 Sources → who collects (all route the same way)</h3>
-        <div class="table-wrap"><table class="lp-table">
-          <thead><tr><th>Source</th><th>Channel / handle</th><th>Collected by</th></tr></thead>
-          <tbody>${srcRows}</tbody>
-        </table></div>
-        <p class="lp-muted" style="margin:8px 0 0">Every row then follows the standard flow: email ${mail} → Mayank creates the Bigin pipeline (≤8 working hrs, + file) → Sparsha validates next working day.</p>
-      </div>
 
       <div class="lp-card">
         <h3>👥 Roles &amp; ownership</h3>
