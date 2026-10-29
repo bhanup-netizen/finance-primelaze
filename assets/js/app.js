@@ -6589,11 +6589,11 @@
     // Where leads come from → who collects → how to route. All route the same
     // way (the standard flow), so the last column is the single rule.
     const sources = [
-      ["📧 Sales Support email", "salessupport@primelaze.com", "Vikas"],
-      ["💬 WhatsApp", "+91 99155 59151", "Vikas"],
+      ["🌐 Website forms", "Contact &amp; Book-a-Demo (go straight to leads@primelaze.com)", "Auto → Mayank"],
+      ["💬 WhatsApp", "+91 99155 59151 (Primelaze) · +91 86109 96995 (Casovil)", "Vikas / Lubdha"],
+      ["📞 Phone", "+91 97013 82034 (Primelaze, site-wide)", "Sales (Arjun)"],
       ["💬 Esthemax &amp; machine leads", "Arjun / Dhinesh WhatsApp group", "Arjun / Dhinesh"],
       ["📱 Social &amp; marketplaces", "Instagram, Facebook, YouTube, Pinterest, IndiaMart", "Sparsha"],
-      ["🌐 Website", "Contact &amp; Book-a-Demo forms, site WhatsApp &amp; phone, brochure popup", "Channel owner (per Coverage Matrix)"],
     ];
     const srcRows = sources.map((s) => `<tr><td><b>${s[0]}</b></td><td>${s[1]}</td><td>${esc(s[2])}</td></tr>`).join("");
     return `<div class="lead-process">

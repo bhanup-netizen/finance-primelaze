@@ -23,25 +23,17 @@ window.SOCIAL_SEED = {
     // Websites
     { platform: "Website", brand: "Primelaze", id: "primelaze.com", link: "https://primelaze.com", owner: "Vikas", note: "Company website" },
     { platform: "Website", brand: "Casovil",   id: "casovil.com",   link: "https://casovil.com",   owner: "Vikas", note: "E-commerce / orders site" },
-    // Emails — ★ = live on the public primelaze.com site (verified from the
-    // website source). leads@ + hr@ are the only two on the public site; the
-    // support-portal addresses and catch-alls are internal.
-    { platform: "Email", brand: "Primelaze", id: "leads@primelaze.com",          fn: "Sales",   owner: "Mayank",          note: "★ Website — General, Sales & Support. The Contact & Book-a-Demo forms and the mailto link all go here; Mayank creates the Bigin pipeline. (Mayank has access.)" },
-    { platform: "Email", brand: "Primelaze", id: "hr@primelaze.com",             fn: "HR",      owner: "Sandeepika (HR)", note: "★ Website — HR & Careers (careers form via FormSubmit + mailto)" },
-    { platform: "Email", brand: "Primelaze", id: "salessupport@primelaze.com",   fn: "Sales",   owner: "Sparsha",         note: "Support portal — Sales support (not on the public website)" },
-    { platform: "Email", brand: "Primelaze", id: "servicesupport@primelaze.com", fn: "Service", owner: "Vikas",           note: "Support portal — Service / technical support (not on the public website)" },
-    { platform: "Email", brand: "Primelaze", id: "calls@primelaze.com",          fn: "Sales",   owner: "Sparsha",         note: "Internal enquiry inbox — not on the public website" },
-    { platform: "Email", brand: "Primelaze", id: "info@primelaze.com",           fn: "General", owner: "Sparsha",         note: "General / catch-all — not on the public website" },
-    { platform: "Email", brand: "Casovil",   id: "sales@casovil.com",          fn: "Sales",   owner: "Sparsha",         note: "★ Casovil website — Sales & orders (contact form + mailto)" },
-    { platform: "Email", brand: "Casovil",   id: "info@casovil.com",           fn: "General", owner: "Sparsha",         note: "Not on the public Casovil site — internal / catch-all" },
-    { platform: "Email", brand: "Casovil",   id: "itsupport@primelaze.com",    fn: "Admin",   owner: "Bhanu",           note: "Admin login only — order-management backend (not public)" },
-    // Phone / WhatsApp — ★ = live on the public primelaze.com site (verified).
-    { platform: "Phone",    brand: "Primelaze", id: "+91 97013 82034", fn: "Sales",    owner: "Vikas",           note: "★ Website — General, Sales & Support (the main number shown site-wide)" },
-    { platform: "Phone",    brand: "Primelaze", id: "+91 78459 13001", fn: "HR",       owner: "Sandeepika (HR)", note: "★ Website — HR & Careers" },
-    { platform: "WhatsApp", brand: "Primelaze", id: "+91 99155 59151", fn: "WhatsApp", owner: "Sparsha",         note: "★ Website — site-wide WhatsApp chat button + all wa.me links" },
-    { platform: "Phone",    brand: "Primelaze", id: "+91 74167 35111", fn: "Sales",    owner: "Sparsha",         note: "⚠ Not shown on the current website — legacy / other line (confirm or remove)" },
-    { platform: "Phone",    brand: "Casovil",   id: "+91 86109 96995", fn: "Sales",    owner: "Lubdha",          note: "★ Casovil website — Call & orders (site-wide)" },
-    { platform: "WhatsApp", brand: "Casovil",   id: "+91 86109 96995", fn: "Sales",    owner: "Lubdha",          note: "★ Casovil website — WhatsApp chat button + all wa.me links" },
+    // Emails — ONLY the addresses actually on the live websites (verified from
+    // the primelaze.com & casovil.com source repos). Nothing internal/legacy.
+    { platform: "Email", brand: "Primelaze", id: "leads@primelaze.com",          fn: "Sales",   owner: "Mayank",          note: "General, Sales & Support. Contact & Book-a-Demo forms + mailto all go here; Mayank creates the Bigin pipeline. (Mayank has access.)" },
+    { platform: "Email", brand: "Primelaze", id: "hr@primelaze.com",             fn: "HR",      owner: "Sandeepika (HR)", note: "HR & Careers (careers form via FormSubmit + mailto)" },
+    { platform: "Email", brand: "Casovil",   id: "sales@casovil.com",            fn: "Sales",   owner: "Sparsha",         note: "Sales & orders (contact form + mailto)" },
+    // Phone / WhatsApp — only the numbers on the live sites.
+    { platform: "Phone",    brand: "Primelaze", id: "+91 97013 82034", fn: "Sales",    owner: "Vikas",           note: "General, Sales & Support — the main number shown site-wide" },
+    { platform: "Phone",    brand: "Primelaze", id: "+91 78459 13001", fn: "HR",       owner: "Sandeepika (HR)", note: "HR & Careers" },
+    { platform: "WhatsApp", brand: "Primelaze", id: "+91 99155 59151", fn: "WhatsApp", owner: "Sparsha",         note: "Site-wide WhatsApp chat button + all wa.me links" },
+    { platform: "Phone",    brand: "Casovil",   id: "+91 86109 96995", fn: "Sales",    owner: "Lubdha",          note: "Call & orders — shown site-wide on casovil.com" },
+    { platform: "WhatsApp", brand: "Casovil",   id: "+91 86109 96995", fn: "Sales",    owner: "Lubdha",          note: "Casovil WhatsApp chat button + all wa.me links" },
     // Instagram — posting owner (company: Rashmi + Avedan; agency brands: the agency)
     { platform: "Instagram", brand: "Primelaze", id: "primelazemeditech", link: "https://instagram.com/primelazemeditech", owner: "Rashmi + Avedan", login: "primelazemeditech",   pass: "Ju5645@P" },
     { platform: "Instagram", brand: "Celluma",   id: "Celluma_india",     link: "https://instagram.com/Celluma_india",     owner: "Rashmi + Avedan", login: "Celluma_india",       pass: "Primelaze@Zirakhpur" },
