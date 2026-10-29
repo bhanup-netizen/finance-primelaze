@@ -8,20 +8,20 @@
    backups start blank for Marketing to assign. Fully editable.
    ============================================================ */
 window.COVERAGE_SEED = {
-  version: 9,
-  note: "Two parts: who POSTS content, and who MANAGES DMs, messages, calls & emails. Each row has an owner, a backup (for leave), and the action they must do. Contacts match the live primelaze.com & casovil.com sites (verified from source): Primelaze leads@ + hr@, +91 97013 82034 (General/Sales/Support), +91 78459 13001 (HR), WhatsApp +91 99155 59151; Casovil sales@casovil.com + +91 86109 96995. Editable by Marketing/Admin — saves for everyone.",
+  version: 10,
+  note: "Two parts: who POSTS content (now all handled by the agency Buzzfied, with Avedan + Rashmi as backup — reviewing & approving), and who MANAGES DMs, messages, calls & emails. The posting section is split into Primelaze (Primelaze · Celluma · Esthemax) and Casovil. Contacts match the live primelaze.com & casovil.com sites: Primelaze leads@ + hr@, +91 97013 82034 (General/Sales/Support), +91 78459 13001 (HR), WhatsApp +91 99155 59151 (Vikas); Casovil sales@casovil.com + +91 86109 96995. Editable by Marketing/Admin — saves for everyone.",
   rows: [
     // ---------- PART 1 · Who posts (content) ----------
-    { id: "p1",  part: "post", channel: "Instagram", account: "Primelaze — @primelazemeditech", primary: "Rashmi + Avedan", backup: "", notes: "Post per approved calendar (3–5/week + daily stories); community-manage." },
-    { id: "p2",  part: "post", channel: "Instagram", account: "Celluma — @Celluma_india",        primary: "Rashmi + Avedan", backup: "", notes: "Post per approved calendar; community-manage." },
-    { id: "p3",  part: "post", channel: "Instagram", account: "Esthemax — @esthemax.india",       primary: "ClanConnect (agency)", backup: "Avedan (client-side)", notes: "Agency posts; Avedan briefs, reviews & approves the calendar." },
-    { id: "p4",  part: "post", channel: "Instagram", account: "Casovil — @casovil.world",         primary: "Buzzfied (agency)",    backup: "Avedan (client-side)", notes: "Agency posts; Avedan briefs, reviews & approves the calendar." },
-    { id: "p5",  part: "post", channel: "Facebook",  account: "Primelaze",                         primary: "Rashmi + Avedan", backup: "", notes: "Post per approved calendar; reshare Instagram content." },
-    { id: "p6",  part: "post", channel: "Facebook",  account: "Esthemax",                          primary: "ClanConnect (agency)", backup: "Avedan (client-side)", notes: "Agency posts; Avedan reviews & approves." },
-    { id: "p7",  part: "post", channel: "YouTube",   account: "Primelaze — @marketingprimelaze",  primary: "Rashmi + Avedan", backup: "", notes: "Upload demo/education videos per plan; titles, thumbnails, tags." },
-    { id: "p8",  part: "post", channel: "LinkedIn",  account: "Primelaze — company page",          primary: "Rashmi + Avedan", backup: "", notes: "Post company/product updates; engage relevant pages." },
-    { id: "p9",  part: "post", channel: "Pinterest", account: "Primelaze",                         primary: "Rashmi + Avedan", backup: "", notes: "Pin product/creative content per plan." },
-    { id: "p10", part: "post", channel: "Indiamart", account: "Primelaze — 7339513001",           primary: "Rashmi + Avedan", backup: "", notes: "Keep catalogue & product listings updated. (OTP login on Dhinesh sir's number.)" },
+    { id: "p1",  part: "post", channel: "Instagram", account: "Primelaze — @primelazemeditech", primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied posts per approved calendar (3–5/week + daily stories); Avedan + Rashmi brief, review & approve; community-manage." },
+    { id: "p2",  part: "post", channel: "Instagram", account: "Celluma — @Celluma_india",        primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied posts per approved calendar; Avedan + Rashmi brief, review & approve." },
+    { id: "p3",  part: "post", channel: "Instagram", account: "Esthemax — @esthemax.india",       primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied posts; Avedan + Rashmi brief, review & approve the calendar." },
+    { id: "p5",  part: "post", channel: "Facebook",  account: "Primelaze",                         primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied posts per approved calendar; reshare Instagram content." },
+    { id: "p6",  part: "post", channel: "Facebook",  account: "Esthemax",                          primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied posts; Avedan + Rashmi review & approve." },
+    { id: "p7",  part: "post", channel: "YouTube",   account: "Primelaze — @marketingprimelaze",  primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied uploads demo/education videos per plan; Avedan + Rashmi review & approve." },
+    { id: "p8",  part: "post", channel: "LinkedIn",  account: "Primelaze — company page",          primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied posts company/product updates; engages relevant pages." },
+    { id: "p9",  part: "post", channel: "Pinterest", account: "Primelaze",                         primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied pins product/creative content per plan." },
+    { id: "p10", part: "post", channel: "Indiamart", account: "Primelaze — 7339513001",           primary: "Rashmi + Avedan", backup: "", notes: "Keep catalogue & product listings updated (handled in-house, not the agency). (OTP login on Dhinesh sir's number.)" },
+    { id: "p4",  part: "post", channel: "Instagram", account: "Casovil — @casovil.world",         primary: "Buzzfied (agency)", backup: "Avedan + Rashmi", notes: "Buzzfied posts; Avedan + Rashmi brief, review & approve the calendar." },
     // ---------- PART 2 · Who manages DMs & messages ----------
     { id: "d1",  part: "dm", channel: "Instagram", account: "DMs, comments & story replies (all brands)", primary: "Sparsha", backup: "", notes: "Reply within 1 hr (working hrs); qualify & pass hot leads to Mayank." },
     { id: "d2",  part: "dm", channel: "Facebook",  account: "Page messages & comments (all brands)",      primary: "Sparsha", backup: "", notes: "Reply within 1 hr; qualify & forward leads to Mayank." },

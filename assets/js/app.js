@@ -9715,19 +9715,33 @@
         <td data-label="Action / what to do" class="cov-action">${esc(r.notes || "—")}</td>
       </tr>`;
     };
+    // Which brand a row belongs to (for the Casovil / Primelaze split).
+    const covBrandGrp = (r) => /casovil/i.test((r.account || "") + " " + (r.channel || "")) ? "Casovil" : "Primelaze";
+    const tblFor = (rowsArr, head, cols) => `<div class="table-wrap"><table class="cov-table"><thead>${head}</thead><tbody>${rowsArr.length ? rowsArr.map(rowHtml).join("") : `<tr><td colspan="${cols}" class="empty">No channels yet.</td></tr>`}</tbody></table></div>`;
     const parts = COV_PARTS.map((p) => {
       const inPart = list.filter((x) => partOf(x.r) === p.key);
       const gaps = inPart.filter((x) => (x.r.primary || "").trim() && !(x.r.backup || "").trim()).length;
       const cols = ed ? 6 : 5;
       const head = `<tr><th>Channel</th><th>Account / number</th><th>Primary owner</th><th>Backup (on leave)</th><th>Action / what to do</th>${ed ? "<th></th>" : ""}</tr>`;
-      const body = inPart.length ? inPart.map(rowHtml).join("") : `<tr><td colspan="${cols}" class="empty">No channels yet.</td></tr>`;
+      let bodyHtml;
+      if (p.key === "post") {
+        // Split the posting channels into separate Primelaze and Casovil blocks.
+        const BR = [["Primelaze", "🟥 Primelaze · Celluma · Esthemax"], ["Casovil", "🟩 Casovil"]];
+        bodyHtml = BR.map(([g, label]) => {
+          const rg = inPart.filter((x) => covBrandGrp(x.r) === g);
+          if (!rg.length) return "";
+          return `<div class="cov-brandgrp"><h4 class="cov-brandh">${esc(label)} <span class="tag">${rg.length}</span></h4>${tblFor(rg, head, cols)}</div>`;
+        }).join("");
+      } else {
+        bodyHtml = tblFor(inPart, head, cols);
+      }
       return `<section class="cov-part" data-part="${p.key}">
         <div class="cov-part-head"><span class="cov-part-icon">${p.icon}</span>
           <div><div class="cov-part-title">${esc(p.label)} <span class="tag">${inPart.length}</span>${gaps ? ` <span class="cov-gap-tag">${gaps} no backup</span>` : ""}</div>
           <div class="cov-part-sub">${esc(p.sub)}</div></div>
           ${ed ? `<button type="button" class="ghost-btn cov-add" data-part="${p.key}" style="margin-left:auto">＋ Add ${p.key === "post" ? "posting" : "message"} channel</button>` : ""}
         </div>
-        <div class="table-wrap"><table class="cov-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+        ${bodyHtml}
       </section>`;
     }).join("");
     const sum = (n, l, cls) => `<div class="cov-sum ${cls || ""}"><div class="cov-sum-n">${n}</div><div class="cov-sum-l">${esc(l)}</div></div>`;
