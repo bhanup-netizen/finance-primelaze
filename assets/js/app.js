@@ -6634,14 +6634,27 @@
 
       <div class="lp-card">
         <h3>📬 Per-channel entry &amp; routing</h3>
+
+        <h4 class="cov-brandh" style="margin:4px 0 6px">🟥 Primelaze · Celluma · Esthemax</h4>
         <div class="table-wrap"><table class="lp-table">
           <thead><tr><th>Channel</th><th>Who sends it in</th><th>Who enters / backup</th></tr></thead>
           <tbody>
             <tr><td><b>🌐 Website forms</b> — Contact &amp; Book-a-Demo</td><td>Auto → leads@primelaze.com</td><td>Mayank enters · Sparsha validates</td></tr>
             <tr><td><b>📞 Phone +91 97013 82034 (Arjun)</b></td><td>Arjun posts every enquiry in the WhatsApp group with a screenshot</td><td>Sparsha collects → Mayank enters</td></tr>
-            <tr><td><b>💬 Casovil WhatsApp / Phone +91 86109 96995 (Lubdha)</b></td><td>Lubdha updates Mayank (cc Sparsha)</td><td>Mayank enters · Sparsha backup</td></tr>
-            <tr><td><b>📧 Casovil email — sales@casovil.com (Sparsha)</b></td><td>Sparsha updates Mayank</td><td>Mayank enters</td></tr>
-            <tr><td><b>🎪 Conferences / events</b></td><td>Sparsha appoints a point-of-contact at the event; that person shares the visitor forms (with photo) on WhatsApp to Sparsha</td><td>Sparsha passes to Mayank → Mayank enters in Bigin / Primelaze CRM. If Mayank is overloaded / unavailable, Sparsha enters.</td></tr>
+            <tr><td><b>💬 WhatsApp +91 99155 59151 (Vikas)</b></td><td>Vikas answers &amp; shares in the WhatsApp group</td><td>Mayank enters · Sparsha backup</td></tr>
+            <tr><td><b>📱 Social &amp; marketplaces</b> — Instagram, Facebook, YouTube, Pinterest, IndiaMart</td><td>Sparsha collects &amp; shares in the group</td><td>Mayank enters</td></tr>
+            <tr><td><b>💬 Esthemax &amp; machine leads</b> — Arjun / Dhinesh WhatsApp group</td><td>Arjun / Dhinesh share in the group</td><td>Mayank enters</td></tr>
+            <tr><td><b>🎪 Conferences / events</b></td><td>Sparsha appoints a point-of-contact; they share the visitor forms (with photo) on WhatsApp to Sparsha</td><td>Sparsha → Mayank enters (Sparsha if Mayank overloaded)</td></tr>
+          </tbody>
+        </table></div>
+
+        <h4 class="cov-brandh" style="margin:16px 0 6px">🟩 Casovil</h4>
+        <div class="table-wrap"><table class="lp-table">
+          <thead><tr><th>Channel</th><th>Who sends it in</th><th>Who enters / backup</th></tr></thead>
+          <tbody>
+            <tr><td><b>💬 WhatsApp / 📞 Phone +91 86109 96995 (Lubdha)</b></td><td>Lubdha updates Mayank (cc Sparsha)</td><td>Mayank enters · Sparsha backup</td></tr>
+            <tr><td><b>📧 Email — sales@casovil.com (Sparsha)</b></td><td>Sparsha updates Mayank</td><td>Mayank enters</td></tr>
+            <tr><td><b>📱 Casovil social</b> — Instagram @casovil.world DMs (Sparsha)</td><td>Sparsha collects &amp; shares</td><td>Mayank enters</td></tr>
           </tbody>
         </table></div>
       </div>
@@ -9723,18 +9736,13 @@
       const gaps = inPart.filter((x) => (x.r.primary || "").trim() && !(x.r.backup || "").trim()).length;
       const cols = ed ? 6 : 5;
       const head = `<tr><th>Channel</th><th>Account / number</th><th>Primary owner</th><th>Backup (on leave)</th><th>Action / what to do</th>${ed ? "<th></th>" : ""}</tr>`;
-      let bodyHtml;
-      if (p.key === "post") {
-        // Split the posting channels into separate Primelaze and Casovil blocks.
-        const BR = [["Primelaze", "🟥 Primelaze · Celluma · Esthemax"], ["Casovil", "🟩 Casovil"]];
-        bodyHtml = BR.map(([g, label]) => {
-          const rg = inPart.filter((x) => covBrandGrp(x.r) === g);
-          if (!rg.length) return "";
-          return `<div class="cov-brandgrp"><h4 class="cov-brandh">${esc(label)} <span class="tag">${rg.length}</span></h4>${tblFor(rg, head, cols)}</div>`;
-        }).join("");
-      } else {
-        bodyHtml = tblFor(inPart, head, cols);
-      }
+      // Split BOTH sections into separate Primelaze and Casovil blocks.
+      const BR = [["Primelaze", "🟥 Primelaze · Celluma · Esthemax"], ["Casovil", "🟩 Casovil"]];
+      const bodyHtml = BR.map(([g, label]) => {
+        const rg = inPart.filter((x) => covBrandGrp(x.r) === g);
+        if (!rg.length) return "";
+        return `<div class="cov-brandgrp"><h4 class="cov-brandh">${esc(label)} <span class="tag">${rg.length}</span></h4>${tblFor(rg, head, cols)}</div>`;
+      }).join("");
       return `<section class="cov-part" data-part="${p.key}">
         <div class="cov-part-head"><span class="cov-part-icon">${p.icon}</span>
           <div><div class="cov-part-title">${esc(p.label)} <span class="tag">${inPart.length}</span>${gaps ? ` <span class="cov-gap-tag">${gaps} no backup</span>` : ""}</div>
