@@ -288,6 +288,8 @@
   const customHQs = [];   // admin-added base-HQ cities
   const customDesignations = []; // admin-added designations/roles
   const rosterRemovals = []; // nums of original roster people deleted by admin
+  const seedRemovedEmpIds = []; // empIds of SEED_SERVICE_TEAM people an admin deleted
+                                // — so seedServiceTeam() does NOT re-add them on load.
   let rosterDirty = false;   // this session changed the team roster (protects unsaved edits on refresh)
   // Uploaded KRA docs per position, keyed by card id ("aid:xx" / "num:xx").
   // Value: { name, url, path, size, at, by }. File bytes live in Firebase Storage.
@@ -314,6 +316,10 @@
     { empId: "PLM0094", name: "Brajeshkumar Veeramuthu", designation: "Sales Executive", reportsTo: "Arjun", baseHQ: "Chennai", dept: "Sales" },
     { empId: "PLM0116", name: "Ashutosh Galge", designation: "Trainee", reportsTo: "Ms. Lubdha", division: "Salon/Spa", dept: "Sales" },
   ];
+  // Set of all employee numbers the service-team seed knows about — used to tell
+  // whether a deleted person came from the seed (and so must be remembered as
+  // removed, or the seed would re-add them on the next load).
+  const SEED_SERVICE_EMPIDS = new Set(SEED_SERVICE_TEAM.map((s) => String(s.empId || "").toUpperCase()));
   // Employee numbers for existing base-roster people, matched by exact name.
   const EMP_ID_BY_NAME = {
     "Akshay Jain": "PLM0096", "Ambika Anand": "PLM0041", "Ibrahim": "PLM0006",
@@ -324,15 +330,24 @@
   const SEED_REMOVE_EMPIDS = new Set(["PLM0014", "LHR0011", "LHR0007"]); // Bala; Harshita; Manjot
   // People to remove by exact name (base roster rows the user asked to delete).
   const SEED_REMOVE_NAMES = new Set(["Ranjith"]);
+  // One-time removals of SEED_SERVICE_TEAM people an admin deleted but the seed
+  // used to keep re-adding. Applied once when SEED_VERSION bumps, then remembered
+  // in seedRemovedEmpIds so they stay gone (and can be re-added manually later).
+  const SEED_REMOVE_SERVICE_EMPIDS = ["PLM0098"]; // Viisvesh S — removed by HR
   // Bump whenever the seed definitions above change so the reconcile re-applies once.
-  const SEED_VERSION = 3;
+  const SEED_VERSION = 4;
   let seedVersion = 0; // last applied seed version, restored from the edits doc
   function seedServiceTeam() {
     if (!(roleIsAdmin() || hasAnyEditGrant())) return; // only writers seed + persist
     let changed = 0;
-    // Drop ignored people that a previous seed may have added.
+    // Drop ignored people that a previous seed may have added — the hardcoded
+    // ignore list PLUS any seed person an admin has explicitly deleted
+    // (seedRemovedEmpIds), so a re-added duplicate from an older/stale save is
+    // cleaned up and never shown again.
     for (let i = rosterAdds.length - 1; i >= 0; i--) {
-      if (SEED_REMOVE_EMPIDS.has(String(rosterAdds[i].empId || "").toUpperCase())
+      const eid = String(rosterAdds[i].empId || "").toUpperCase();
+      if (SEED_REMOVE_EMPIDS.has(eid)
+        || seedRemovedEmpIds.includes(eid)
         || SEED_REMOVE_NAMES.has(String(rosterAdds[i].name || "").trim())) { rosterAdds.splice(i, 1); changed++; }
     }
     // Remove named base-roster people (via rosterRemovals, keyed by num).
@@ -342,6 +357,7 @@
     const have = new Set(roster().map((p) => String(rval(p, "empId") || "").toUpperCase()).filter(Boolean));
     SEED_SERVICE_TEAM.forEach((s) => {
       if (have.has(s.empId.toUpperCase())) return;
+      if (seedRemovedEmpIds.includes(String(s.empId || "").toUpperCase())) return; // admin deleted — don't re-add
       rosterAdds.push({ _aid: "r" + (rosterAddSeq++), name: s.name, designation: s.designation, division: s.division || "Derma", dept: s.dept || "Sales", baseHQ: s.baseHQ || "", reportsTo: s.reportsTo, zone: "", status: "active", empId: s.empId });
       changed++;
     });
@@ -354,6 +370,15 @@
         if (!rp) return;
         const want = { name: s.name, designation: s.designation, reportsTo: s.reportsTo, division: s.division || "Derma", dept: s.dept || "Sales", baseHQ: s.baseHQ || "" };
         Object.keys(want).forEach((k) => { if (rp[k] !== want[k]) { rp[k] = want[k]; changed++; } });
+      });
+      // One-time: honour admin deletions of seed people that the old code kept
+      // re-adding — mark them removed and drop any stale re-added row.
+      SEED_REMOVE_SERVICE_EMPIDS.forEach((raw) => {
+        const eid = String(raw || "").toUpperCase();
+        if (eid && !seedRemovedEmpIds.includes(eid)) { seedRemovedEmpIds.push(eid); changed++; }
+        for (let i = rosterAdds.length - 1; i >= 0; i--) {
+          if (String(rosterAdds[i].empId || "").toUpperCase() === eid) { rosterAdds.splice(i, 1); changed++; }
+        }
       });
       seedVersion = SEED_VERSION;
       changed++;
@@ -454,7 +479,15 @@
     let nm = "";
     if (p._aid != null) {
       const i = rosterAdds.findIndex((x) => x._aid === p._aid);
-      if (i >= 0) { nm = rosterAdds[i].name || ""; rosterAdds.splice(i, 1); }
+      if (i >= 0) {
+        nm = rosterAdds[i].name || "";
+        // If this row came from the service-team seed, remember its empId so the
+        // seed does NOT re-add the person on the next admin load. Without this, a
+        // deleted seed person (e.g. a finance exec) reappears after a refresh.
+        const eid = String(rosterAdds[i].empId || "").toUpperCase();
+        if (eid && SEED_SERVICE_EMPIDS.has(eid) && !seedRemovedEmpIds.includes(eid)) seedRemovedEmpIds.push(eid);
+        rosterAdds.splice(i, 1);
+      }
     } else if (!rosterRemovals.includes(p.num)) {
       nm = ((D.roster.people || [])[p.num] || {}).name || "";
       rosterRemovals.push(p.num);
@@ -12267,6 +12300,9 @@
           rosterAddSeq = ids.length ? Math.max(...ids) + 1 : 0;
         }
         if (Array.isArray(e.rosterRemovals)) { rosterRemovals.length = 0; e.rosterRemovals.forEach((n) => rosterRemovals.push(n)); }
+        // UNION (never replace) so a deleted seed person stays deleted even if
+        // another tab saves concurrently — removals must be sticky.
+        if (Array.isArray(e.seedRemovedEmpIds)) e.seedRemovedEmpIds.forEach((x) => { const u = String(x || "").toUpperCase(); if (u && !seedRemovedEmpIds.includes(u)) seedRemovedEmpIds.push(u); });
       }
       if (e.kraFiles && typeof e.kraFiles === "object") { Object.keys(kraFiles).forEach((k) => delete kraFiles[k]); Object.assign(kraFiles, e.kraFiles); }
       if (e.regDocs && typeof e.regDocs === "object") { Object.keys(regDocs).forEach((k) => delete regDocs[k]); Object.assign(regDocs, e.regDocs); }
@@ -12564,7 +12600,7 @@
     ["hqTargets", () => hqEdits], ["hqAdds", () => hqAdds], ["hqQtr", () => hqQtr],
     ["hqSales", () => hqSales], ["hqEsthSales", () => hqEsthSales], ["hqSpTargets", () => hqSpTargets],
     ["demo", () => demoEdits], ["demoAdds", () => demoAdds], ["demoRemovals", () => demoRemovals],
-    ["roster", () => rosterEdits, () => rosterDirty], ["rosterAdds", () => rosterAdds, () => rosterDirty], ["rosterRemovals", () => rosterRemovals, () => rosterDirty],
+    ["roster", () => rosterEdits, () => rosterDirty], ["rosterAdds", () => rosterAdds, () => rosterDirty], ["rosterRemovals", () => rosterRemovals, () => rosterDirty], ["seedRemovedEmpIds", () => seedRemovedEmpIds, () => rosterDirty],
     ["kraFiles", () => kraFiles],
     ["customHQs", () => customHQs], ["customDesignations", () => customDesignations],
     ["customPeople", () => customPeople], ["customAddresses", () => customAddresses],
@@ -12833,7 +12869,7 @@
         // the snapshot so a later save from another area doesn't re-write (and
         // clobber) them, and remote refreshes can flow back in.
         inductionDirty = false; attendanceDirty = false; rosterDirty = false;
-        try { ["induction", "attendance", "roster", "rosterAdds", "rosterRemovals"].forEach((k) => { const f = PASSIVE_FIELDS.find((x) => x[0] === k); if (f) loadedFieldSnap[k] = JSON.stringify(f[1]()); }); } catch (e3) {}
+        try { ["induction", "attendance", "roster", "rosterAdds", "rosterRemovals", "seedRemovedEmpIds"].forEach((k) => { const f = PASSIVE_FIELDS.find((x) => x[0] === k); if (f) loadedFieldSnap[k] = JSON.stringify(f[1]()); }); } catch (e3) {}
         // Save succeeded — clear any prior error state.
         if (saveErrorShown) { saveErrorShown = false; const el = document.getElementById("lastUpdated"); if (el) el.style.color = ""; }
         if (/^Weekly duty/.test(desc)) toast("✓ Saved to the database");
