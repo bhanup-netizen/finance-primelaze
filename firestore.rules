@@ -101,6 +101,18 @@ service cloud.firestore {
       allow delete: if isAdmin() || isPageEditor();
     }
 
+    // Products — simple product list; Corporate clients — corporate/institutional
+    // accounts. Internal team tools: any signed-in user reads & creates/updates;
+    // admins & page editors delete.
+    match /products/{doc} {
+      allow read, create, update: if isSignedIn();
+      allow delete: if isAdmin() || isPageEditor();
+    }
+    match /corpClients/{doc} {
+      allow read, create, update: if isSignedIn();
+      allow delete: if isAdmin() || isPageEditor();
+    }
+
     // MIS — Finance monthly summary documents (one per month). Any signed-in
     // user may read; only admins and page editors may write. Without this rule
     // the "New month" save is denied and nothing persists.

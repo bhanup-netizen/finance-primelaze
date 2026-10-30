@@ -932,6 +932,9 @@ tr.ind-done .ind-check span { color: var(--good); }
 .tk-done td b { text-decoration: line-through; }
 .tk-act { white-space: nowrap; }
 .tk-act .linkish { margin-right: 6px; }
+.prod-ul { margin: 2px 0 0; padding-left: 18px; }
+.prod-ul li { margin-bottom: 4px; line-height: 1.5; }
+.prod-ul .linkish { font-size: 11px; margin-left: 6px; }
 .cov-gap-tag { font-size: 10px; font-weight: 700; color: var(--warn, #d97706); background: color-mix(in srgb, var(--warn, #d97706) 14%, transparent); border-radius: 999px; padding: 1px 8px; }
 .cov-person { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .cov-ava { width: 24px; height: 24px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }

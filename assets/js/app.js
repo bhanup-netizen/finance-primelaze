@@ -148,6 +148,8 @@
     { id: "leads", label: "Casovil CRM", group: "Sale", render: renderCasovilCRM },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
     { id: "tasks", label: "✅ Tasks", group: "Sale", render: renderTasks },
+    { id: "products", label: "📦 Products", group: "Sale", render: renderProducts },
+    { id: "corporate", label: "🏢 Corporate", group: "Sale", render: renderCorporate },
     { id: "weeklySale", label: "Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
@@ -7044,6 +7046,8 @@
         <label>City${citySelectHtml("lfCity", "", "")}</label>
         <label>Source<select id="lfSource">${allLeadSources().map((s) => `<option>${esc(s)}</option>`).join("")}<option value="__new__">＋ Add new source…</option></select></label>
         <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
+        <label>Device<input id="lfDevice" list="lfDeviceList" placeholder="Select or type a device"><datalist id="lfDeviceList">${taskDevices().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
+        <label>Esthemax variant${esthVariantSelect("lfEsth", "")}</label>
         <label>Owner (rep)<select id="lfOwner">${ownerOptionsHtml("")}</select></label>
         <label class="lead-form-wide">Opening remark<input id="lfRemark" type="text" placeholder="how the lead came in / first note"></label>
       </div>
@@ -7086,6 +7090,7 @@
       const id = leadAddNew({
         name, mobile, company, city: v("lfCity"), state: v("lfState"),
         source: v("lfSource"), product: v("lfProduct"), owner: v("lfOwner"),
+        device: v("lfDevice"), esth: v("lfEsth"),
         occ: "Salon",
         history: remark ? [{ at: Date.now(), stage: "new", by: (sessionUser && sessionUser.email) || "", text: remark }] : [],
       });
@@ -10527,6 +10532,120 @@
     const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
     setTimeout(() => window.print(), 40);
+  }
+
+  /* ================= PRODUCTS — simple product list =================
+     A plain editable list of everything we sell, grouped by category. Each
+     product is one document in the Firestore "products" collection. */
+  function prodStore() { return db ? db.collection("products") : null; }
+  let localProds = [], prodCache = [];
+  const PROD_CATS = ["Devices", "Esthemax", "Celluma", "Consumables", "Other"];
+  const prodCanEdit = () => roleIsAdmin() || isSuperAdmin() || hasAnyEditGrant();
+  function prodModal(existing) {
+    const p = existing || { category: "Devices" };
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card"><h3>${existing ? "Edit product" : "Add product"}</h3>
+      <div class="lead-form-grid">
+        <label class="lead-form-wide">Product name<input id="pdName" value="${esc(p.name || "")}" placeholder="Product / model name"></label>
+        <label>Category<input id="pdCat" list="pdCatList" value="${esc(p.category || "")}" placeholder="Category"><datalist id="pdCatList">${PROD_CATS.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></label>
+        <label class="lead-form-wide">Note<input id="pdNote" value="${esc(p.note || "")}" placeholder="Optional note"></label>
+      </div>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="pdCancel">Cancel</button><button type="button" class="dl-btn" id="pdSave">${existing ? "Save" : "Add"}</button></div></div>`;
+    document.body.appendChild(wrap); const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("pdCancel").onclick = close;
+    document.getElementById("pdSave").onclick = async () => {
+      const name = document.getElementById("pdName").value.trim(); if (!name) { toast("Enter a name", "warn"); return; }
+      const data = { name, category: document.getElementById("pdCat").value.trim() || "Other", note: document.getElementById("pdNote").value.trim(), updatedAt: Date.now(), updatedBy: (sessionUser && sessionUser.email) || "" };
+      try {
+        const store = prodStore();
+        if (existing && existing.id) { if (store) await store.doc(existing.id).set(data, { merge: true }); else { const i = localProds.findIndex((x) => x.id === existing.id); if (i >= 0) localProds[i] = Object.assign(localProds[i], data); } }
+        else { data.createdAt = Date.now(); if (store) await store.add(data); else { data.id = "p" + Date.now(); localProds.push(data); } }
+        close(); toast("✓ Saved"); loadProds();
+      } catch (e) { console.warn("product save failed", e); toast("Save failed", "warn"); }
+    };
+  }
+  async function loadProds() { let list = []; try { const store = prodStore(); if (store) { const snap = await store.get(); snap.forEach((d) => list.push({ id: d.id, ...d.data() })); } else list = localProds.slice(); } catch (e) { list = localProds.slice(); } prodCache = list; if (document.getElementById("prodMain")) renderProdList(); }
+  async function prodDelete(id) { if (!window.confirm("Remove this product?")) return; try { const store = prodStore(); if (store) await store.doc(id).delete(); else localProds = localProds.filter((x) => x.id !== id); } catch (e) { console.warn(e); } loadProds(); }
+  function renderProdList() {
+    const main = document.getElementById("prodMain"); if (!main) return;
+    const ed = prodCanEdit();
+    const byCat = {}; prodCache.forEach((p) => { (byCat[p.category || "Other"] = byCat[p.category || "Other"] || []).push(p); });
+    const cats = Object.keys(byCat).sort();
+    main.innerHTML = cats.length ? cats.map((c) => `<div class="lp-card"><h3>${esc(c)} <span class="tag">${byCat[c].length}</span></h3><ul class="prod-ul">${byCat[c].slice().sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((p) => `<li><b>${esc(p.name)}</b>${p.note ? ` <span class="t-muted">— ${esc(p.note)}</span>` : ""}${ed ? ` <button class="linkish pd-edit" data-id="${esc(p.id)}">edit</button> <button class="linkish pd-del" data-id="${esc(p.id)}" title="Remove">✕</button>` : ""}</li>`).join("")}</ul></div>`).join("") : `<div class="muted-note">No products yet.${ed ? " Click “＋ Add product”." : ""}</div>`;
+    main.querySelectorAll(".pd-edit").forEach((b) => b.onclick = () => { const p = prodCache.find((x) => x.id === b.dataset.id); if (p) prodModal(p); });
+    main.querySelectorAll(".pd-del").forEach((b) => b.onclick = () => prodDelete(b.dataset.id));
+  }
+  function renderProducts() {
+    setTimeout(() => { const ab = document.getElementById("prodAdd"); if (ab) ab.onclick = () => prodModal(null); loadProds(); }, 0);
+    return `<div class="section-head"><h1>📦 Products</h1><p>Simple list of everything we sell, grouped by category. ${prodCanEdit() ? "Editable — saves for everyone." : "Read-only."}</p></div>
+      <div class="controls" style="margin-top:8px">${prodCanEdit() ? `<button id="prodAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add product</button>` : ""}</div>
+      <div id="prodMain" class="lead-process" style="margin-top:10px"></div>`;
+  }
+
+  /* ================= CORPORATE — corporate / institutional clients =================
+     Hospitals, clinic chains and corporate accounts and their deals. Each client
+     is one document in the Firestore "corpClients" collection. */
+  function corpStore() { return db ? db.collection("corpClients") : null; }
+  let localCorp = [], corpCache = [];
+  const CORP_TYPES = ["Hospital", "Clinic chain", "Corporate", "Distributor", "Government", "Other"];
+  const CORP_STATUSES = ["Prospect", "In discussion", "Won", "On hold", "Lost"];
+  const corpCanEdit = () => roleIsAdmin() || isSuperAdmin() || hasAnyEditGrant();
+  const corpBadge = (s) => { const m = { "Won": "b-good", "Lost": "b-bad", "In discussion": "b-info", "On hold": "b-warn", "Prospect": "b-neutral" }; return `<span class="badge ${m[s] || "b-neutral"}">${esc(s || "—")}</span>`; };
+  function corpModal(existing) {
+    const c = existing || { type: "Hospital", status: "Prospect" };
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    wrap.innerHTML = `<div class="lead-modal-card"><h3>${existing ? "Edit client" : "Add corporate client"}</h3>
+      <div class="lead-form-grid">
+        <label class="lead-form-wide">Client / organization<input id="cpName" value="${esc(c.name || "")}" placeholder="Hospital / chain / company"></label>
+        <label>Type<select id="cpType">${CORP_TYPES.map((x) => `<option${x === (c.type || "Hospital") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
+        <label>Status<select id="cpStatus">${CORP_STATUSES.map((x) => `<option${x === (c.status || "Prospect") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
+        <label>Contact person<input id="cpContact" value="${esc(c.contact || "")}"></label>
+        <label>Phone<input id="cpPhone" value="${esc(c.phone || "")}"></label>
+        <label>Location<input id="cpLoc" value="${esc(c.location || "")}"></label>
+        <label>Owner<input id="cpOwner" list="cpOwnerList" value="${esc(c.owner || "")}"><datalist id="cpOwnerList">${taskOwnerNames().map((o) => `<option value="${esc(o)}">`).join("")}</datalist></label>
+        <label class="lead-form-wide">Deal / products<input id="cpDeal" value="${esc(c.deal || "")}" placeholder="What they're buying / value"></label>
+        <label class="lead-form-wide">Notes<input id="cpNotes" value="${esc(c.notes || "")}"></label>
+      </div>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="cpCancel">Cancel</button><button type="button" class="dl-btn" id="cpSave">${existing ? "Save" : "Add"}</button></div></div>`;
+    document.body.appendChild(wrap); const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("cpCancel").onclick = close;
+    document.getElementById("cpSave").onclick = async () => {
+      const name = document.getElementById("cpName").value.trim(); if (!name) { toast("Enter a name", "warn"); return; }
+      const g = (id) => document.getElementById(id).value.trim();
+      const data = { name, type: document.getElementById("cpType").value, status: document.getElementById("cpStatus").value, contact: g("cpContact"), phone: g("cpPhone"), location: g("cpLoc"), owner: g("cpOwner"), deal: g("cpDeal"), notes: g("cpNotes"), updatedAt: Date.now(), updatedBy: (sessionUser && sessionUser.email) || "" };
+      try {
+        const store = corpStore();
+        if (existing && existing.id) { if (store) await store.doc(existing.id).set(data, { merge: true }); else { const i = localCorp.findIndex((x) => x.id === existing.id); if (i >= 0) localCorp[i] = Object.assign(localCorp[i], data); } }
+        else { data.createdAt = Date.now(); if (store) await store.add(data); else { data.id = "c" + Date.now(); localCorp.push(data); } }
+        close(); toast("✓ Saved"); loadCorp();
+      } catch (e) { console.warn("corp save failed", e); toast("Save failed", "warn"); }
+    };
+  }
+  async function loadCorp() { let list = []; try { const store = corpStore(); if (store) { const snap = await store.get(); snap.forEach((d) => list.push({ id: d.id, ...d.data() })); } else list = localCorp.slice(); } catch (e) { list = localCorp.slice(); } corpCache = list; if (document.getElementById("corpMain")) renderCorpList(); }
+  async function corpDelete(id) { if (!window.confirm("Remove this client?")) return; try { const store = corpStore(); if (store) await store.doc(id).delete(); else localCorp = localCorp.filter((x) => x.id !== id); } catch (e) { console.warn(e); } loadCorp(); }
+  function renderCorpList() {
+    const main = document.getElementById("corpMain"); if (!main) return;
+    const ed = corpCanEdit();
+    const rows = corpCache.slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    main.innerHTML = rows.length ? rows.map((c) => `<tr>
+      <td><b>${esc(c.name)}</b>${c.deal ? `<div class="tk-notes">${esc(c.deal)}</div>` : ""}</td>
+      <td>${esc(c.type || "—")}</td>
+      <td>${esc(c.contact || "—")}${c.phone ? `<div class="tk-notes">${esc(c.phone)}</div>` : ""}</td>
+      <td>${esc(c.location || "—")}</td>
+      <td>${esc(c.owner || "—")}</td>
+      <td>${corpBadge(c.status)}</td>
+      <td class="tk-act">${ed ? `<button class="linkish cp-edit" data-id="${esc(c.id)}">Edit</button> <button class="linkish cp-del" data-id="${esc(c.id)}" title="Remove">✕</button>` : ""}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="empty">No corporate clients yet.</td></tr>`;
+    main.querySelectorAll(".cp-edit").forEach((b) => b.onclick = () => { const c = corpCache.find((x) => x.id === b.dataset.id); if (c) corpModal(c); });
+    main.querySelectorAll(".cp-del").forEach((b) => b.onclick = () => corpDelete(b.dataset.id));
+  }
+  function renderCorporate() {
+    setTimeout(() => { const ab = document.getElementById("corpAdd"); if (ab) ab.onclick = () => corpModal(null); loadCorp(); }, 0);
+    return `<div class="section-head"><h1>🏢 Corporate Clients</h1><p>Hospitals, clinic chains and corporate / institutional accounts and their deals. ${corpCanEdit() ? "Editable — saves for everyone." : "Read-only."}</p></div>
+      <div class="controls" style="margin-top:8px">${corpCanEdit() ? `<button id="corpAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add client</button>` : ""}</div>
+      <div class="table-wrap" style="margin-top:10px"><table class="cov-table"><thead><tr><th>Client</th><th>Type</th><th>Contact</th><th>Location</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody id="corpMain"></tbody></table></div>`;
   }
 
   /* ================= TASKS — Bigin-style task board =================
