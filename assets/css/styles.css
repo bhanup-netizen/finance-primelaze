@@ -1420,11 +1420,12 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; width: min(720px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
 .lead-modal-card h3 { margin: 0 0 14px; }
 .lead-form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.lead-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
-.lead-form-grid input, .lead-form-grid select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; }
+.lead-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); min-width: 0; }
+.lead-form-grid input, .lead-form-grid select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .lead-form-wide { grid-column: 1 / -1; }
-.lead-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
-@media (max-width: 640px) { .lead-form-grid { grid-template-columns: 1fr 1fr; } }
+.lead-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+@media (max-width: 640px) { .lead-form-grid { grid-template-columns: 1fr 1fr; } .lead-modal { padding: 20px 10px; } }
+@media (max-width: 440px) { .lead-form-grid { grid-template-columns: 1fr; } }
 
 /* Leads — remark column: compact tracker + latest remark */
 .lead-table td.lead-remarkcell { white-space: normal; }
@@ -1599,9 +1600,9 @@ select.lead-stage-sel option { color: var(--text); background: var(--surface); }
 .lead-open-sub { display: block; }
 .lead-detail-card { width: min(640px, 100%); }
 .ld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 12px; }
-.ld-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
+.ld-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); min-width: 0; }
 .ld-field > span { font-weight: 600; }
-.ld-field input, .ld-field select { padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; }
+.ld-field input, .ld-field select { padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .ld-val { font-size: 14px; color: var(--text); padding: 2px 0; }
 .ld-meta { font-size: 12px; color: var(--text-3); margin: 2px 0 10px; }
 .ld-h { margin: 10px 0 6px; font-size: 13px; }

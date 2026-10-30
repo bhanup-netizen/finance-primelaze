@@ -12059,6 +12059,10 @@
   }
 
   function go(id, keepScroll) {
+    // Re-rendering the SAME tab is almost always an in-place edit refresh, not a
+    // navigation — keep the scroll position & focus so editing a row/field never
+    // jumps the view (and cursor) back to the top. Real tab switches still jump.
+    if (keepScroll === undefined && id === currentTab) keepScroll = true;
     let tab = TABS.find((t) => t.id === id);
     if (!tab || !canSeePage(tab.id)) tab = TABS.find((t) => t.id === firstVisibleTab()) || TABS[0];
     currentTab = tab.id;
