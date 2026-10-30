@@ -6311,6 +6311,8 @@
         ${admin ? `<label class="ld-field"><span>City</span>${citySelectHtml("ld_city", r.state || "", r.city || "")}</label>` : `<div class="ld-field"><span>City</span><div class="ld-val">${r.city ? esc(r.city) : "—"}</div></div>`}
         ${fSelect("source", "Source", allLeadSources(), "")}
         ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
+        ${admin ? `<label class="ld-field"><span>Device</span><input id="ld_device" list="ldDevList" value="${val(r.device)}" placeholder="Select or type a device"><datalist id="ldDevList">${taskDevices().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>` : (r.device ? `<div class="ld-field"><span>Device</span><div class="ld-val">${esc(r.device)}</div></div>` : "")}
+        ${admin ? `<label class="ld-field"><span>Esthemax variant</span>${esthVariantSelect("ld_esth", r.esth || "")}</label>` : (r.esth ? `<div class="ld-field"><span>Esthemax variant</span><div class="ld-val">${esc(r.esth)}</div></div>` : "")}
         ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
         ${admin ? `<label class="ld-field"><span>Priority</span><select id="ld_priority"><option value="">— None</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}"${(r.priority || "") === p.key ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>` : (r.priority ? `<div class="ld-field"><span>Priority</span><div class="ld-val">${leadPrioBadge(r)}</div></div>` : "")}
         ${fText("link", "Attachment link", "https://…")}
@@ -6408,7 +6410,7 @@
     const saveB = document.getElementById("ldSave");
     if (saveB) saveB.onclick = () => {
       let changed = 0;
-      ["name", "mobile", "company", "city", "state", "source", "product", "owner", "link", "priority"].forEach((f) => {
+      ["name", "mobile", "company", "city", "state", "source", "product", "device", "esth", "owner", "link", "priority"].forEach((f) => {
         const el = document.getElementById("ld_" + f); if (!el) return;
         let v = (el.value || "").trim();
         if (f === "mobile") v = v.replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
@@ -10661,7 +10663,10 @@
     return out;
   }
   function taskDevices() { try { return deviceNames().filter(Boolean); } catch (e) { return []; } }
-  function taskOwnerNames() { try { return Array.from(new Set(roster().map((p) => rval(p, "name")).filter((n) => n && !/^vacant/i.test(n)))); } catch (e) { return []; } }
+  // Curated owner list for tasks / corporate (the sales reps). The datalist also
+  // lets you type a new name to add someone not in this list.
+  const TASK_OWNERS = ["Ashutosh", "Lubdha", "Sparsha", "Arjun", "Bhanu"];
+  function taskOwnerNames() { return TASK_OWNERS.slice(); }
   const taskCanEdit = (t) => roleIsAdmin() || isSuperAdmin() || hasAnyEditGrant() || (t && t.createdBy && sessionUser && t.createdBy === sessionUser.email);
 
   // Grouped Esthemax <select> (optgroup by product line) — reused in Tasks & Leads.
@@ -10677,7 +10682,6 @@
     const isEdit = !!(existing && existing.id);
     const wrap = document.createElement("div");
     wrap.className = "lead-modal";
-    const devs = taskDevices();
     const owners = taskOwnerNames();
     const leadsList = (typeof leadAll === "function" ? leadAll() : []).filter((l) => typeof leadIsArchived !== "function" || !leadIsArchived(l.id));
     const leadLabel = (l) => [l.name || l.company || l.mobile || l.id, (l.mobile && (l.name || l.company)) ? l.mobile : "", l.city].filter(Boolean).join(" · ");
@@ -10691,9 +10695,7 @@
         <label>Due date<input id="tkDue" type="date" value="${esc(t.due || "")}"></label>
         <label>Priority<select id="tkPrio">${TASK_PRIORITIES.map((p) => `<option${p === (t.priority || "Medium") ? " selected" : ""}>${p}</option>`).join("")}</select></label>
         <label>Status<select id="tkStatus">${TASK_STATUSES.map((s) => `<option value="${s.k}"${s.k === (t.status || "open") ? " selected" : ""}>${s.l}</option>`).join("")}</select></label>
-        <label>Device<input id="tkDevice" list="tkDeviceList" value="${esc(t.device || "")}" placeholder="Select or type a device"><datalist id="tkDeviceList">${devs.map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
-        <label>Esthemax variant${esthVariantSelect("tkEsth", t.esth || "")}</label>
-        <label>Link lead<input id="tkLead" list="tkLeadList" value="${esc(curLeadLabel)}" placeholder="Type to search a lead…"><datalist id="tkLeadList">${leadsList.map((l) => `<option value="${esc(leadLabel(l))}">`).join("")}</datalist></label>
+        <label class="lead-form-wide">Link lead (optional)<input id="tkLead" list="tkLeadList" value="${esc(curLeadLabel)}" placeholder="Type the doctor / clinic name to search and link a lead…"><datalist id="tkLeadList">${leadsList.map((l) => `<option value="${esc(leadLabel(l))}">`).join("")}</datalist></label>
         <label class="lead-form-wide">Notes<input id="tkNotes" type="text" value="${esc(t.notes || "")}" placeholder="Details"></label>
       </div>
       <div class="lead-modal-actions">
@@ -10715,8 +10717,6 @@
         due: document.getElementById("tkDue").value,
         priority: document.getElementById("tkPrio").value,
         status: document.getElementById("tkStatus").value,
-        device: document.getElementById("tkDevice").value.trim(),
-        esth: document.getElementById("tkEsth").value,
         leadId: leadLabelToId[document.getElementById("tkLead").value.trim()] || "",
         notes: document.getElementById("tkNotes").value.trim(),
         updatedAt: now, updatedBy: by,
@@ -10763,7 +10763,6 @@
     const ed = taskCanEdit(t);
     const overdue = t.due && t.status !== "done" && t.due < new Date().toISOString().slice(0, 10);
     const link = (t.leadId && typeof leadAll === "function") ? leadAll().find((l) => l.id === t.leadId) : null;
-    const prod = [t.device, t.esth].filter(Boolean).join(" · ");
     return `<tr class="${t.status === "done" ? "tk-done" : ""}">
       <td>${ed ? `<input type="checkbox" class="tk-check" data-id="${esc(t.id)}"${t.status === "done" ? " checked" : ""} title="Mark done">` : ""}</td>
       <td><b>${esc(t.title || "")}</b>${t.notes ? `<div class="tk-notes">${esc(t.notes)}</div>` : ""}</td>
@@ -10771,7 +10770,7 @@
       <td class="${overdue ? "tk-overdue" : ""}">${esc(t.due || "—")}</td>
       <td>${taskPrioIcon(t.priority)} ${esc(t.priority || "Medium")}</td>
       <td>${esc(taskStatusLabel(t.status))}</td>
-      <td>${esc(prod || "—")}${link ? `<div class="tk-notes">↳ ${esc(link.name || link.salon || link.id)}</div>` : ""}</td>
+      <td>${link ? esc(link.name || link.company || link.id) : "—"}</td>
       <td class="tk-act">${ed ? `<button class="linkish tk-edit" data-id="${esc(t.id)}">Edit</button> <button class="linkish tk-del" data-id="${esc(t.id)}" title="Delete">✕</button>` : ""}</td>
     </tr>`;
   }
@@ -10825,7 +10824,7 @@
         <button id="taskAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add task</button>
       </div>
       <div class="table-wrap"><table class="cov-table tk-table">
-        <thead><tr><th style="width:26px"></th><th>Task</th><th>Owner</th><th>Due</th><th>Priority</th><th>Status</th><th>Device / Variant · Lead</th><th></th></tr></thead>
+        <thead><tr><th style="width:26px"></th><th>Task</th><th>Owner</th><th>Due</th><th>Priority</th><th>Status</th><th>Linked lead</th><th></th></tr></thead>
         <tbody id="taskMain"></tbody>
       </table></div>`;
   }
