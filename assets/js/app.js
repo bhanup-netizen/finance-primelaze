@@ -7043,6 +7043,7 @@
     const owners = leadOwners();
     wrap.innerHTML = `<div class="lead-modal-card">
       <h3>Add a new lead</h3>
+      <div class="lf-dest-row">Add to: <label><input type="radio" name="lfDest" value="lead" checked> 🎯 Leads</label> <label><input type="radio" name="lfDest" value="corp"> 🏢 Corporate (chain / hospital)</label></div>
       <div class="lead-form-grid">
         <label>Name<input id="lfName" type="text" placeholder="Contact name"></label>
         <label>Mobile<input id="lfMobile" type="text" placeholder="10-digit"></label>
@@ -7087,12 +7088,20 @@
     };
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("lfCancel").onclick = close;
-    document.getElementById("lfSave").onclick = () => {
+    document.getElementById("lfSave").onclick = async () => {
       const v = (id) => (document.getElementById(id).value || "").trim();
       const name = v("lfName"), company = v("lfCompany"), mobile = v("lfMobile");
       if (!name && !company && !mobile) { window.alert("Enter at least a name, company or mobile."); return; }
       const remark = v("lfRemark");
-      const id = leadAddNew({
+      const dest = (document.querySelector('input[name="lfDest"]:checked') || {}).value || "lead";
+      if (dest === "corp") {
+        // Add straight into Corporate (chain / hospital) — not into Leads.
+        const now = Date.now(), by = (sessionUser && sessionUser.email) || "";
+        const cdata = { name: company || name, contact: name, phone: mobile, location: [v("lfCity"), v("lfState")].filter(Boolean).join(", "), owner: v("lfOwner"), deal: [v("lfProduct"), v("lfDevice"), v("lfEsth")].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", notes: remark, fromLeadId: "", createdAt: now, createdBy: by, updatedAt: now, updatedBy: by };
+        try { const store = corpStore(); if (store) await store.add(cdata); else { cdata.id = "c" + now; localCorp.push(cdata); } toast("✓ Added to Corporate"); } catch (e) { console.warn(e); toast("Save failed", "warn"); }
+        close(); casovilView = "corporate"; go("leads"); return;
+      }
+      leadAddNew({
         name, mobile, company, city: v("lfCity"), state: v("lfState"),
         source: v("lfSource"), product: v("lfProduct"), owner: v("lfOwner"),
         device: v("lfDevice"), esth: v("lfEsth"),
@@ -10594,8 +10603,13 @@
       try {
         const store = corpStore();
         if (existing && existing.id) { if (store) await store.doc(existing.id).set(data, { merge: true }); else { const i = localCorp.findIndex((x) => x.id === existing.id); if (i >= 0) localCorp[i] = Object.assign(localCorp[i], data); } }
-        else { data.createdAt = Date.now(); if (store) await store.add(data); else { data.id = "c" + Date.now(); localCorp.push(data); } }
-        close(); toast("✓ Saved"); loadCorp();
+        else {
+          data.createdAt = Date.now(); if (store) await store.add(data); else { data.id = "c" + Date.now(); localCorp.push(data); }
+          // Moved from a lead → take it OUT of the active Leads list so it lives
+          // in Corporate only (archived, still recoverable).
+          if (data.fromLeadId) { try { leadArchiveSet(data.fromLeadId, true); leadRepaint(); } catch (e) { console.warn(e); } }
+        }
+        close(); toast(data.fromLeadId && !isEdit ? "✓ Moved to Corporate" : "✓ Saved"); loadCorp();
       } catch (e) { console.warn("corp save failed", e); toast("Save failed", "warn"); }
     };
   }

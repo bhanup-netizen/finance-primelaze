@@ -932,6 +932,9 @@ tr.ind-done .ind-check span { color: var(--good); }
 .tk-done td b { text-decoration: line-through; }
 .tk-act { white-space: nowrap; }
 .tk-act .linkish { margin-right: 6px; }
+.lf-dest-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 13px;
+  font-weight: 600; background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+.lf-dest-row label { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; cursor: pointer; }
 .cov-gap-tag { font-size: 10px; font-weight: 700; color: var(--warn, #d97706); background: color-mix(in srgb, var(--warn, #d97706) 14%, transparent); border-radius: 999px; padding: 1px 8px; }
 .cov-person { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .cov-ava { width: 24px; height: 24px; border-radius: 50%; color: #fff; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
