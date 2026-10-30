@@ -1884,3 +1884,43 @@ tr.lead-row-sel > td { background: var(--accent-soft); }
 .lp-tier.lp-hot { background: rgba(220, 38, 38, .10); border-color: rgba(220, 38, 38, .35); }
 .lp-tier.lp-warm { background: rgba(217, 160, 10, .12); border-color: rgba(217, 160, 10, .4); }
 .lp-tier.lp-cold { background: var(--accent-soft); }
+
+/* ===================== Global UI polish (consistency pass) ===================== */
+/* Subtle, consistent hover on all data-table rows (skip already-coloured rows). */
+.table-wrap tbody tr { transition: background-color .12s ease; }
+.table-wrap tbody tr:hover:not(.lead-won):not(.lead-row-sel):not(.tk-done) { background: var(--accent-soft); }
+
+/* Clear keyboard focus everywhere (accessibility + ease of use). */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 6px;
+}
+/* Form controls: accent border on focus. */
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+/* Buttons feel responsive & consistent across the app. */
+.ghost-btn, .dl-btn, .mini-btn, .icon-btn, .mode-btn {
+  transition: background-color .12s, box-shadow .12s, transform .05s, border-color .12s, filter .12s;
+}
+.ghost-btn:hover, .mini-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+.dl-btn:hover { filter: brightness(1.06); }
+.ghost-btn:active, .dl-btn:active, .mini-btn:active, .icon-btn:active, .mode-btn:active { transform: translateY(1px); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Links. */
+.linkish { transition: color .12s; cursor: pointer; }
+.linkish:hover { text-decoration: underline; }
+
+/* Slimmer, subtler scrollbars (webkit). */
+.table-wrap::-webkit-scrollbar, .view::-webkit-scrollbar, .lead-modal::-webkit-scrollbar { width: 9px; height: 9px; }
+.table-wrap::-webkit-scrollbar-thumb, .view::-webkit-scrollbar-thumb, .lead-modal::-webkit-scrollbar-thumb {
+  background: var(--border-strong); border-radius: 6px;
+}
+.table-wrap::-webkit-scrollbar-track, .view::-webkit-scrollbar-track { background: transparent; }
+
+/* A touch more breathing room + consistent rounding. */
+.table-wrap { border-radius: 10px; }
+.section-head { margin-bottom: 14px; }
+
+/* Empty-state cells read softer. */
+td.empty, .empty { color: var(--muted); text-align: center; padding: 18px 10px; }
