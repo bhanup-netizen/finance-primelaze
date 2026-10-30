@@ -147,6 +147,7 @@
     // Sale
     { id: "leads", label: "Casovil CRM", group: "Sale", render: renderCasovilCRM },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
+    { id: "tasks", label: "✅ Tasks", group: "Sale", render: renderTasks },
     { id: "weeklySale", label: "Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
@@ -10526,6 +10527,194 @@
     const cleanup = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
     setTimeout(() => window.print(), 40);
+  }
+
+  /* ================= TASKS — Bigin-style task board =================
+     Each task is ONE document in the Firestore "tasks" collection (persists &
+     syncs for everyone; no array to clobber). Create tasks with an owner, due
+     date, priority, status & notes; optionally link a lead and the device /
+     Esthemax variant the task is about. */
+  function taskStore() { return db ? db.collection("tasks") : null; }
+  let localTasks = [];
+  let taskCache = [];
+  let taskFilter = { owner: "", priority: "", q: "", view: "open" };
+  const TASK_STATUSES = [{ k: "open", l: "Open" }, { k: "inprogress", l: "In progress" }, { k: "done", l: "Done" }];
+  const TASK_PRIORITIES = ["High", "Medium", "Low"];
+  const taskPrioIcon = (p) => p === "High" ? "🔴" : p === "Low" ? "⚪" : "🟡";
+  const taskStatusLabel = (k) => (TASK_STATUSES.find((s) => s.k === k) || {}).l || "Open";
+
+  // All Esthemax variants from the price seed: [{group, variant}].
+  function esthVariants() {
+    const S = window.ESTHEMAX_PRICE_SEED; const out = []; const seen = new Set();
+    if (S && S.markets) Object.values(S.markets).forEach((m) => (m.groups || []).forEach((g) => (g.rows || []).forEach((r) => {
+      const v = r && r[1]; if (v && !seen.has(v)) { seen.add(v); out.push({ group: g.title || "Esthemax", variant: v }); }
+    })));
+    return out;
+  }
+  function taskDevices() { try { return deviceNames().filter(Boolean); } catch (e) { return []; } }
+  function taskOwnerNames() { try { return Array.from(new Set(roster().map((p) => rval(p, "name")).filter((n) => n && !/^vacant/i.test(n)))); } catch (e) { return []; } }
+  const taskCanEdit = (t) => roleIsAdmin() || isSuperAdmin() || hasAnyEditGrant() || (t && t.createdBy && sessionUser && t.createdBy === sessionUser.email);
+
+  // Grouped Esthemax <select> (optgroup by product line) — reused in Tasks & Leads.
+  function esthVariantSelect(id, cur) {
+    const groups = {};
+    esthVariants().forEach((e) => { (groups[e.group] = groups[e.group] || []).push(e.variant); });
+    const opts = Object.keys(groups).map((g) => `<optgroup label="${esc(g)}">${groups[g].map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("")}</optgroup>`).join("");
+    return `<select id="${id}"><option value="">— Esthemax variant —</option>${opts}</select>`;
+  }
+
+  function taskModal(existing) {
+    const t = existing || { priority: "Medium", status: "open" };
+    const wrap = document.createElement("div");
+    wrap.className = "lead-modal";
+    const devs = taskDevices();
+    const owners = taskOwnerNames();
+    const leadsList = (typeof leadAll === "function" ? leadAll() : []).filter((l) => typeof leadIsArchived !== "function" || !leadIsArchived(l.id));
+    wrap.innerHTML = `<div class="lead-modal-card">
+      <h3>${existing ? "Edit task" : "Add a task"}</h3>
+      <div class="lead-form-grid">
+        <label class="lead-form-wide">Task<input id="tkTitle" type="text" placeholder="What needs to be done" value="${esc(t.title || "")}"></label>
+        <label>Owner<input id="tkOwner" list="tkOwnerList" value="${esc(t.owner || "")}" placeholder="Assign to"><datalist id="tkOwnerList">${owners.map((o) => `<option value="${esc(o)}">`).join("")}</datalist></label>
+        <label>Due date<input id="tkDue" type="date" value="${esc(t.due || "")}"></label>
+        <label>Priority<select id="tkPrio">${TASK_PRIORITIES.map((p) => `<option${p === (t.priority || "Medium") ? " selected" : ""}>${p}</option>`).join("")}</select></label>
+        <label>Status<select id="tkStatus">${TASK_STATUSES.map((s) => `<option value="${s.k}"${s.k === (t.status || "open") ? " selected" : ""}>${s.l}</option>`).join("")}</select></label>
+        <label>Device<input id="tkDevice" list="tkDeviceList" value="${esc(t.device || "")}" placeholder="Select or type a device"><datalist id="tkDeviceList">${devs.map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
+        <label>Esthemax variant${esthVariantSelect("tkEsth", t.esth || "")}</label>
+        <label>Link lead<select id="tkLead"><option value="">—</option>${leadsList.map((l) => `<option value="${esc(l.id)}"${l.id === t.leadId ? " selected" : ""}>${esc(l.name || l.salon || l.mobile || l.id)}</option>`).join("")}</select></label>
+        <label class="lead-form-wide">Notes<input id="tkNotes" type="text" value="${esc(t.notes || "")}" placeholder="Details"></label>
+      </div>
+      <div class="lead-modal-actions">
+        <button type="button" class="ghost-btn" id="tkCancel">Cancel</button>
+        <button type="button" class="dl-btn" id="tkSave">${existing ? "Save" : "Add task"}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("tkCancel").onclick = close;
+    document.getElementById("tkSave").onclick = async () => {
+      const title = document.getElementById("tkTitle").value.trim();
+      if (!title) { toast("Enter a task", "warn"); return; }
+      const now = Date.now(), by = (sessionUser && sessionUser.email) || "";
+      const data = {
+        title,
+        owner: document.getElementById("tkOwner").value.trim(),
+        due: document.getElementById("tkDue").value,
+        priority: document.getElementById("tkPrio").value,
+        status: document.getElementById("tkStatus").value,
+        device: document.getElementById("tkDevice").value.trim(),
+        esth: document.getElementById("tkEsth").value,
+        leadId: document.getElementById("tkLead").value,
+        notes: document.getElementById("tkNotes").value.trim(),
+        updatedAt: now, updatedBy: by,
+      };
+      try {
+        const store = taskStore();
+        if (existing && existing.id) {
+          if (store) await store.doc(existing.id).set(data, { merge: true });
+          else { const i = localTasks.findIndex((x) => x.id === existing.id); if (i >= 0) localTasks[i] = Object.assign(localTasks[i], data); }
+        } else {
+          data.createdAt = now; data.createdBy = by;
+          if (store) { const ref = await store.add(data); data.id = ref.id; }
+          else { data.id = "t" + now; localTasks.push(data); }
+        }
+        close(); toast("✓ Task saved"); loadTasks();
+      } catch (e) { console.warn("task save failed", e); toast("Save failed", "warn"); }
+    };
+  }
+
+  async function loadTasks() {
+    let list = [];
+    try {
+      const store = taskStore();
+      if (store) { const snap = await store.get(); snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() })); }
+      else list = localTasks.slice();
+    } catch (e) { console.warn("tasks load failed", e); list = localTasks.slice(); }
+    taskCache = list;
+    if (document.getElementById("taskMain")) renderTaskList();
+  }
+
+  function taskFiltered() {
+    const q = (taskFilter.q || "").toLowerCase();
+    return taskCache.filter((t) => {
+      if (taskFilter.view === "open" && t.status === "done") return false;
+      if (taskFilter.view === "done" && t.status !== "done") return false;
+      if (taskFilter.owner && t.owner !== taskFilter.owner) return false;
+      if (taskFilter.priority && t.priority !== taskFilter.priority) return false;
+      if (q && !([t.title, t.owner, t.device, t.esth, t.notes].join(" ").toLowerCase().includes(q))) return false;
+      return true;
+    }).sort((a, b) => ((a.status === "done") - (b.status === "done")) || String(a.due || "9999").localeCompare(String(b.due || "9999")));
+  }
+
+  function taskRowHtml(t) {
+    const ed = taskCanEdit(t);
+    const overdue = t.due && t.status !== "done" && t.due < new Date().toISOString().slice(0, 10);
+    const link = (t.leadId && typeof leadAll === "function") ? leadAll().find((l) => l.id === t.leadId) : null;
+    const prod = [t.device, t.esth].filter(Boolean).join(" · ");
+    return `<tr class="${t.status === "done" ? "tk-done" : ""}">
+      <td>${ed ? `<input type="checkbox" class="tk-check" data-id="${esc(t.id)}"${t.status === "done" ? " checked" : ""} title="Mark done">` : ""}</td>
+      <td><b>${esc(t.title || "")}</b>${t.notes ? `<div class="tk-notes">${esc(t.notes)}</div>` : ""}</td>
+      <td>${esc(t.owner || "—")}</td>
+      <td class="${overdue ? "tk-overdue" : ""}">${esc(t.due || "—")}</td>
+      <td>${taskPrioIcon(t.priority)} ${esc(t.priority || "Medium")}</td>
+      <td>${esc(taskStatusLabel(t.status))}</td>
+      <td>${esc(prod || "—")}${link ? `<div class="tk-notes">↳ ${esc(link.name || link.salon || link.id)}</div>` : ""}</td>
+      <td class="tk-act">${ed ? `<button class="linkish tk-edit" data-id="${esc(t.id)}">Edit</button> <button class="linkish tk-del" data-id="${esc(t.id)}" title="Delete">✕</button>` : ""}</td>
+    </tr>`;
+  }
+
+  function renderTaskList() {
+    const main = document.getElementById("taskMain"); if (!main) return;
+    const rows = taskFiltered();
+    main.innerHTML = rows.length ? rows.map(taskRowHtml).join("") : `<tr><td colspan="8" class="empty">No tasks.</td></tr>`;
+    const cnt = document.getElementById("taskCount"); if (cnt) cnt.textContent = rows.length + " task" + (rows.length === 1 ? "" : "s");
+    main.querySelectorAll(".tk-check").forEach((c) => c.onchange = () => taskSetStatus(c.dataset.id, c.checked ? "done" : "open"));
+    main.querySelectorAll(".tk-edit").forEach((b) => b.onclick = () => { const t = taskCache.find((x) => x.id === b.dataset.id); if (t) taskModal(t); });
+    main.querySelectorAll(".tk-del").forEach((b) => b.onclick = () => taskDelete(b.dataset.id));
+  }
+
+  async function taskSetStatus(id, status) {
+    const t = taskCache.find((x) => x.id === id); if (!t) return;
+    t.status = status;
+    try { const store = taskStore(); if (store) await store.doc(id).set({ status, updatedAt: Date.now(), updatedBy: (sessionUser && sessionUser.email) || "" }, { merge: true }); } catch (e) { console.warn(e); }
+    renderTaskList();
+  }
+  async function taskDelete(id) {
+    if (!window.confirm("Delete this task?")) return;
+    try { const store = taskStore(); if (store) await store.doc(id).delete(); else localTasks = localTasks.filter((x) => x.id !== id); } catch (e) { console.warn(e); }
+    loadTasks();
+  }
+
+  function renderTasks() {
+    setTimeout(() => {
+      const ab = document.getElementById("taskAdd"); if (ab) ab.onclick = () => taskModal(null);
+      const wire = (id, f) => { const el = document.getElementById(id); if (el) el.onchange = f; };
+      wire("tkfOwner", (e) => { taskFilter.owner = e.target.value; renderTaskList(); });
+      wire("tkfPrio", (e) => { taskFilter.priority = e.target.value; renderTaskList(); });
+      const s = document.getElementById("tkfSearch"); if (s) s.oninput = (e) => { taskFilter.q = e.target.value; renderTaskList(); };
+      document.querySelectorAll(".tkv[data-v]").forEach((b) => b.onclick = () => { taskFilter.view = b.dataset.v; renderTab("tasks"); });
+      loadTasks();
+    }, 0);
+    const owners = taskOwnerNames();
+    const sel = (id, cur, vals, label) => `<label class="ord-field"><span>${label}</span><select id="${id}"><option value="">All</option>${vals.map((v) => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
+    return `
+      <div class="section-head"><h1>✅ Tasks</h1><p>Team to-dos and follow-ups — like Bigin. Create a task, assign an owner, set a due date and track it to done. Saves for everyone.</p></div>
+      <div class="controls" style="margin-top:8px">
+        <div class="lead-viewtabs" role="tablist">
+          <button type="button" class="tkv${taskFilter.view === "open" ? " active" : ""}" data-v="open">Open</button>
+          <button type="button" class="tkv${taskFilter.view === "all" ? " active" : ""}" data-v="all">All</button>
+          <button type="button" class="tkv${taskFilter.view === "done" ? " active" : ""}" data-v="done">Done</button>
+        </div>
+        <input id="tkfSearch" class="search" type="search" placeholder="Search tasks…" value="${esc(taskFilter.q)}">
+        ${sel("tkfOwner", taskFilter.owner, owners, "Owner")}
+        <label class="ord-field"><span>Priority</span><select id="tkfPrio"><option value="">All</option>${TASK_PRIORITIES.map((p) => `<option${p === taskFilter.priority ? " selected" : ""}>${p}</option>`).join("")}</select></label>
+        <span class="tag" id="taskCount"></span>
+        <button id="taskAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add task</button>
+      </div>
+      <div class="table-wrap"><table class="cov-table tk-table">
+        <thead><tr><th style="width:26px"></th><th>Task</th><th>Owner</th><th>Due</th><th>Priority</th><th>Status</th><th>Device / Variant · Lead</th><th></th></tr></thead>
+        <tbody id="taskMain"></tbody>
+      </table></div>`;
   }
 
   /* ================= MIS (Finance monthly report) =================
