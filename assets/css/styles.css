@@ -1924,3 +1924,19 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 /* Empty-state cells read softer. */
 td.empty, .empty { color: var(--muted); text-align: center; padding: 18px 10px; }
+
+/* ===== Modals: content scrolls inside; action buttons stay pinned & visible ===== */
+/* Applies to every pop-up form (add lead, lead detail, task, corporate, etc.)
+   so the Save/Cancel/Close buttons are always reachable without scrolling. */
+.lead-modal { align-items: center; padding: 18px 12px; }
+.lead-modal-card { max-height: calc(100vh - 36px); overflow-y: auto; padding-bottom: 0; }
+.lead-modal-card .lead-modal-actions {
+  position: sticky; bottom: 0; z-index: 5;
+  background: var(--surface); justify-content: flex-end;
+  margin: 16px -22px 0; padding: 12px 22px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 640px) {
+  .lead-modal { padding: 8px 8px; align-items: flex-start; }
+  .lead-modal-card { max-height: calc(100vh - 16px); }
+}
