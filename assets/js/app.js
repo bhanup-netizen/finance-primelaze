@@ -7347,6 +7347,8 @@
         <a href="#h-start">Quick start</a> ·
         <a href="#h-pages">The pages</a> ·
         <a href="#h-add">Add a lead</a> ·
+        <a href="#h-tasks">Tasks</a> ·
+        <a href="#h-corp">Corporate</a> ·
         <a href="#h-views">Views (Table / Board / Analytics)</a> ·
         <a href="#h-prio">Priority &amp; tags</a> ·
         <a href="#h-bulk">Bulk actions</a> ·
@@ -7364,7 +7366,7 @@
 
       <div class="help-cards">
         <div class="help-card help-new"><h3>🙋 New here?</h3><p>Start with the <a href="#h-start">5-minute quick start</a> below, then read <a href="#h-stages">Pipeline stages</a> and <a href="#h-activity">Log an activity</a>. That covers 90% of daily work.</p></div>
-        <div class="help-card help-exist"><h3>🔁 Already using it?</h3><p>What's new: three board <b>views</b> (Table / <b>Kanban Board</b> / <b>Analytics</b>), lead <b>Priority</b> (🔥/🌤/❄️) &amp; <b>Tags</b>, and <b>Bulk actions</b> (assign, move stage, set priority, archive many at once). Also: a <b>Calendar</b>, an <b>Activity Board</b>, Task/Event activity types, mandatory next-action date, and multiple orders per contact. See the sections below.</p></div>
+        <div class="help-card help-exist"><h3>🔁 Already using it?</h3><p>What's new: a <b>✅ Tasks</b> board and a <b>🏢 Corporate</b> section (both inside Casovil CRM); <b>Device</b> &amp; <b>Esthemax variant</b> on each lead; three board <b>views</b> (Table / <b>Kanban Board</b> / <b>Analytics</b>), lead <b>Priority</b> (🔥/🌤/❄️) &amp; <b>Tags</b>, and <b>Bulk actions</b>. Also: a <b>Calendar</b>, an <b>Activity Board</b>, and multiple orders per contact. See the sections below.</p></div>
       </div>
 
       <h2 class="df-sec" id="h-start">① Quick start (5 minutes)</h2>
@@ -7380,13 +7382,29 @@
       <ul class="df-list">
         <li><b><a class="linkish" data-cv="leads">Casovil Sale</a></b> — the main lead board: add, filter, open and move leads.</li>
         <li><b><a class="linkish" data-cv="calendar">Calendar</a></b> — every lead's next task/action date and expected deliveries in a month view + an upcoming/overdue list.</li>
+        <li><b><a class="linkish" data-cv="tasks">✅ Tasks</a></b> — team to-dos &amp; follow-ups (like Bigin): owner, due date, priority, status; optionally link a task to a lead.</li>
+        <li><b><a class="linkish" data-cv="corporate">🏢 Corporate</a></b> — hospitals, clinic chains &amp; multi-centre salon/spa accounts, kept separate from regular leads.</li>
         <li><b><a class="linkish" data-cv="activity">Activity Board</a></b> — every activity logged across all leads, filter by person &amp; type (e.g. all of one salesperson's calls).</li>
         <li><b>📖 Help &amp; Training</b> — this page.</li>
       </ul>
 
       <h2 class="df-sec" id="h-add">③ Add a lead</h2>
-      <p>On <b>Casovil Sale</b>, click <b>＋ Add lead</b> (or the ＋ button). Fill the contact's name, <b>mobile (required)</b>, salon/clinic, city/state, source, product and owner. Save.</p>
+      <p>On <b>Casovil Sale</b>, click <b>＋ Add lead</b> (or the ＋ button). At the top choose <b>Add to: 🎯 Leads</b> (normal) or <b>🏢 Corporate</b> (a chain / hospital — goes straight to the Corporate section). Fill the name, <b>mobile (required)</b>, salon/clinic, city/state, source, product, and — where relevant — the <b>Device</b> and the exact <b>Esthemax variant</b>, then owner. Save.</p>
+      <p>You can also edit the <b>Device</b> and <b>Esthemax variant</b> later: open any existing lead and update them in the detail panel, then <b>Save details</b>.</p>
       ${ex("a new enquiry", "Dr. Meera calls asking about Celluma. Add lead → Name <b>Dr. Meera</b>, Mobile <b>98xxxxxx21</b>, Company <b>Glow Skin Clinic</b>, City <b>Pune</b>, Source <b>Phone</b>, Product <b>Celluma</b>, Owner <b>you</b> → Save. It appears on the board at stage <b>New</b>.")}
+
+      <h2 class="df-sec" id="h-tasks">✅ Tasks</h2>
+      <p>Inside Casovil CRM, open the <b><a class="linkish" data-cv="tasks">✅ Tasks</a></b> tab — your team to-do board (like Bigin). Click <b>＋ Add task</b>, give it a title, pick an <b>Owner</b> (Ashutosh / Lubdha / Sparsha / Arjun / Bhanu, or type a new name), a <b>Due date</b>, <b>Priority</b> and <b>Status</b>, and optionally <b>Link lead</b> (type the doctor/clinic name to search). Use the <b>Open / All / Done</b> tabs; tick the box to mark a task done.</p>
+      <p>Fastest way: open a lead → <b>✅ + Task</b> — it creates a task already linked to that doctor, so you don't have to search.</p>
+      ${ex("a follow-up", "You promised Dr. Meera a demo next Tuesday. Open her lead → <b>✅ + Task</b> → due <b>Tue</b>, priority <b>High</b> → Add. It shows under Open until you tick it done.")}
+
+      <h2 class="df-sec" id="h-corp">🏢 Corporate</h2>
+      <p>The <b><a class="linkish" data-cv="corporate">🏢 Corporate</a></b> tab holds hospitals, clinic chains and multi-centre salon/spa accounts — <b>separate from regular leads</b> (a client is in one place only). Two ways to add:</p>
+      <ul class="df-list">
+        <li><b>New corporate client:</b> on the Add-lead form pick <b>Add to: 🏢 Corporate</b>, or in the Corporate tab click <b>＋ Add client</b>.</li>
+        <li><b>Move an existing lead:</b> open the lead → <b>🏢 → Corporate</b>. It prefills the client (type = Clinic chain) and <b>moves</b> the lead out of the active list (archived, recoverable) so it isn't in two places.</li>
+      </ul>
+      ${ex("a chain", "“Glow Skin” turns out to be a 4-branch chain. Open the lead → <b>🏢 → Corporate</b> → confirm → Save. It now lives only in Corporate, marked <b>Clinic chain</b>.")}
 
       <h2 class="df-sec" id="h-stages">④ Pipeline stages</h2>
       <p>Move a lead by opening it and choosing a new stage in <b>＋ Add update</b> (you'll always add a note + next action at the same time).</p>
