@@ -147,9 +147,6 @@
     // Sale
     { id: "leads", label: "Casovil CRM", group: "Sale", render: renderCasovilCRM },
     { id: "payments", label: "Primelaze Sale", group: "Sale", render: renderPayments },
-    { id: "tasks", label: "✅ Tasks", group: "Sale", render: renderTasks },
-    { id: "products", label: "📦 Products", group: "Sale", render: renderProducts },
-    { id: "corporate", label: "🏢 Corporate", group: "Sale", render: renderCorporate },
     { id: "weeklySale", label: "Duties", group: "Sale", render: () => renderWeekly("Sale") },
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
@@ -7294,11 +7291,15 @@
   function renderCasovilCRM() {
     const views = [
       { k: "leads", label: "🎯 Leads" },
+      { k: "tasks", label: "✅ Tasks" },
+      { k: "corporate", label: "🏢 Corporate" },
       { k: "calendar", label: "📅 Calendar" },
       { k: "activity", label: "🧾 Activity Board" },
       { k: "help", label: "📖 Help & Training" },
     ];
-    const body = casovilView === "calendar" ? renderLeadCalendar()
+    const body = casovilView === "tasks" ? renderTasks()
+      : casovilView === "corporate" ? renderCorporate()
+      : casovilView === "calendar" ? renderLeadCalendar()
       : casovilView === "activity" ? renderLeadActivity()
       : casovilView === "help" ? renderCasovilHelp()
       : renderLeads();
@@ -10534,55 +10535,6 @@
     setTimeout(() => window.print(), 40);
   }
 
-  /* ================= PRODUCTS — simple product list =================
-     A plain editable list of everything we sell, grouped by category. Each
-     product is one document in the Firestore "products" collection. */
-  function prodStore() { return db ? db.collection("products") : null; }
-  let localProds = [], prodCache = [];
-  const PROD_CATS = ["Devices", "Esthemax", "Celluma", "Consumables", "Other"];
-  const prodCanEdit = () => roleIsAdmin() || isSuperAdmin() || hasAnyEditGrant();
-  function prodModal(existing) {
-    const p = existing || { category: "Devices" };
-    const wrap = document.createElement("div"); wrap.className = "lead-modal";
-    wrap.innerHTML = `<div class="lead-modal-card"><h3>${existing ? "Edit product" : "Add product"}</h3>
-      <div class="lead-form-grid">
-        <label class="lead-form-wide">Product name<input id="pdName" value="${esc(p.name || "")}" placeholder="Product / model name"></label>
-        <label>Category<input id="pdCat" list="pdCatList" value="${esc(p.category || "")}" placeholder="Category"><datalist id="pdCatList">${PROD_CATS.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></label>
-        <label class="lead-form-wide">Note<input id="pdNote" value="${esc(p.note || "")}" placeholder="Optional note"></label>
-      </div>
-      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="pdCancel">Cancel</button><button type="button" class="dl-btn" id="pdSave">${existing ? "Save" : "Add"}</button></div></div>`;
-    document.body.appendChild(wrap); const close = () => wrap.remove();
-    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
-    document.getElementById("pdCancel").onclick = close;
-    document.getElementById("pdSave").onclick = async () => {
-      const name = document.getElementById("pdName").value.trim(); if (!name) { toast("Enter a name", "warn"); return; }
-      const data = { name, category: document.getElementById("pdCat").value.trim() || "Other", note: document.getElementById("pdNote").value.trim(), updatedAt: Date.now(), updatedBy: (sessionUser && sessionUser.email) || "" };
-      try {
-        const store = prodStore();
-        if (existing && existing.id) { if (store) await store.doc(existing.id).set(data, { merge: true }); else { const i = localProds.findIndex((x) => x.id === existing.id); if (i >= 0) localProds[i] = Object.assign(localProds[i], data); } }
-        else { data.createdAt = Date.now(); if (store) await store.add(data); else { data.id = "p" + Date.now(); localProds.push(data); } }
-        close(); toast("✓ Saved"); loadProds();
-      } catch (e) { console.warn("product save failed", e); toast("Save failed", "warn"); }
-    };
-  }
-  async function loadProds() { let list = []; try { const store = prodStore(); if (store) { const snap = await store.get(); snap.forEach((d) => list.push({ id: d.id, ...d.data() })); } else list = localProds.slice(); } catch (e) { list = localProds.slice(); } prodCache = list; if (document.getElementById("prodMain")) renderProdList(); }
-  async function prodDelete(id) { if (!window.confirm("Remove this product?")) return; try { const store = prodStore(); if (store) await store.doc(id).delete(); else localProds = localProds.filter((x) => x.id !== id); } catch (e) { console.warn(e); } loadProds(); }
-  function renderProdList() {
-    const main = document.getElementById("prodMain"); if (!main) return;
-    const ed = prodCanEdit();
-    const byCat = {}; prodCache.forEach((p) => { (byCat[p.category || "Other"] = byCat[p.category || "Other"] || []).push(p); });
-    const cats = Object.keys(byCat).sort();
-    main.innerHTML = cats.length ? cats.map((c) => `<div class="lp-card"><h3>${esc(c)} <span class="tag">${byCat[c].length}</span></h3><ul class="prod-ul">${byCat[c].slice().sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((p) => `<li><b>${esc(p.name)}</b>${p.note ? ` <span class="t-muted">— ${esc(p.note)}</span>` : ""}${ed ? ` <button class="linkish pd-edit" data-id="${esc(p.id)}">edit</button> <button class="linkish pd-del" data-id="${esc(p.id)}" title="Remove">✕</button>` : ""}</li>`).join("")}</ul></div>`).join("") : `<div class="muted-note">No products yet.${ed ? " Click “＋ Add product”." : ""}</div>`;
-    main.querySelectorAll(".pd-edit").forEach((b) => b.onclick = () => { const p = prodCache.find((x) => x.id === b.dataset.id); if (p) prodModal(p); });
-    main.querySelectorAll(".pd-del").forEach((b) => b.onclick = () => prodDelete(b.dataset.id));
-  }
-  function renderProducts() {
-    setTimeout(() => { const ab = document.getElementById("prodAdd"); if (ab) ab.onclick = () => prodModal(null); loadProds(); }, 0);
-    return `<div class="section-head"><h1>📦 Products</h1><p>Simple list of everything we sell, grouped by category. ${prodCanEdit() ? "Editable — saves for everyone." : "Read-only."}</p></div>
-      <div class="controls" style="margin-top:8px">${prodCanEdit() ? `<button id="prodAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add product</button>` : ""}</div>
-      <div id="prodMain" class="lead-process" style="margin-top:10px"></div>`;
-  }
-
   /* ================= CORPORATE — corporate / institutional clients =================
      Hospitals, clinic chains and corporate accounts and their deals. Each client
      is one document in the Firestore "corpClients" collection. */
@@ -10595,8 +10547,10 @@
   function corpModal(existing) {
     const c = existing || { type: "Hospital", status: "Prospect" };
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    const crmLeads = (typeof leadAll === "function" ? leadAll() : []).filter((l) => typeof leadIsArchived !== "function" || !leadIsArchived(l.id));
     wrap.innerHTML = `<div class="lead-modal-card"><h3>${existing ? "Edit client" : "Add corporate client"}</h3>
       <div class="lead-form-grid">
+        ${existing ? "" : `<label class="lead-form-wide">Move from an existing lead (optional)<select id="cpFromLead"><option value="">— new client / none —</option>${crmLeads.map((l) => `<option value="${esc(l.id)}">${esc(l.company || l.name || l.mobile || l.id)}${l.city ? " · " + esc(l.city) : ""}</option>`).join("")}</select></label>`}
         <label class="lead-form-wide">Client / organization<input id="cpName" value="${esc(c.name || "")}" placeholder="Hospital / chain / company"></label>
         <label>Type<select id="cpType">${CORP_TYPES.map((x) => `<option${x === (c.type || "Hospital") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
         <label>Status<select id="cpStatus">${CORP_STATUSES.map((x) => `<option${x === (c.status || "Prospect") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
@@ -10611,10 +10565,23 @@
     document.body.appendChild(wrap); const close = () => wrap.remove();
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("cpCancel").onclick = close;
+    // "Move from a lead": prefill the form from the chosen CRM lead (default a chain).
+    const fl = document.getElementById("cpFromLead");
+    if (fl) fl.onchange = () => {
+      const l = crmLeads.find((x) => x.id === fl.value); if (!l) return;
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ""; };
+      set("cpName", l.company || l.name || "");
+      set("cpContact", l.name || "");
+      set("cpPhone", l.mobile || "");
+      set("cpLoc", [l.city, l.state].filter(Boolean).join(", "));
+      set("cpOwner", l.owner || "");
+      set("cpDeal", [l.product, l.device, l.esth].filter(Boolean).join(" · "));
+      const ts = document.getElementById("cpType"); if (ts) ts.value = "Clinic chain";
+    };
     document.getElementById("cpSave").onclick = async () => {
       const name = document.getElementById("cpName").value.trim(); if (!name) { toast("Enter a name", "warn"); return; }
       const g = (id) => document.getElementById(id).value.trim();
-      const data = { name, type: document.getElementById("cpType").value, status: document.getElementById("cpStatus").value, contact: g("cpContact"), phone: g("cpPhone"), location: g("cpLoc"), owner: g("cpOwner"), deal: g("cpDeal"), notes: g("cpNotes"), updatedAt: Date.now(), updatedBy: (sessionUser && sessionUser.email) || "" };
+      const data = { name, type: document.getElementById("cpType").value, status: document.getElementById("cpStatus").value, contact: g("cpContact"), phone: g("cpPhone"), location: g("cpLoc"), owner: g("cpOwner"), deal: g("cpDeal"), notes: g("cpNotes"), fromLeadId: (fl && fl.value) || (c.fromLeadId || ""), updatedAt: Date.now(), updatedBy: (sessionUser && sessionUser.email) || "" };
       try {
         const store = corpStore();
         if (existing && existing.id) { if (store) await store.doc(existing.id).set(data, { merge: true }); else { const i = localCorp.findIndex((x) => x.id === existing.id); if (i >= 0) localCorp[i] = Object.assign(localCorp[i], data); } }
@@ -10811,7 +10778,7 @@
       wire("tkfOwner", (e) => { taskFilter.owner = e.target.value; renderTaskList(); });
       wire("tkfPrio", (e) => { taskFilter.priority = e.target.value; renderTaskList(); });
       const s = document.getElementById("tkfSearch"); if (s) s.oninput = (e) => { taskFilter.q = e.target.value; renderTaskList(); };
-      document.querySelectorAll(".tkv[data-v]").forEach((b) => b.onclick = () => { taskFilter.view = b.dataset.v; renderTab("tasks"); });
+      document.querySelectorAll(".tkv[data-v]").forEach((b) => b.onclick = () => { taskFilter.view = b.dataset.v; go("leads"); });
       loadTasks();
     }, 0);
     const owners = taskOwnerNames();

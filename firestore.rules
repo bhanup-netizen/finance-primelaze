@@ -101,13 +101,8 @@ service cloud.firestore {
       allow delete: if isAdmin() || isPageEditor();
     }
 
-    // Products — simple product list; Corporate clients — corporate/institutional
-    // accounts. Internal team tools: any signed-in user reads & creates/updates;
-    // admins & page editors delete.
-    match /products/{doc} {
-      allow read, create, update: if isSignedIn();
-      allow delete: if isAdmin() || isPageEditor();
-    }
+    // Corporate clients — corporate/institutional accounts. Internal team tool:
+    // any signed-in user reads & creates/updates; admins & page editors delete.
     match /corpClients/{doc} {
       allow read, create, update: if isSignedIn();
       allow delete: if isAdmin() || isPageEditor();
