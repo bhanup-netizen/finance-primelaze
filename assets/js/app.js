@@ -6333,6 +6333,8 @@
       <ol class="lead-tl" id="ldTl">${items}</ol>
       <div class="lead-modal-actions ld-actions">
         ${canRemarkLeads() ? `<button type="button" class="dl-btn" id="ldAdd">＋ Add update${admin ? " / move stage" : ""}</button>` : ""}
+        ${canRemarkLeads() ? `<button type="button" class="ghost-btn" id="ldTask">✅ + Task</button>` : ""}
+        ${admin ? `<button type="button" class="ghost-btn" id="ldCorp">🏢 → Corporate</button>` : ""}
         ${admin && !r.owner && myLeadOwner() ? `<button type="button" class="ghost-btn" id="ldMine">🙋 Assign to me</button>` : ""}
         ${admin ? (archived ? `<button type="button" class="ghost-btn" id="ldArch">↩ Restore</button>` : `<button type="button" class="ghost-btn" id="ldArch">🗄 Archive</button>`) : ""}
         ${admin ? `<button type="button" class="ghost-btn" id="ldSave">💾 Save details</button>` : ""}
@@ -6346,6 +6348,12 @@
     if (ldOwn) { let lastO = ldOwn.value; ldOwn.onchange = () => { if (ldOwn.value !== "__newrep__") { lastO = ldOwn.value; return; } const nm = addNewRepPrompt(); ldOwn.innerHTML = ownerOptionsHtml(nm || lastO); ldOwn.value = nm || lastO; lastO = ldOwn.value; }; }
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("ldClose").onclick = close;
+    // One-click: create a task pre-linked to this lead (no dropdown hunting).
+    const ldTask = document.getElementById("ldTask");
+    if (ldTask) ldTask.onclick = () => { close(); taskModal({ title: "Follow up: " + (r.name || r.company || ""), owner: r.owner || "", leadId: r.id, device: r.device || "", esth: r.esth || "", priority: "Medium", status: "open" }); };
+    // One-click: move this lead into Corporate (prefilled from the lead).
+    const ldCorp = document.getElementById("ldCorp");
+    if (ldCorp) ldCorp.onclick = () => { close(); corpModal({ name: r.company || r.name || "", contact: r.name || "", phone: r.mobile || "", location: [r.city, r.state].filter(Boolean).join(", "), owner: r.owner || "", deal: [r.product, r.device, r.esth].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", fromLeadId: r.id }); };
     // Other pipelines for this contact: open, create, and merged timeline.
     wrap.querySelectorAll(".lead-sib[data-open]").forEach((b) => (b.onclick = () => { close(); leadDetailDialog(b.dataset.open); }));
     const newPipe = document.getElementById("ldNewPipe");
@@ -10546,11 +10554,12 @@
   const corpBadge = (s) => { const m = { "Won": "b-good", "Lost": "b-bad", "In discussion": "b-info", "On hold": "b-warn", "Prospect": "b-neutral" }; return `<span class="badge ${m[s] || "b-neutral"}">${esc(s || "—")}</span>`; };
   function corpModal(existing) {
     const c = existing || { type: "Hospital", status: "Prospect" };
+    const isEdit = !!(existing && existing.id);
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
     const crmLeads = (typeof leadAll === "function" ? leadAll() : []).filter((l) => typeof leadIsArchived !== "function" || !leadIsArchived(l.id));
-    wrap.innerHTML = `<div class="lead-modal-card"><h3>${existing ? "Edit client" : "Add corporate client"}</h3>
+    wrap.innerHTML = `<div class="lead-modal-card"><h3>${isEdit ? "Edit client" : "Add corporate client"}</h3>
       <div class="lead-form-grid">
-        ${existing ? "" : `<label class="lead-form-wide">Move from an existing lead (optional)<select id="cpFromLead"><option value="">— new client / none —</option>${crmLeads.map((l) => `<option value="${esc(l.id)}">${esc(l.company || l.name || l.mobile || l.id)}${l.city ? " · " + esc(l.city) : ""}</option>`).join("")}</select></label>`}
+        ${(isEdit || c.fromLeadId) ? "" : `<label class="lead-form-wide">Move from an existing lead (optional)<select id="cpFromLead"><option value="">— new client / none —</option>${crmLeads.map((l) => `<option value="${esc(l.id)}">${esc(l.company || l.name || l.mobile || l.id)}${l.city ? " · " + esc(l.city) : ""}</option>`).join("")}</select></label>`}
         <label class="lead-form-wide">Client / organization<input id="cpName" value="${esc(c.name || "")}" placeholder="Hospital / chain / company"></label>
         <label>Type<select id="cpType">${CORP_TYPES.map((x) => `<option${x === (c.type || "Hospital") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
         <label>Status<select id="cpStatus">${CORP_STATUSES.map((x) => `<option${x === (c.status || "Prospect") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
@@ -10561,7 +10570,7 @@
         <label class="lead-form-wide">Deal / products<input id="cpDeal" value="${esc(c.deal || "")}" placeholder="What they're buying / value"></label>
         <label class="lead-form-wide">Notes<input id="cpNotes" value="${esc(c.notes || "")}"></label>
       </div>
-      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="cpCancel">Cancel</button><button type="button" class="dl-btn" id="cpSave">${existing ? "Save" : "Add"}</button></div></div>`;
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="cpCancel">Cancel</button><button type="button" class="dl-btn" id="cpSave">${isEdit ? "Save" : "Add"}</button></div></div>`;
     document.body.appendChild(wrap); const close = () => wrap.remove();
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
     document.getElementById("cpCancel").onclick = close;
@@ -10651,13 +10660,17 @@
 
   function taskModal(existing) {
     const t = existing || { priority: "Medium", status: "open" };
+    const isEdit = !!(existing && existing.id);
     const wrap = document.createElement("div");
     wrap.className = "lead-modal";
     const devs = taskDevices();
     const owners = taskOwnerNames();
     const leadsList = (typeof leadAll === "function" ? leadAll() : []).filter((l) => typeof leadIsArchived !== "function" || !leadIsArchived(l.id));
+    const leadLabel = (l) => [l.name || l.company || l.mobile || l.id, (l.mobile && (l.name || l.company)) ? l.mobile : "", l.city].filter(Boolean).join(" · ");
+    const leadLabelToId = {}; leadsList.forEach((l) => { leadLabelToId[leadLabel(l)] = l.id; });
+    const curLeadLabel = t.leadId ? leadLabel(leadsList.find((l) => l.id === t.leadId) || {}) : "";
     wrap.innerHTML = `<div class="lead-modal-card">
-      <h3>${existing ? "Edit task" : "Add a task"}</h3>
+      <h3>${isEdit ? "Edit task" : "Add a task"}</h3>
       <div class="lead-form-grid">
         <label class="lead-form-wide">Task<input id="tkTitle" type="text" placeholder="What needs to be done" value="${esc(t.title || "")}"></label>
         <label>Owner<input id="tkOwner" list="tkOwnerList" value="${esc(t.owner || "")}" placeholder="Assign to"><datalist id="tkOwnerList">${owners.map((o) => `<option value="${esc(o)}">`).join("")}</datalist></label>
@@ -10666,12 +10679,12 @@
         <label>Status<select id="tkStatus">${TASK_STATUSES.map((s) => `<option value="${s.k}"${s.k === (t.status || "open") ? " selected" : ""}>${s.l}</option>`).join("")}</select></label>
         <label>Device<input id="tkDevice" list="tkDeviceList" value="${esc(t.device || "")}" placeholder="Select or type a device"><datalist id="tkDeviceList">${devs.map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
         <label>Esthemax variant${esthVariantSelect("tkEsth", t.esth || "")}</label>
-        <label>Link lead<select id="tkLead"><option value="">—</option>${leadsList.map((l) => `<option value="${esc(l.id)}"${l.id === t.leadId ? " selected" : ""}>${esc(l.name || l.salon || l.mobile || l.id)}</option>`).join("")}</select></label>
+        <label>Link lead<input id="tkLead" list="tkLeadList" value="${esc(curLeadLabel)}" placeholder="Type to search a lead…"><datalist id="tkLeadList">${leadsList.map((l) => `<option value="${esc(leadLabel(l))}">`).join("")}</datalist></label>
         <label class="lead-form-wide">Notes<input id="tkNotes" type="text" value="${esc(t.notes || "")}" placeholder="Details"></label>
       </div>
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="tkCancel">Cancel</button>
-        <button type="button" class="dl-btn" id="tkSave">${existing ? "Save" : "Add task"}</button>
+        <button type="button" class="dl-btn" id="tkSave">${isEdit ? "Save" : "Add task"}</button>
       </div>
     </div>`;
     document.body.appendChild(wrap);
@@ -10690,7 +10703,7 @@
         status: document.getElementById("tkStatus").value,
         device: document.getElementById("tkDevice").value.trim(),
         esth: document.getElementById("tkEsth").value,
-        leadId: document.getElementById("tkLead").value,
+        leadId: leadLabelToId[document.getElementById("tkLead").value.trim()] || "",
         notes: document.getElementById("tkNotes").value.trim(),
         updatedAt: now, updatedBy: by,
       };
