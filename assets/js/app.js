@@ -52,7 +52,15 @@
   };
   const canSeePage = (id) => {
     if (id === "passwords") return isSuperAdmin(); // account passwords: super admin only
-    if (id === "companyprice") return isSuperAdmin(); // full cost/price sheet: super admin only
+    // Price Calculator: confidential cost/price sheet — hidden by default, but
+    // visible to admins/super AND to any user explicitly granted access to it
+    // (View or Edit) in their permissions. (Was super-admin-only, which blocked
+    // granted admins like admin@ from seeing it.)
+    if (id === "companyprice") {
+      return roleIsAdmin() || isSuperAdmin()
+        || canEditPage("companyprice")
+        || (Array.isArray(perms.pages) && perms.pages.includes("companyprice"));
+    }
     // Travel policy: hidden by default, but visible to admins AND to any user
     // explicitly granted access to it (View or Edit) in their permissions.
     if (id === "travelpolicy") {
@@ -3210,7 +3218,7 @@
     }
   }
   function renderCompanyPrice() {
-    if (!isSuperAdmin()) return `<div class="section-head"><h1>🧮 Price Calculator</h1><p>This confidential price sheet is visible to the super admin only.</p></div>`;
+    if (!canSeePage("companyprice")) return `<div class="section-head"><h1>🧮 Price Calculator</h1><p>This confidential price sheet is visible to the super admin and to users granted access.</p></div>`;
     if (typeof orderInit === "function") orderInit();
     const usd = (orderState && orderState.usdInr) || "—";
     const custPct = orderState && orderState.customs != null ? Math.round(orderState.customs * 100) + "%" : "—";
