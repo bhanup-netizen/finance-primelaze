@@ -156,9 +156,7 @@
     // Marketing
     { id: "social", label: "Online Marketing", group: "Marketing", render: renderSocial },
     { id: "coverage", label: "Coverage Matrix", group: "Marketing", render: renderCoverage },
-    { id: "weeklyOnline", label: "Online Duties", group: "Marketing", render: () => renderWeekly("Online Marketing") },
     { id: "offline", label: "Offline Marketing", group: "Marketing", render: renderOffline },
-    { id: "weeklyOffline", label: "Offline Duties", group: "Marketing", render: () => renderWeekly("Offline Marketing") },
     { id: "telemarketing", label: "Lead Collection", group: "Marketing", render: renderTelemarketing },
     { id: "passwords", label: "🔑 Passwords", group: "Marketing", render: renderPasswords },
     // Admin & Logistics
