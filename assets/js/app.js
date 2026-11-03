@@ -8684,6 +8684,61 @@
           <li><b>No visitor form should be missed</b> — all forms must be shared clearly and in the correct sequence.</li>
         </ol>
         <div class="muted-note">This keeps proper records of conference visitors and ensures all leads are shared on time. <span class="t-muted">— Process set by Sparsha.</span></div>
+      </div>
+
+      <h2 style="margin-top:28px">🩺 Doctor Event — process</h2>
+      <div class="callout teal" style="margin-top:12px">Every doctor event is planned <b>3 weeks in advance</b> and every photo/video is recorded in the Marketing Drive. Buzzfied gives <b>three free photoshoots across India</b> — so the request must go in early.</div>
+      <div class="block" style="margin-top:12px">
+        <h3 style="margin:0 0 8px">Flow (plan → event → post → doctor)</h3>
+        <ol class="soc-addr">
+          <li>The <b>salesperson</b> updates <b>Sparsha</b> via the <b>Bigin pipeline (Marketing Update)</b> — at least <b>3 weeks before</b> the event.</li>
+          <li><b>Sparsha</b> updates <b>Buzzfied</b> (cc <b>Avedan</b>).</li>
+          <li><b>Avedan, Sparsha &amp; Buzzfied</b> brainstorm how to run the event at the doctor's place.</li>
+          <li><b>Akshay</b> arranges everything to run the event at the doctor's place.</li>
+          <li>After the event, the <b>salesperson</b> (or <b>Akshay</b>, if he is at the doctor's place) shares the <b>videos &amp; photos to Sparsha</b>.</li>
+          <li><b>Sparsha</b> puts them in the <b>Drive</b> and updates <b>Avedan</b> via <b>email + Zoho Projects</b>.</li>
+          <li><b>Avedan</b> shares with <b>Buzzfied</b> to enhance; Buzzfied sends the enhanced output back to Sparsha.</li>
+          <li><b>Sparsha</b> shares the final output <b>with the doctor</b> (directly or via the salesperson).</li>
+        </ol>
+      </div>
+      <div class="block" style="margin-top:12px">
+        <h3 style="margin:0 0 8px">Photographer</h3>
+        <ul class="soc-addr">
+          <li>Buzzfied provides <b>three photoshoots free, all over India</b> — she <b>arranges the photographer</b>, but we must <b>request it at least 3 weeks in advance</b>.</li>
+          <li>Buzzfied <b>only coordinates with the photographer</b> and briefs them on what is needed at the event.</li>
+          <li><b>Sparsha</b> takes the output and puts it in the Drive. <b>Backup: Akshay</b> (if Sparsha is unavailable).</li>
+        </ul>
+      </div>
+      <div class="block" style="margin-top:12px">
+        <h3 style="margin:0 0 8px">Posting the video / post</h3>
+        <ul class="soc-addr">
+          <li><b>Avedan</b> posts the doctor-event video/post on <b>social media</b> and shares it with the doctor <b>within 48 hours (business days)</b>.</li>
+          <li>Backup: <b>Rashmi</b>; if both are unavailable, <b>Akshay</b>.</li>
+          <li><b>Buzzfied &amp; Naresh</b> meet (through Avedan) during post creation, so Naresh can check the <b>technical &amp; clinical</b> accuracy.</li>
+        </ul>
+      </div>
+      <div class="block" style="margin-top:12px">
+        <h3 style="margin:0 0 8px">📁 Drive &amp; folder structure</h3>
+        <ul class="soc-addr">
+          <li>All data must go into the <b>Marketing Drive</b>.</li>
+          <li>Folder name: <b>DoctorName_ProductName_YYYY-MM-DD/</b></li>
+          <li>Inside it, keep two separate sub-folders: <b>raw</b> and <b>enhanced</b>.</li>
+        </ul>
+      </div>
+      <div class="muted-note" style="margin-top:8px">Sparsha keeps Avedan on <b>all calls, emails &amp; meetings</b>, and vice versa.</div>
+
+      <h2 style="margin-top:28px">🚀 New Product Campaign — process</h2>
+      <div class="callout teal" style="margin-top:12px">Weekly PR planning for new &amp; existing products, driven by Avedan with Arjun.</div>
+      <div class="block" style="margin-top:12px">
+        <ol class="soc-addr">
+          <li><b>Avedan asks Arjun weekly</b> about PR for new &amp; existing products.</li>
+          <li><b>Arjun</b> explains which product needs to be marketed.</li>
+          <li><b>Avedan</b> sets up a call with <b>Arjun, Naresh, Sparsha &amp; Avedan</b>; the <b>strategy is decided</b> on that call.</li>
+          <li><b>Avedan creates all the follow-up PR tasks</b> (what Avedan does and what <b>Jahnvi</b> does) and <b>updates Arjun weekly</b>.</li>
+          <li><b>Avedan</b> asks <b>Arjun for the deadline</b> of the activity.</li>
+          <li>If the outcome is an <b>offline PR activity</b>, <b>Sparsha takes it over and hands it to Akshay</b>, who conduct it — handled the <b>same way as a doctor event</b> (above).</li>
+        </ol>
+        <div class="muted-note">Avedan keeps Sparsha on <b>all calls, emails &amp; meetings</b>, and vice versa.</div>
       </div>`;
   }
 
