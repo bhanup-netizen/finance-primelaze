@@ -8710,9 +8710,10 @@
         </ul>
       </div>
       <div class="block" style="margin-top:12px">
-        <h3 style="margin:0 0 8px">Posting the video / post</h3>
-        <ul class="soc-addr">
-          <li><b>Avedan</b> posts the doctor-event video/post on <b>social media</b> and shares it with the doctor <b>within 48 hours (business days)</b>.</li>
+        <h3 style="margin:0 0 8px">⏱ 72-hour rule — output (online)</h3>
+        <div class="callout teal" style="margin-top:4px">The event is offline, but the <b>output is online</b> (video/photos for social media &amp; website). For <b>every event / conference</b>, the <b>whole cycle must finish within 72 hours (maximum)</b>: photos/videos <b>received → enhanced → reach the doctor → posted on social media &amp; website</b>.</div>
+        <ul class="soc-addr" style="margin-top:10px">
+          <li><b>Avedan</b> posts the event video/post on <b>social media &amp; the website</b> and shares it with the doctor — all inside the <b>72-hour window</b>.</li>
           <li>Backup: <b>Rashmi</b>; if both are unavailable, <b>Akshay</b>.</li>
           <li><b>Buzzfied &amp; Naresh</b> meet (through Avedan) during post creation, so Naresh can check the <b>technical &amp; clinical</b> accuracy.</li>
         </ul>
@@ -8734,7 +8735,7 @@
           <li><b>Avedan asks Arjun weekly</b> about PR for new &amp; existing products.</li>
           <li><b>Arjun</b> explains which product needs to be marketed.</li>
           <li><b>Avedan</b> sets up a call with <b>Arjun, Naresh, Sparsha &amp; Avedan</b>; the <b>strategy is decided</b> on that call.</li>
-          <li><b>Avedan creates all the follow-up PR tasks</b> (what Avedan does and what <b>Jahnvi</b> does) and <b>updates Arjun weekly</b>.</li>
+          <li><b>Avedan creates all the follow-up PR tasks</b> (what Avedan does and what <b>Buzzfied</b> does) and <b>updates Arjun weekly</b>.</li>
           <li><b>Avedan</b> asks <b>Arjun for the deadline</b> of the activity.</li>
           <li>If the outcome is an <b>offline PR activity</b>, <b>Sparsha takes it over and hands it to Akshay</b>, who conduct it — handled the <b>same way as a doctor event</b> (above).</li>
         </ol>
