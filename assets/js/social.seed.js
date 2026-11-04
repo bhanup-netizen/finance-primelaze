@@ -75,10 +75,10 @@ window.SOCIAL_SEED = {
     ],
     // 2.3 Monthly content calendar
     calendar: [
-      { brand: "Celluma India", prepared: "Rashmi + Avedan", approved: "Arjun + Bhanu", due: "25th of preceding month" },
-      { brand: "Primelaze", prepared: "Rashmi + Avedan", approved: "Arjun + Bhanu", due: "25th of preceding month" },
-      { brand: "Esthemax India", prepared: "ClanConnect", approved: "Rashmi + Avedan, then Arjun + Bhanu", due: "25th of preceding month" },
-      { brand: "Casovil", prepared: "Buzzfied", approved: "Rashmi + Avedan, then Arjun + Bhanu", due: "25th of preceding month" },
+      { brand: "Celluma India", prepared: "Buzzfied", approved: "Arjun", due: "25th of preceding month" },
+      { brand: "Primelaze", prepared: "Buzzfied", approved: "Arjun", due: "25th of preceding month" },
+      { brand: "Esthemax India", prepared: "Buzzfied", approved: "Arjun", due: "25th of preceding month" },
+      { brand: "Casovil", prepared: "Buzzfied", approved: "Arjun", due: "25th of preceding month" },
     ],
     // 2.4 Quarterly strategy note (company-managed brands)
     strategyNote: {

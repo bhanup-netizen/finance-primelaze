@@ -8529,13 +8529,9 @@
         <h2 style="margin-top:8px">Online marketing structure</h2>
         <div class="callout teal">Owned by <b>${mkText(ed, "onlineOwners", M.onlineOwners)}</b> · Agencies: ${mkText(ed, "agencies", M.agencies)}<br>${mkArea(ed, "scope", M.scope)}</div>
 
-        <div class="block" style="margin-top:16px"><h3 style="margin:0 0 2px">Who runs which page <span class="t-muted" style="font-weight:400">· Instagram page</span></h3>
-          <div class="muted-note" style="margin:0 0 8px">Refers to the Instagram page for each brand.</div>
-          ${mkRowsTable(ed, "pages", M.pages, [["brand", "Brand"], ["model", "Instagram page"], ["owners", "Our owners"]])}
-          ${mkList(ed, "models", M.models)}</div>
-
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Monthly content calendar</h3>
-          ${mkRowsTable(ed, "calendar", M.calendar, [["brand", "Brand"], ["prepared", "Prepared by"], ["approved", "Reviewed / approved by"], ["due", "Due"]])}</div>
+          ${mkRowsTable(ed, "calendar", M.calendar, [["brand", "Brand"], ["prepared", "Prepared by"], ["approved", "Approved by"], ["due", "Due"]])}
+          <div class="muted-note">Every monthly calendar is <b>approved by Arjun</b>. Review / strategy meetings are <b>set up by Avedan</b>.</div></div>
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Quarterly strategy note <span class="t-muted" style="font-weight:400">· company-managed brands</span></h3>
           ${mkList(ed, "strategyNote.sections", M.strategyNote && M.strategyNote.sections)}
@@ -8543,15 +8539,11 @@
 
         <div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">Fixed cadence</h3>
           ${mkRowsTable(ed, "cadence", M.cadence, [["deliverable", "Deliverable"], ["owner", "Owner"], ["freq", "Frequency"]])}
-          <div class="muted-note">${mkArea(ed, "escalation", M.escalation)}</div></div>
-
-        ${M.kpis ? `<div class="block" style="margin-top:16px"><h3 style="margin:0 0 8px">KPIs — what we measure</h3>
-          ${mkRowsTable(ed, "kpis.rows", M.kpis.rows, [["metric", "Metric"], ["how", "How it's measured"], ["target", "Target"]])}
-          <div class="muted-note">${mkArea(ed, "kpis.note", M.kpis.note)}</div></div>` : ""}`;
+          <div class="muted-note">${mkArea(ed, "escalation", M.escalation)}</div></div>`;
     }
     const websites = (platOrdered.length || ed)
       ? `<h2 style="margin-top:28px">Pages by platform</h2>
-         <p class="muted-note" style="margin-top:2px"><b>Content created &amp; posted by</b> the company team (Rashmi + Avedan) or the agency (ClanConnect / Buzzfied); <b>DM replies &amp; post engagement</b> are handled by Sparsha (Lead Collection).${ed ? " Page admins can toggle a page Active / Not Active, add a new page, or delete one." : ""} Emails &amp; phone numbers are on the Lead Collection tab; logins on the 🔑 Passwords tab (super admin only).</p>
+         <p class="muted-note" style="margin-top:2px"><b>Content created &amp; posted by</b> Buzzfied (agency) — backup <b>Avedan + Rashmi</b>. <b>DM replies &amp; post engagement</b> by Sparsha — backup <b>Avedan</b>.${ed ? " Page admins can toggle a page Active / Not Active, add a new page, or delete one." : ""} Emails &amp; phone numbers are on the Lead Collection tab; logins on the 🔑 Passwords tab (super admin only).</p>
          ${addPageBtn}${platSections}`
       : "";
 
@@ -12565,6 +12557,13 @@
       if (Array.isArray(e.socPageAdds)) { socPageAdds.length = 0; e.socPageAdds.forEach((x) => socPageAdds.push(x)); const ids = socPageAdds.map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); socPageSeq = Math.max(socPageSeq, ...(ids.length ? ids : [0])) + 1; }
       if (Array.isArray(e.socPageHidden)) { socPageHidden.length = 0; e.socPageHidden.forEach((x) => socPageHidden.push(x)); }
       if (e.mktDoc && typeof e.mktDoc === "object") { Object.keys(mktDoc).forEach((k) => delete mktDoc[k]); Object.assign(mktDoc, e.mktDoc); }
+      // One-time: every monthly content calendar is approved by Arjun only.
+      // Normalises any previously-saved override (idempotent; guarded so later
+      // manual edits aren't overwritten once this has persisted).
+      if (mktDoc.__init && !(mktDoc.__calApprovedV >= 1)) {
+        if (Array.isArray(mktDoc.calendar)) mktDoc.calendar.forEach((r) => { if (r) r.approved = "Arjun"; });
+        mktDoc.__calApprovedV = 1;
+      }
       if (e.weeklyTasks && typeof e.weeklyTasks === "object") { Object.keys(weeklyTasks).forEach((k) => delete weeklyTasks[k]); Object.assign(weeklyTasks, e.weeklyTasks); const ids = Object.values(weeklyTasks).flatMap((d) => [...((d && d.mandatory) || []), ...((d && d.monthly) || []), ...((d && d.optional) || [])]).map((x) => +String(x.id || "").replace(/\D/g, "")).filter((n) => !isNaN(n)); weeklySeq = Math.max(weeklySeq, ...(ids.length ? ids : [0])) + 1; }
       // Refresh a department's duties to the new built-in list (once) when the
       // stored copy predates that dept's current version. Only stale depts are
