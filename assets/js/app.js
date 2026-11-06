@@ -6310,7 +6310,8 @@
         ${fSelect("source", "Source", allLeadSources(), "")}
         ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
         ${admin ? `<label class="ld-field"><span>Device</span><input id="ld_device" list="ldDevList" value="${val(r.device)}" placeholder="Select or type a device"><datalist id="ldDevList">${taskDevices().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>` : (r.device ? `<div class="ld-field"><span>Device</span><div class="ld-val">${esc(r.device)}</div></div>` : "")}
-        ${admin ? `<label class="ld-field"><span>Esthemax variant</span>${esthVariantSelect("ld_esth", r.esth || "")}</label>` : (r.esth ? `<div class="ld-field"><span>Esthemax variant</span><div class="ld-val">${esc(r.esth)}</div></div>` : "")}
+        ${admin ? `<label class="ld-field"><span>Esthemax variant(s)</span>${esthVariantMulti("ld_esth", r.esth || "")}</label>` : (r.esth ? `<div class="ld-field"><span>Esthemax variant(s)</span><div class="ld-val">${esc(r.esth)}</div></div>` : "")}
+        ${admin ? `<label class="ld-field"><span>Celluma model(s)</span>${cellumaMulti("ld_celluma", r.celluma || "")}</label>` : (r.celluma ? `<div class="ld-field"><span>Celluma model(s)</span><div class="ld-val">${esc(r.celluma)}</div></div>` : "")}
         ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
         ${admin ? `<label class="ld-field"><span>Priority</span><select id="ld_priority"><option value="">— None</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}"${(r.priority || "") === p.key ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>` : (r.priority ? `<div class="ld-field"><span>Priority</span><div class="ld-val">${leadPrioBadge(r)}</div></div>` : "")}
         ${fText("link", "Attachment link", "https://…")}
@@ -6353,7 +6354,7 @@
     if (ldTask) ldTask.onclick = () => { close(); taskModal({ title: "Follow up: " + (r.name || r.company || ""), owner: r.owner || "", leadId: r.id, device: r.device || "", esth: r.esth || "", priority: "Medium", status: "open" }); };
     // One-click: move this lead into Corporate (prefilled from the lead).
     const ldCorp = document.getElementById("ldCorp");
-    if (ldCorp) ldCorp.onclick = () => { close(); corpModal({ name: r.company || r.name || "", contact: r.name || "", phone: r.mobile || "", location: [r.city, r.state].filter(Boolean).join(", "), owner: r.owner || "", deal: [r.product, r.device, r.esth].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", fromLeadId: r.id }); };
+    if (ldCorp) ldCorp.onclick = () => { close(); corpModal({ name: r.company || r.name || "", contact: r.name || "", phone: r.mobile || "", location: [r.city, r.state].filter(Boolean).join(", "), owner: r.owner || "", deal: [r.product, r.device, r.esth, r.celluma].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", fromLeadId: r.id }); };
     // Other pipelines for this contact: open, create, and merged timeline.
     wrap.querySelectorAll(".lead-sib[data-open]").forEach((b) => (b.onclick = () => { close(); leadDetailDialog(b.dataset.open); }));
     const newPipe = document.getElementById("ldNewPipe");
@@ -6408,9 +6409,9 @@
     const saveB = document.getElementById("ldSave");
     if (saveB) saveB.onclick = () => {
       let changed = 0;
-      ["name", "mobile", "company", "city", "state", "source", "product", "device", "esth", "owner", "link", "priority"].forEach((f) => {
+      ["name", "mobile", "company", "city", "state", "source", "product", "device", "esth", "celluma", "owner", "link", "priority"].forEach((f) => {
         const el = document.getElementById("ld_" + f); if (!el) return;
-        let v = (el.value || "").trim();
+        let v = readFieldCSV(el);
         if (f === "mobile") v = v.replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
         if (v !== (r[f] || "")) { leadUpdate(id, f, v); changed++; }
       });
@@ -7053,7 +7054,8 @@
         <label>Source<select id="lfSource">${allLeadSources().map((s) => `<option>${esc(s)}</option>`).join("")}<option value="__new__">＋ Add new source…</option></select></label>
         <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
         <label>Device<input id="lfDevice" list="lfDeviceList" placeholder="Select or type a device"><datalist id="lfDeviceList">${taskDevices().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
-        <label>Esthemax variant${esthVariantSelect("lfEsth", "")}</label>
+        <label>Esthemax variant(s)${esthVariantMulti("lfEsth", "")}</label>
+        <label>Celluma model(s)${cellumaMulti("lfCelluma", "")}</label>
         <label>Owner (rep)<select id="lfOwner">${ownerOptionsHtml("")}</select></label>
         <label class="lead-form-wide">Opening remark<input id="lfRemark" type="text" placeholder="how the lead came in / first note"></label>
       </div>
@@ -7090,6 +7092,7 @@
     document.getElementById("lfCancel").onclick = close;
     document.getElementById("lfSave").onclick = async () => {
       const v = (id) => (document.getElementById(id).value || "").trim();
+      const mv = (id) => readFieldCSV(document.getElementById(id));
       const name = v("lfName"), company = v("lfCompany"), mobile = v("lfMobile");
       if (!name && !company && !mobile) { window.alert("Enter at least a name, company or mobile."); return; }
       const remark = v("lfRemark");
@@ -7097,14 +7100,14 @@
       if (dest === "corp") {
         // Add straight into Corporate (chain / hospital) — not into Leads.
         const now = Date.now(), by = (sessionUser && sessionUser.email) || "";
-        const cdata = { name: company || name, contact: name, phone: mobile, location: [v("lfCity"), v("lfState")].filter(Boolean).join(", "), owner: v("lfOwner"), deal: [v("lfProduct"), v("lfDevice"), v("lfEsth")].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", notes: remark, fromLeadId: "", createdAt: now, createdBy: by, updatedAt: now, updatedBy: by };
+        const cdata = { name: company || name, contact: name, phone: mobile, location: [v("lfCity"), v("lfState")].filter(Boolean).join(", "), owner: v("lfOwner"), deal: [v("lfProduct"), v("lfDevice"), mv("lfEsth"), mv("lfCelluma")].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", notes: remark, fromLeadId: "", createdAt: now, createdBy: by, updatedAt: now, updatedBy: by };
         try { const store = corpStore(); if (store) await store.add(cdata); else { cdata.id = "c" + now; localCorp.push(cdata); } toast("✓ Added to Corporate"); } catch (e) { console.warn(e); toast("Save failed", "warn"); }
         close(); casovilView = "corporate"; go("leads"); return;
       }
       leadAddNew({
         name, mobile, company, city: v("lfCity"), state: v("lfState"),
         source: v("lfSource"), product: v("lfProduct"), owner: v("lfOwner"),
-        device: v("lfDevice"), esth: v("lfEsth"),
+        device: v("lfDevice"), esth: mv("lfEsth"), celluma: mv("lfCelluma"),
         occ: "Salon",
         history: remark ? [{ at: Date.now(), stage: "new", by: (sessionUser && sessionUser.email) || "", text: remark }] : [],
       });
@@ -10659,7 +10662,7 @@
       set("cpPhone", l.mobile || "");
       set("cpLoc", [l.city, l.state].filter(Boolean).join(", "));
       set("cpOwner", l.owner || "");
-      set("cpDeal", [l.product, l.device, l.esth].filter(Boolean).join(" · "));
+      set("cpDeal", [l.product, l.device, l.esth, l.celluma].filter(Boolean).join(" · "));
       const ts = document.getElementById("cpType"); if (ts) ts.value = "Clinic chain";
     };
     document.getElementById("cpSave").onclick = async () => {
@@ -10739,6 +10742,36 @@
     esthVariants().forEach((e) => { (groups[e.group] = groups[e.group] || []).push(e.variant); });
     const opts = Object.keys(groups).map((g) => `<optgroup label="${esc(g)}">${groups[g].map((v) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("")}</optgroup>`).join("");
     return `<select id="${id}"><option value="">— Esthemax variant —</option>${opts}</select>`;
+  }
+  // Celluma model list (from the Company Price cost book).
+  function cellumaVariants() {
+    const out = [], seen = new Set();
+    const src = (D && D.costs && Array.isArray(D.costs.celluma)) ? D.costs.celluma
+      : ((D && D.incentives && Array.isArray(D.incentives.celluma)) ? D.incentives.celluma : []);
+    src.forEach((c) => { const v = c && c.model; if (v && !seen.has(v)) { seen.add(v); out.push(v); } });
+    return out;
+  }
+  const csvSet = (s) => new Set(String(s || "").split(",").map((x) => x.trim()).filter(Boolean));
+  // Multi-select of Esthemax variants (grouped). A salesperson can pick one OR
+  // MORE; value is stored as a comma-separated string.
+  function esthVariantMulti(id, curCSV) {
+    const cur = csvSet(curCSV), groups = {};
+    esthVariants().forEach((e) => { (groups[e.group] = groups[e.group] || []).push(e.variant); });
+    const opts = Object.keys(groups).map((g) => `<optgroup label="${esc(g)}">${groups[g].map((v) => `<option value="${esc(v)}"${cur.has(v) ? " selected" : ""}>${esc(v)}</option>`).join("")}</optgroup>`).join("");
+    return `<select id="${id}" class="variant-multi" multiple size="6">${opts}</select><div class="variant-hint">Pick one or more — hold Ctrl / ⌘ (or tap) to multi-select.</div>`;
+  }
+  // Multi-select of Celluma models (one or more).
+  function cellumaMulti(id, curCSV) {
+    const cur = csvSet(curCSV), list = cellumaVariants();
+    const opts = list.map((v) => `<option value="${esc(v)}"${cur.has(v) ? " selected" : ""}>${esc(v)}</option>`).join("");
+    const sz = Math.min(6, Math.max(3, list.length || 3));
+    return `<select id="${id}" class="variant-multi" multiple size="${sz}">${opts}</select><div class="variant-hint">Pick one or more — hold Ctrl / ⌘ (or tap) to multi-select.</div>`;
+  }
+  // Read a field: joins all selected options for a multi-select, else the value.
+  function readFieldCSV(el) {
+    if (!el) return "";
+    if (el.multiple) return [...el.selectedOptions].map((o) => o.value).join(", ");
+    return (el.value || "").trim();
   }
 
   function taskModal(existing) {

@@ -1940,3 +1940,9 @@ td.empty, .empty { color: var(--muted); text-align: center; padding: 18px 10px; 
   .lead-modal { padding: 8px 8px; align-items: flex-start; }
   .lead-modal-card { max-height: calc(100vh - 16px); }
 }
+
+/* Esthemax / Celluma multi-variant selects (Casovil CRM lead forms) — pick one or more */
+.variant-multi { width: 100%; min-width: 0; box-sizing: border-box; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+.variant-multi option { padding: 3px 5px; border-radius: 4px; }
+.variant-multi option:checked { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.variant-hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
