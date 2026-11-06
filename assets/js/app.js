@@ -6846,7 +6846,7 @@
     const ow = document.getElementById("lbkOwner");
     if (ow) ow.onchange = () => { const v = ow.value; if (!v) return; if (!window.confirm(`Assign ${n} lead(s) to ${spLabel(v)}?`)) { ow.value = ""; return; } ids().forEach((id) => { leadUpdate(id, "owner", v); leadAddHistory(id, null, "Assigned to " + spLabel(v) + " (bulk)"); }); leadSelected.clear(); leadRepaint(); };
     const st = document.getElementById("lbkStage");
-    if (st) st.onchange = () => { const v = st.value; if (!v) return; if (!window.confirm(`Move ${n} lead(s) to "${LEAD_STAGE_LABEL[v]}"?`)) { st.value = ""; return; } ids().forEach((id) => { const l = leadAll().find((x) => x.id === id); if (l && (l.stage || "new") !== v) { leadUpdate(id, "stage", v); leadUpdate(id, "stageSince", Date.now()); leadAddHistory(id, v, "Moved to " + LEAD_STAGE_LABEL[v] + " (bulk)"); } }); leadSelected.clear(); leadRepaint(); };
+    if (st) st.onchange = () => { const v = st.value; if (!v) return; if (v === "sold" || v === "dispatched") { window.alert("“" + LEAD_STAGE_LABEL[v] + "” can’t be set in bulk.\n\nOpen each order and move it there individually — Won needs an order value and Dispatched needs the invoice."); st.value = ""; return; } if (!window.confirm(`Move ${n} lead(s) to "${LEAD_STAGE_LABEL[v]}"?`)) { st.value = ""; return; } ids().forEach((id) => { const l = leadAll().find((x) => x.id === id); if (l && (l.stage || "new") !== v) { leadUpdate(id, "stage", v); leadUpdate(id, "stageSince", Date.now()); leadAddHistory(id, v, "Moved to " + LEAD_STAGE_LABEL[v] + " (bulk)"); } }); leadSelected.clear(); leadRepaint(); };
     const pr = document.getElementById("lbkPrio");
     if (pr) pr.onchange = () => { const v = pr.value; if (!v) return; const nv = v === "__none__" ? "" : v; ids().forEach((id) => leadUpdate(id, "priority", nv)); leadSelected.clear(); leadRepaint(); };
     const ar = document.getElementById("lbkArchive");
@@ -6953,15 +6953,21 @@
       ${canMove ? `<label class="lead-remark-label">Stage (leave as current, or move it)
         <select id="lrStage" class="select">${LEAD_STAGES.map((s) => `<option value="${s.key}"${preStage === s.key ? " selected" : ""}>${esc(s.label)}${s.key === curStage ? " · current" : ""}</option>`).join("")}</select></label>
       <div class="lead-form-grid" id="lrSoldBox"${preStage === "sold" ? "" : " hidden"}>
-        <label>Deal value ₹<input id="lrAmt" type="number" placeholder="0" value="${l.soldAmount ? esc(l.soldAmount) : ""}"></label>
+        <label>Deal / order value ₹ <span class="lead-req">*</span><input id="lrAmt" type="number" min="1" placeholder="required to move to Won" value="${l.soldAmount ? esc(l.soldAmount) : ""}"></label>
         <label>Sold on<input id="lrDate" type="date" value="${esc(l.soldDate || leadToday())}"></label>
+        <div class="muted-note lead-form-wide">A Won order must have an order value — the deal cannot be moved to Won without it.</div>
       </div>
       <div class="lead-form-grid" id="lrDispBox"${preStage === "dispatched" ? "" : " hidden"}>
         <label>Courier / carrier<input id="lrCourier" type="text" placeholder="e.g. Bluedart, DTDC" value="${esc(l.courier || "")}"></label>
         <label>AWB / tracking no.<input id="lrAwb" type="text" placeholder="tracking number" value="${esc(l.awb || "")}"></label>
         <label>Dispatched on<input id="lrDispDate" type="date" value="${esc(l.dispatchDate || leadToday())}"></label>
         <label>Expected delivery<input id="lrExpDeliv" type="date" value="${esc(l.expDelivDate || leadAddDays(l.dispatchDate || leadToday(), LEAD_TRANSIT_DAYS))}"></label>
-        <div class="muted-note lead-form-wide">On this date the lead moves to <b>Delivered</b> automatically — Sparsha/Lubdha can confirm or move it sooner.</div>
+        <div class="lead-form-wide" id="lrInvWrap">
+          <div class="lead-remark-label" style="margin-bottom:4px"><b>Invoice <span class="lead-req">*</span></b> — required to dispatch</div>
+          <div id="lrInvStatus" class="muted-note">${l.invoiceUrl ? `✓ Invoice on file — <a href="${esc(l.invoiceUrl)}" target="_blank" rel="noopener">view</a>` : "No invoice uploaded yet."}</div>
+          <label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Upload invoice<input type="file" id="lrInvFile" hidden></label>
+        </div>
+        <div class="muted-note lead-form-wide">On the expected-delivery date the lead moves to <b>Delivered</b> automatically — Sparsha/Lubdha can confirm or move it sooner.</div>
       </div>
       <div class="lead-form-grid" id="lrDelivBox"${preStage === "delivered" ? "" : " hidden"}>
         <label>Delivered on<input id="lrDelivDate" type="date" value="${esc(l.deliveredDate || leadToday())}"></label>
@@ -6986,6 +6992,31 @@
       document.getElementById("lrDelivBox").hidden = v !== "delivered";
       const db2 = document.getElementById("lrDemoBox"); if (db2) db2.hidden = v !== "demo";
     };
+    // Invoice upload (required to move Closed Won → Dispatched). Stored on the
+    // lead as invoiceUrl and added to the lead's attachments.
+    let invoiceUrl = l.invoiceUrl || "";
+    const invFile = document.getElementById("lrInvFile");
+    if (invFile) invFile.onchange = async (e) => {
+      const f = e.target.files[0]; e.target.value = "";
+      if (!f) return;
+      const st = document.getElementById("lrInvStatus");
+      if (!storage) { window.alert("⚠ File storage is not enabled yet — ask the admin to turn on Firebase Storage."); return; }
+      if (f.size > 15 * 1024 * 1024) { window.alert("⚠ File too large (max 15 MB)."); return; }
+      if (st) st.textContent = "Uploading…";
+      try {
+        const safe = String(f.name).replace(/[^\w.\-]+/g, "_").slice(-80);
+        const path = "leadfiles/" + id + "/invoice-" + Date.now() + "-" + safe;
+        const ref = storage.ref().child(path);
+        await ref.put(f, { contentType: f.type || "application/octet-stream" });
+        const url = await ref.getDownloadURL();
+        const fkey = id + "#" + Date.now();
+        leadFiles[fkey] = { name: "Invoice — " + f.name, url, path, size: f.size, at: Date.now(), by: (sessionUser && sessionUser.email) || "", kind: "invoice" };
+        leadFilesDirty.add(fkey);
+        invoiceUrl = url; leadUpdate(id, "invoiceUrl", url);
+        leadDirty = true; saveEdits("Uploaded invoice");
+        if (st) st.innerHTML = "✓ Invoice uploaded — <a href=\"" + esc(url) + "\" target=\"_blank\" rel=\"noopener\">view</a>";
+      } catch (err) { if (st) st.textContent = "Upload failed — storage may not be enabled or rules block it."; }
+    };
     const actSel = document.getElementById("lrAct");
     const evWrap = document.getElementById("lrEvWrap");
     const toggleEv = () => { if (evWrap) evWrap.hidden = !/^(event|meeting)$/.test(actSel ? actSel.value : ""); };
@@ -7007,12 +7038,24 @@
       // timeline entry (matches Bigin — always record what happened + what next).
       if (!text) { window.alert("Please enter a description / update."); return; }
       if (!follow) { window.alert("Please set the next task / action date."); return; }
+      // --- Gate 1: a Won (Closed Won) order MUST carry an order value. This
+      // applies when moving to Won and when editing an order already in Won,
+      // so the Won total reflects real deal values. ---
+      let soldN = 0;
+      if (chosen === "sold") {
+        soldN = parseFloat(String((document.getElementById("lrAmt") || {}).value || "").replace(/[^0-9.]/g, "")) || 0;
+        if (!(soldN > 0)) { window.alert("Enter the order / deal value (₹) before moving to Won.\n\nA Won order cannot be saved without a value."); return; }
+      }
+      // --- Gate 2: moving Closed Won → Dispatched requires an uploaded invoice. ---
+      if (moved && chosen === "dispatched" && !invoiceUrl) {
+        window.alert("Upload the invoice before dispatching this order.\n\nUse ‘⬆ Upload invoice’ in the Dispatch section, then save.");
+        return;
+      }
       // Save / clear the next-follow-up reminder.
       if (follow !== (l.nextFollowUp || "")) leadUpdate(id, "nextFollowUp", follow);
-      if (moved && chosen === "sold") {
-        const n = parseFloat(String(document.getElementById("lrAmt").value).replace(/[^0-9.]/g, "")) || 0;
+      if (chosen === "sold") {
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
-        leadUpdate(id, "soldAmount", n); leadUpdate(id, "soldDate", d);
+        leadUpdate(id, "soldAmount", soldN); leadUpdate(id, "soldDate", d);
       }
       if (moved && chosen === "dispatched") {
         const dDate = (document.getElementById("lrDispDate").value || "").trim() || leadToday();
