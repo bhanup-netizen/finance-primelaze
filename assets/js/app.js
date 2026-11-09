@@ -151,6 +151,7 @@
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
     { id: "weeklyHr", label: "Duties", group: "HR", render: () => renderWeekly("HR") },
+    { id: "hiring", label: "Hiring Protocol", group: "HR", render: renderHiring },
     { id: "induction", label: "Induction", group: "HR", render: renderInduction },
     { id: "attendance", label: "Attendance Protocol", group: "HR", render: renderAttendance },
     // Marketing
@@ -9748,6 +9749,158 @@
     if (gadd) gadd.onclick = () => { (attendance.legend = attendance.legend || []).push({ id: "g" + (attSeq++), term: "", meaning: "" }); attSave("Attendance legend added"); go(currentTab); };
     const rs = document.getElementById("attReset");
     if (rs) rs.onclick = () => { if (!window.confirm("Restore the default protocol? This replaces the current one for everyone.")) return; attendance = JSON.parse(JSON.stringify(ATTENDANCE_SEED)); attSave("Attendance · restored default"); go(currentTab); };
+  }
+
+  /* ================= HR · INTERVIEW & HIRING PROTOCOL ================= */
+  // Recruitment workflow (Version 2): profile → offer letter in max 22 working
+  // days, with per-step TAT, six decision gates, escalation and roles.
+  function hiringBody() {
+    const t = (head, rows) => table(head.map((h) => `<th>${h}</th>`).join(""), rows);
+    // --- 20 steps: #, step, owner, TAT ---
+    const STEPS = [
+      [1, "HR Screening", "HR Team", "1 WD from profile received"],
+      [2, "Share assignment set", "Technical Manager", "4 working hrs from HR's request"],
+      [3, "Email assignment to candidate", "HR Manager", "Same day · candidate has 48 h to submit · reminder 24 h before deadline"],
+      [4, "Forward filled assignment to Technical Manager", "HR Team", "4 working hrs"],
+      [5, "Evaluate & give feedback · Gate G1", "Technical Manager", "2 WD"],
+      [6, "Schedule technical round", "HR Team", "Within 2 WD of G1"],
+      [7, "Technical interview & feedback · Gate G2", "Technical Manager + Reporting Manager", "Feedback 1 WD after interview"],
+      [8, "Send candidate pack to Management", "HR Team", "1 WD"],
+      [9, "Final round · Gate G3", "Management Panel (Sales, Service, Operations Directors)", "Within 3 WD · feedback within 1 WD"],
+      [10, "Collect salary documents", "HR Team + Operations Director", "2 WD"],
+      [11, "Salary discussion & CTC approval · Gate G4", "Operations Director + Management", "Discussion within 2 WD of docs · CTC approval 1 WD"],
+      [12, "Create offer breakup", "HR Team", "1 WD after CTC approval"],
+      [13, "Release offer letter", "HR Team", "1 WD after breakup sign-off"],
+      [14, "Offer acceptance · Gate G5", "Candidate", "Within 3 WD"],
+      [15, "Pre-joining documents & consent", "HR Team", "Within 3 WD of acceptance"],
+      [16, "Background verification · Gate G6", "HR Team", "Start within 1 WD of docs · close in 7–10 WD · done 3 WD before joining"],
+      [17, "Notice-period tracking (runs in parallel)", "Candidate + HR Team", "Proof within 7 days of accepting · weekly check-in"],
+      [18, "Joining confirmation & kit email", "HR Team", "3 WD before joining"],
+      [19, "Pre-joining setup", "Admin/IT + Reporting Manager", "1 WD before joining"],
+      [20, "Day 1 joining & induction", "HR Team + Reporting Manager", "Day 1"],
+    ];
+    const stepsTbl = t(["#", "Step", "Owner", "TAT"], STEPS.map((s) =>
+      `<tr><td class="num">${s[0]}</td><td><b>${esc(s[1])}</b></td><td>${esc(s[2])}</td><td>${esc(s[3])}</td></tr>`).join(""));
+    // --- Decision gates ---
+    const GATES = [
+      ["G1", "Is the assignment qualified?", "Technical Manager", "HR schedules the technical round (within 2 WD)", "Process closed — HR sends regret email"],
+      ["G2", "Is the technical interview cleared?", "Technical Manager & Reporting Manager", "HR sends the candidate pack to the Management Panel (1 WD)", "Process closed — HR sends regret email"],
+      ["G3", "Does the Management Panel approve?", "Management Panel (Sales, Service, Operations Directors)", "HR collects salary documents for the Operations Director", "Process closed — HR sends regret email"],
+      ["G4", "Is the CTC approved?", "Operations Director & Management", "HR creates the offer breakup (1 WD)", "Process closed — HR sends regret email"],
+      ["G5", "Is the offer accepted in writing?", "Candidate (within 3 WD)", "HR collects pre-joining documents & consent", "Offer lapses — HR moves to the next shortlisted candidate"],
+      ["G6", "Is background verification clear?", "HR Team; Management reviews any discrepancy", "HR sends joining confirmation & kit email", "Offer withdrawn in writing"],
+    ];
+    const gatesTbl = t(["Gate", "Question", "Decided by", "If YES ✅", "If NO ⛔"], GATES.map((g) =>
+      `<tr><td><b>${esc(g[0])}</b></td><td><b>${esc(g[1])}</b></td><td>${esc(g[2])}</td><td>${esc(g[3])}</td><td class="t-muted">${esc(g[4])}</td></tr>`).join(""));
+    // --- Why each step matters ---
+    const WHY = [
+      ["HR Screening", "First-level screening of the profile, background and basic fit; sets the Fresher / Experienced assignment track.", "Filters candidates early so evaluators spend time only on relevant profiles."],
+      ["Assignment set", "Technical Manager shares 2 assignments (logic, answers, attributes; experienced also get industry & technical knowledge).", "Objective, comparable evidence of how a candidate thinks before any interview."],
+      ["Assignment email", "HR Manager emails the assignment the same day; candidate has 48 h, with a reminder 24 h before the deadline.", "A clear deadline keeps the process moving and treats every candidate consistently."],
+      ["Evaluation (G1)", "Technical Manager analyses the assignment and documents feedback to HR.", "An independent expert review before interview time is spent."],
+      ["Technical round (G2)", "Covers job profile, attributes, industry exposure and salary expectation; feedback decides G2.", "Verifies the assignment face to face and surfaces salary expectations early."],
+      ["Candidate pack", "HR sends CV, assignment, interview feedback and salary expectation to the Management Panel.", "Gives the panel the full picture so the final round is focused."],
+      ["Final round (G3)", "Management Panel holds the final round and shares feedback with HR.", "Leadership approval on fit and business need, with shared ownership of every hire."],
+      ["Salary documents", "HR collects last salary slips / bank record, offer letter and masked Aadhaar for the Operations Director.", "Grounds the salary discussion in verified facts, with minimal personal data."],
+      ["Salary & CTC (G4)", "Operations Director leads the salary discussion; CTC approved by Operations Director & Management.", "Keeps pay decisions fair, defensible and consistent — nothing committed before approval."],
+      ["Offer breakup & letter", "HR builds the offer breakup to the approved CTC, signs it off, then releases the offer letter.", "Ensures no unapproved figures reach the candidate and formalises the decision."],
+      ["Offer acceptance (G5)", "Candidate accepts in writing within 3 WD, else the offer lapses.", "A fixed window prevents open-ended offers and keeps the hiring plan on track."],
+      ["Pre-joining docs & consent", "Education, experience, relieving letters, PAN, masked Aadhaar, address proof, photo, bank, 2 references and signed BGV consent.", "Completes the joining file early; signed consent makes verification lawful."],
+      ["Background verification (G6)", "Verifies identity, address, education, last 2 employers and 2 references; discrepancy goes to Management.", "Protects Primelaze from misrepresentation before joining."],
+      ["Notice-period tracking", "Runs in parallel: candidate submits resignation-acceptance proof; HR holds a weekly check-in.", "Keeps the joining date realistic and surfaces counter-offers early."],
+      ["Joining confirmation", "Email with joining date, time, location, reporting manager and originals to bring.", "Removes day-one surprises and creates a professional first impression."],
+      ["Pre-joining setup", "Email ID, laptop/assets, HROne profile, CRM access, ID card, seating; 30-day plan & KRAs.", "The new joiner is productive from day one with clear expectations."],
+      ["Day 1 induction", "Verify originals, issue appointment letter, acknowledge HR policies, run induction, assign a buddy.", "Completes the cycle with a structured start, compliance on record and a buddy to settle in."],
+    ];
+    const whyTbl = t(["Step", "What happens", "Why it matters"], WHY.map((w) =>
+      `<tr><td><b>${esc(w[0])}</b></td><td>${esc(w[1])}</td><td class="t-muted">${esc(w[2])}</td></tr>`).join(""));
+    // --- Email & communication TAT ---
+    const EMAILS = [
+      ["Assignment email to candidate", "HR Manager", "Same day"],
+      ["Assignment reminder", "HR Manager", "24 hours before the 48-hour deadline"],
+      ["Regret email (any gate)", "HR Team", "Within 1 WD of the decision"],
+      ["Candidate pack to Management Panel", "HR Team", "1 WD after G2"],
+      ["Salary documents to Operations Director", "HR Team", "2 WD"],
+      ["Offer letter", "HR Team", "1 WD after breakup sign-off"],
+      ["Joining confirmation & kit email", "HR Team", "3 WD before joining"],
+      ["Check-in call with candidate", "HR Team", "Weekly until joining"],
+    ];
+    const emailTbl = t(["Email / communication", "Sent by", "TAT"], EMAILS.map((e) =>
+      `<tr><td>${esc(e[0])}</td><td>${esc(e[1])}</td><td><b>${esc(e[2])}</b></td></tr>`).join(""));
+
+    return `
+      <div class="callout teal"><b>Target: profile → offer letter in a maximum of 22 working days (WD).</b> Every step carries its own TAT. WD = working day.</div>
+
+      <h2 style="margin-top:18px">🔁 Recruitment workflow — 20 steps</h2>
+      <div class="block" style="margin-top:8px">${stepsTbl}</div>
+
+      <h2 style="margin-top:22px">⛳ Decision gates</h2>
+      <div class="block" style="margin-top:8px">${gatesTbl}</div>
+
+      <h2 style="margin-top:22px">🧭 Why each step matters</h2>
+      <div class="block" style="margin-top:8px">${whyTbl}</div>
+
+      <h2 style="margin-top:22px">✉️ Email &amp; communication TAT</h2>
+      <div class="block" style="margin-top:8px">${emailTbl}</div>
+
+      <h2 style="margin-top:22px">⏱ If a TAT is missed</h2>
+      <div class="block" style="margin-top:8px"><ol class="soc-addr">
+        <li><b>TAT missed</b> — a step or email goes past its TAT.</li>
+        <li><b>Same-day reminder</b> — HR sends a reminder the same day.</li>
+        <li><b>Still pending</b> — next working day, still no action.</li>
+        <li><b>Escalate</b> — escalate to the <b>Operations Director</b>.</li>
+      </ol></div>
+
+      <h2 style="margin-top:22px">🧪 Assignment tracks</h2>
+      <div class="hq-grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:8px">
+        <div class="block"><h3 style="margin:0 0 6px">Fresher</h3><ul class="soc-addr">
+          <li>2 assignments created by the Technical Manager</li>
+          <li>Tests logical understanding</li>
+          <li>Tests answer capability</li>
+          <li>Tests personal attributes</li></ul></div>
+        <div class="block"><h3 style="margin:0 0 6px">Experienced</h3><ul class="soc-addr">
+          <li>2 assignments created by the Technical Manager</li>
+          <li>Same coverage as the Fresher track</li>
+          <li>Plus an industry-knowledge check</li>
+          <li>Plus technical knowledge</li></ul></div>
+      </div>
+
+      <h2 style="margin-top:22px">👥 Who does what</h2>
+      <div class="hq-grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:8px">
+        <div class="block"><h3 style="margin:0 0 6px">HR Team <span class="t-muted" style="font-weight:400">· HR Manager sends the assignment</span></h3><ul class="soc-addr">
+          <li>Screens profiles & schedules interviews</li>
+          <li>HR Manager emails the assignment; sends regret emails</li>
+          <li>Forwards assignments; sends candidate pack to Management</li>
+          <li>Collects salary documents; creates offer breakup & letter</li>
+          <li>Collects pre-joining documents & consent; runs background verification</li>
+          <li>Joining kit email; weekly check-ins; Day 1 induction</li></ul></div>
+        <div class="block"><h3 style="margin:0 0 6px">Technical Manager</h3><ul class="soc-addr">
+          <li>Shares the assignment set (2 assignments)</li>
+          <li>Evaluates & gives feedback (G1)</li>
+          <li>Interviews with the Reporting Manager; feedback (G2)</li></ul></div>
+        <div class="block"><h3 style="margin:0 0 6px">Management Panel</h3><ul class="soc-addr">
+          <li>Sales, Service and Operations Directors</li>
+          <li>Final round and feedback (G3)</li>
+          <li>Operations Director leads salary talks; CTC approval (G4)</li></ul></div>
+        <div class="block"><h3 style="margin:0 0 6px">Reporting Manager &amp; Admin/IT</h3><ul class="soc-addr">
+          <li>Reporting Manager joins the technical round</li>
+          <li>Admin/IT & Reporting Manager complete setup 1 WD before joining</li>
+          <li>Reporting Manager shares the 30-day plan and KRAs</li></ul></div>
+      </div>
+
+      <div class="callout warn" style="margin-top:22px"><b>🔒 Data handling &amp; confidentiality</b><br>
+        Collect only <b>masked Aadhaar</b> from candidates. Run background verification only <b>after the candidate's written consent</b>. Store all candidate documents in a <b>restricted HR folder</b>.</div>`;
+  }
+  function renderHiring() {
+    setTimeout(() => {
+      const b = document.getElementById("hirePdf");
+      if (b) b.onclick = () => printDoc("Primelaze — Interview & Hiring Protocol", "Interview &amp; Hiring Protocol", hiringBody());
+    }, 0);
+    return `
+      <div class="section-head"><h1>Interview &amp; Hiring Protocol</h1>
+        <p>Primelaze recruitment workflow (Version 2) — from profile received to offer letter and Day 1, with turnaround times, decision gates, escalation and roles.</p></div>
+      <div class="hq-actions" style="margin:0 0 10px"><button type="button" class="ghost-btn" id="hirePdf">⬇ Download PDF</button></div>
+      ${hiringBody()}`;
   }
 
   /* ================= MARKETING · COVERAGE MATRIX ================= */
