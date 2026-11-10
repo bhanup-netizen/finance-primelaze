@@ -5567,9 +5567,17 @@
   }
   const LEAD_PRODUCTS = ["Esthemax", "Celluma", "Devices", "All products"];
   const LEAD_FIELDS = ["name", "mobile", "company", "gender", "occ", "state", "city", "source",
-    "product", "owner", "notes", "link", "stage", "history", "stageSince",
-    "soldAmount", "soldDate", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
+    "product", "device", "esth", "celluma", "owner", "notes", "link", "stage", "history", "stageSince",
+    "soldAmount", "soldDate", "invoiceUrl", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
+    "lostReason", "lostCompetitor", "fuType",
     "demoProducts", "priority", "tags", "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
+  // Why a deal was lost (Closed-Lost) — for win/loss analysis.
+  const LEAD_LOST_REASONS = ["Price too high", "Chose a competitor", "No budget", "No response / went cold", "Not interested", "Bad timing", "Not the right fit", "Bought elsewhere", "Other"];
+  // Structured outcome when a call is logged.
+  const LEAD_CALL_OUTCOMES = ["Connected – positive", "Connected – follow-up set", "No answer", "Busy", "Switched off / unreachable", "Wrong number", "Left a message"];
+  // Icon + label for a scheduled next action, by follow-up type.
+  const LEAD_FU_META = { task: { icon: "🔔", label: "Next action" }, call: { icon: "📞", label: "Call back" }, event: { icon: "📅", label: "Event" }, meeting: { icon: "🤝", label: "Meeting" } };
+  const leadFuMeta = (ft) => LEAD_FU_META[ft || "task"] || LEAD_FU_META.task;
   // Lead priority (hot / warm / cold) for focus-first working.
   const LEAD_PRIORITIES = [
     { key: "hot", label: "🔥 Hot", short: "Hot" },
@@ -6326,6 +6334,7 @@
       </div>
       ${LEAD_WON.indexOf(r.stage) >= 0 ? `<div class="ld-meta">${r.stage !== "new" && (Number(r.soldAmount) || r.soldDate) ? `<b>Sold:</b> ₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}${r.soldDate ? " · " + esc(r.soldDate) : ""}` : ""}${(r.courier || r.awb) ? ` · <b>Dispatch:</b> ${esc(r.courier || "—")}${r.awb ? " · AWB " + esc(r.awb) : ""}${r.dispatchDate ? " · " + esc(r.dispatchDate) : ""}` : ""}${r.stage === "dispatched" && leadExpectedDelivery(r) ? ` · <b>Exp. delivery:</b> ${esc(leadExpectedDelivery(r))}` : ""}${r.deliveredDate ? ` · <b>Delivered:</b> ${esc(r.deliveredDate)}` : ""}</div>` : ""}
       ${(Array.isArray(r.demoProducts) && r.demoProducts.length) ? `<div class="ld-meta"><b>🧪 Demoed:</b> ${r.demoProducts.map(esc).join(", ")}</div>` : ""}
+      ${(r.stage === "lost" && r.lostReason) ? `<div class="ld-meta"><b>⛔ Lost:</b> ${esc(r.lostReason)}${r.lostCompetitor ? " · " + esc(r.lostCompetitor) : ""}</div>` : ""}
       <div class="ld-attach"><h4 class="ld-h">Attachments</h4><div id="ldFiles"></div>${admin ? `<label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Attach file<input type="file" id="ldFileInput" hidden></label>` : ""}</div>
       <div class="ld-meta"><b>Entered by:</b> ${enteredBy} · ${enteredWhen}</div>
       ${(otherPipelines.length || (admin && leadContactKey(r))) ? `<div class="ld-pipelines">
@@ -6538,7 +6547,10 @@
     if (!total) return `<div class="empty" style="padding:30px;text-align:center">No leads to analyse yet.</div>`;
     const won = rows.filter((r) => LEAD_WON.indexOf(r.stage) >= 0);
     const open = rows.filter((r) => LEAD_OPEN.indexOf(r.stage) >= 0);
+    const lost = rows.filter((r) => r.stage === "lost");
+    const closed = won.length + lost.length;
     const winRate = Math.round((won.length / total) * 100);
+    const lossRate = closed ? Math.round((lost.length / closed) * 100) : 0;
     const pipelineVal = won.reduce((s, r) => s + (Number(r.soldAmount) || 0), 0);
     const stuckN = rows.filter(leadIsStuck).length;
     const kpi = (v, l, cls) => `<div class="lan-kpi ${cls || ""}"><div class="lan-kpi-v">${v}</div><div class="lan-kpi-l">${esc(l)}</div></div>`;
@@ -6548,6 +6560,8 @@
       ${kpi(won.length, "Won (sold+)", "lan-good")}
       ${kpi(winRate + "%", "Win rate", "lan-good")}
       ${kpi("₹" + inr(pipelineVal), "Won value")}
+      ${kpi(lost.length, "Lost", lost.length ? "lan-warn" : "")}
+      ${kpi(lossRate + "%", "Loss rate (of closed)", lossRate > 50 ? "lan-warn" : "")}
       ${kpi(stuckN, "Stuck > " + LEAD_STUCK_DAYS + "d", stuckN ? "lan-warn" : "")}
     </div>`;
     // Funnel over the forward pipeline.
@@ -6570,6 +6584,15 @@
     const bySource = groupCard("By source", (r) => r.source || "—");
     const byState = groupCard("Top states", (r) => r.state || "");
     const byPrio = groupCard("By priority", (r) => r.priority || "", (k) => (LEAD_PRIO_LABEL[k] ? LEAD_PRIO_LABEL[k].label : k));
+    // Lost reasons (win/loss) — computed over Lost deals only.
+    let lostCard = "";
+    if (lost.length) {
+      const lrm = {};
+      lost.forEach((r) => { const k = r.lostReason || "— not recorded"; lrm[k] = (lrm[k] || 0) + 1; });
+      const le = Object.keys(lrm).map((k) => ({ k, n: lrm[k] })).sort((a, b) => b.n - a.n);
+      const mx = Math.max(1, ...le.map((e) => e.n));
+      lostCard = `<div class="lan-card"><h3>Lost reasons (${lost.length})</h3><div class="lan-bars">${le.map((e) => `<div class="lan-bar-row"><span class="lan-bar-lbl">${esc(e.k)}</span><div class="lan-bar-track"><div class="lan-bar-fill lan-bar-bad" style="width:${Math.round((e.n / mx) * 100)}%"></div></div><span class="lan-bar-val">${e.n}</span></div>`).join("")}</div></div>`;
+    }
     // Owner performance.
     const om = {};
     rows.forEach((r) => { const o = r.owner || "__un"; (om[o] = om[o] || { t: 0, w: 0 }); om[o].t++; if (LEAD_WON.indexOf(r.stage) >= 0) om[o].w++; });
@@ -6581,7 +6604,7 @@
     rows.forEach((r) => { const c = Number(r.createdAt) || 0; if (!c) return; weeks.forEach((w) => { if (c >= w.start && c < w.end) w.n++; }); });
     const wkMax = Math.max(1, ...weeks.map((w) => w.n));
     const trend = `<div class="lan-card lan-wide"><h3>New leads — last 8 weeks</h3><div class="lan-cols">${weeks.map((w, i) => `<div class="lan-col"><span class="lan-col-v">${w.n}</span><div class="lan-col-bar" style="height:${Math.max(3, Math.round((w.n / wkMax) * 100))}%"></div><span class="lan-col-x">${i === 7 ? "now" : (7 - i) + "w"}</span></div>`).join("")}</div></div>`;
-    return `<div class="lead-analytics">${kpis}<div class="lan-grid">${funnel}${bySource}${byState}${byPrio}</div>${ownerTable}${trend}</div>`;
+    return `<div class="lead-analytics">${kpis}<div class="lan-grid">${funnel}${bySource}${byState}${byPrio}${lostCard}</div>${ownerTable}${trend}</div>`;
   }
   function wireLeadAnalytics() { /* read-only view — no interactions to wire */ }
 
@@ -6949,6 +6972,8 @@
         <select id="lrAct" class="select">${LEAD_ACTS.map((a) => `<option value="${a.key}">${esc(a.label)}</option>`).join("")}</select></label>
       <label class="lead-remark-label" id="lrEvWrap" hidden>Event type
         <select id="lrEv" class="select">${LEAD_EVENT_TYPES.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("")}</select></label>
+      <label class="lead-remark-label" id="lrCallWrap" hidden>📞 Call outcome
+        <select id="lrCallOut" class="select"><option value="">— select outcome —</option>${LEAD_CALL_OUTCOMES.map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join("")}</select></label>
       <label class="lead-remark-label">Update / description <span class="lead-req">*</span>
         <textarea id="lrText" rows="3" placeholder="What happened / what to do next"></textarea></label>
       <label class="lead-remark-label">🔔 Next task / action date <span class="lead-req">*</span>
@@ -6978,6 +7003,11 @@
       <div id="lrDemoBox"${preStage === "demo" ? "" : " hidden"}>
         <div class="lead-remark-label" style="margin-bottom:4px"><b>Which Esthemax products were demoed?</b> <span class="t-muted" style="font-weight:400">— tick all that apply (you can pick multiple variants)</span></div>
         <div class="lead-demo-prods">${esthDemoProductGroups().map((g) => `<div class="ldp-group"><div class="ldp-group-t">${esc(g.title)}</div>${g.items.map((n) => `<label class="ldp-chk"><input type="checkbox" class="lr-demo-prod" value="${esc(n)}"${(Array.isArray(l.demoProducts) && l.demoProducts.indexOf(n) >= 0) ? " checked" : ""}> ${esc(n)}</label>`).join("")}</div>`).join("")}</div>
+      </div>
+      <div class="lead-form-grid" id="lrLostBox"${preStage === "lost" ? "" : " hidden"}>
+        <label>Lost reason <span class="lead-req">*</span><select id="lrLostReason" class="select"><option value="">— why was it lost? —</option>${LEAD_LOST_REASONS.map((rz) => `<option value="${esc(rz)}"${(l.lostReason || "") === rz ? " selected" : ""}>${esc(rz)}</option>`).join("")}</select></label>
+        <label>Competitor / details<input id="lrLostComp" type="text" placeholder="Who won it, or a short note" value="${esc(l.lostCompetitor || "")}"></label>
+        <div class="muted-note lead-form-wide">A Lost deal must have a reason — it feeds the win/loss report. The lead stays in the database and can be reopened later.</div>
       </div>` : `<div class="muted-note">This is added as a note in the current stage. Only editors can move the stage.</div>`}
       <div class="lead-modal-actions">
         <button type="button" class="ghost-btn" id="lrCancel">Cancel</button>
@@ -6994,6 +7024,7 @@
       document.getElementById("lrDispBox").hidden = v !== "dispatched";
       document.getElementById("lrDelivBox").hidden = v !== "delivered";
       const db2 = document.getElementById("lrDemoBox"); if (db2) db2.hidden = v !== "demo";
+      const lb = document.getElementById("lrLostBox"); if (lb) lb.hidden = v !== "lost";
     };
     // Invoice upload (required to move Closed Won → Dispatched). Stored on the
     // lead as invoiceUrl and added to the lead's attachments.
@@ -7022,7 +7053,12 @@
     };
     const actSel = document.getElementById("lrAct");
     const evWrap = document.getElementById("lrEvWrap");
-    const toggleEv = () => { if (evWrap) evWrap.hidden = !/^(event|meeting)$/.test(actSel ? actSel.value : ""); };
+    const callWrap = document.getElementById("lrCallWrap");
+    const toggleEv = () => {
+      const a = actSel ? actSel.value : "";
+      if (evWrap) evWrap.hidden = !/^(event|meeting)$/.test(a);
+      if (callWrap) callWrap.hidden = a !== "call";
+    };
     if (actSel) actSel.onchange = toggleEv;
     toggleEv();
     wrap.addEventListener("click", (e) => { if (e.target === wrap) { revert(); close(); } });
@@ -7054,8 +7090,23 @@
         window.alert("Upload the invoice before dispatching this order.\n\nUse ‘⬆ Upload invoice’ in the Dispatch section, then save.");
         return;
       }
-      // Save / clear the next-follow-up reminder.
+      // --- Gate 3: a Lost (Closed-Lost) deal must carry a reason. ---
+      let lostReason = "", lostComp = "";
+      if (chosen === "lost") {
+        lostReason = ((document.getElementById("lrLostReason") || {}).value || "").trim();
+        lostComp = ((document.getElementById("lrLostComp") || {}).value || "").trim();
+        if (!lostReason) { window.alert("Select a lost reason before marking this deal Lost.\n\nIt feeds the win/loss report."); return; }
+      }
+      // Call outcome (when a call is logged) is folded into the note text so it
+      // shows on the timeline and the Activity Board.
+      const callOut = (act === "call" && !((callWrap || {}).hidden)) ? (((document.getElementById("lrCallOut") || {}).value) || "").trim() : "";
+      if (callOut) text = "[" + callOut + "] " + text;
+      // Save / clear the next-follow-up reminder, and remember what KIND of
+      // next action it is (call back / event / meeting / task) for the calendar.
       if (follow !== (l.nextFollowUp || "")) leadUpdate(id, "nextFollowUp", follow);
+      const fuType = /^(call|event|meeting)$/.test(act) ? act : "task";
+      if (follow && fuType !== (l.fuType || "")) leadUpdate(id, "fuType", fuType);
+      if (chosen === "lost") { leadUpdate(id, "lostReason", lostReason); leadUpdate(id, "lostCompetitor", lostComp); }
       if (chosen === "sold") {
         const d = (document.getElementById("lrDate").value || "").trim() || leadToday();
         leadUpdate(id, "soldAmount", soldN); leadUpdate(id, "soldDate", d);
@@ -7070,6 +7121,7 @@
       if (moved && chosen === "delivered") {
         leadUpdate(id, "deliveredDate", (document.getElementById("lrDelivDate").value || "").trim() || leadToday());
       }
+      if (chosen === "lost") { text += (text ? " " : "") + "— Lost: " + lostReason + (lostComp ? " (" + lostComp + ")" : ""); }
       // Demo done: record which Esthemax products/variants were demoed.
       if (chosen === "demo") {
         const picks = Array.from(document.querySelectorAll(".lr-demo-prod:checked")).map((c) => c.value);
@@ -7356,6 +7408,7 @@
   function casovilRepaint() { go("leads", true); } // re-render current inner view, keep scroll
   function renderCasovilCRM() {
     const views = [
+      { k: "myday", label: "🏠 My Day" },
       { k: "leads", label: "🎯 Leads" },
       { k: "tasks", label: "✅ Tasks" },
       { k: "corporate", label: "🏢 Corporate" },
@@ -7363,7 +7416,8 @@
       { k: "activity", label: "🧾 Activity Board" },
       { k: "help", label: "📖 Help & Training" },
     ];
-    const body = casovilView === "tasks" ? renderTasks()
+    const body = casovilView === "myday" ? renderMyDay()
+      : casovilView === "tasks" ? renderTasks()
       : casovilView === "corporate" ? renderCorporate()
       : casovilView === "calendar" ? renderLeadCalendar()
       : casovilView === "activity" ? renderLeadActivity()
@@ -7553,13 +7607,77 @@
   }
 
   // ---- Calendar: upcoming tasks / next-actions & expected deliveries --------
+  // ---- My Day: a rep's agenda — overdue & today's follow-ups + open tasks ----
+  let myDayScope = "me";     // "me" | "all"
+  let myDayTasksLoaded = false;
+  const nzName = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  function renderMyDay() {
+    const today = leadToday();
+    const me = (typeof myLeadOwner === "function") ? myLeadOwner() : null;
+    const scopeMe = myDayScope === "me" && !!me;
+    const meZ = nzName(me);
+    const mineLead = (l) => !scopeMe || nzName(l.owner) === meZ;
+    const mineTask = (t) => !scopeMe || (meZ && (nzName(t.owner) === meZ || nzName(t.owner).indexOf(meZ) >= 0 || meZ.indexOf(nzName(t.owner)) >= 0));
+    const leads = leadAll().filter((r) => !leadIsArchived(r.id)).filter(mineLead);
+    // Follow-ups from leads' next-action dates.
+    const fu = leads.filter((l) => l.nextFollowUp && LEAD_WON.indexOf(l.stage) < 0 && l.stage !== "lost");
+    const asc = (a, b) => String(a.nextFollowUp).localeCompare(String(b.nextFollowUp));
+    const overdueFu = fu.filter((l) => l.nextFollowUp < today).sort(asc);
+    const todayFu = fu.filter((l) => l.nextFollowUp === today).sort(asc);
+    // Open tasks (from the Tasks module cache).
+    const tasks = (taskCache || []).filter((t) => t.status !== "done").filter(mineTask);
+    const tAsc = (a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999"));
+    const overdueTk = tasks.filter((t) => t.due && t.due < today).sort(tAsc);
+    const todayTk = tasks.filter((t) => t.due === today).sort(tAsc);
+    const laterTk = tasks.filter((t) => !t.due || t.due > today).sort(tAsc);
+    // One-time task load (Tasks tab may not have been opened yet this session).
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-open]").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.open)));
+      document.querySelectorAll("#view .myday-tedit").forEach((b) => (b.onclick = () => { const t = (taskCache || []).find((x) => x.id === b.dataset.id); if (t) taskModal(t); }));
+      document.querySelectorAll("#view .myday-tcheck").forEach((c) => (c.onchange = () => { taskSetStatus(c.dataset.id, c.checked ? "done" : "open").then(() => casovilRepaint()); }));
+      const sc = document.getElementById("mydayScope"); if (sc) sc.onclick = () => { myDayScope = myDayScope === "me" ? "all" : "me"; casovilRepaint(); };
+      if (!myDayTasksLoaded && typeof loadTasks === "function") { myDayTasksLoaded = true; Promise.resolve(loadTasks()).then(() => { if (casovilView === "myday") casovilRepaint(); }); }
+    }, 0);
+    const fuRow = (l) => `<li class="lagenda-row ${l.nextFollowUp < today ? "lagenda-over" : ""}">
+      <span class="lagenda-date">${esc(fmtDate(l.nextFollowUp))}</span>
+      <span class="lagenda-kind">${leadFuMeta(l.fuType).icon} ${leadFuMeta(l.fuType).label}</span>
+      <button class="linkish lagenda-lead" data-open="${esc(l.id)}">${esc(l.name || l.company || l.mobile || "lead")}</button>
+      <span class="lagenda-stage"><span class="lead-stage-tag lst-${l.stage || "new"}">${esc(LEAD_STAGE_LABEL[l.stage || "new"] || "")}</span></span>
+    </li>`;
+    const tkRow = (t) => `<li class="lagenda-row ${(t.due && t.due < today) ? "lagenda-over" : ""}">
+      <span class="lagenda-date">${t.due ? esc(fmtDate(t.due)) : "—"}</span>
+      <span class="lagenda-kind">${taskPrioIcon(t.priority)} ${esc(t.owner || "—")}</span>
+      <label class="myday-tk-title"><input type="checkbox" class="myday-tcheck" data-id="${esc(t.id)}"> <b>${esc(t.title || "")}</b></label>
+      ${t.leadId ? `<button class="linkish" data-open="${esc(t.leadId)}">lead</button>` : `<button class="linkish myday-tedit" data-id="${esc(t.id)}">open</button>`}
+    </li>`;
+    const section = (title, cls, rows, empty) => `<h2 class="df-sec" ${cls ? `style="color:${cls}"` : ""}>${title}</h2>` + (rows.length ? `<ul class="lagenda-list">${rows.join("")}</ul>` : `<p class="muted-note">${empty}</p>`);
+    const openLeads = leads.filter((l) => LEAD_OPEN.indexOf(l.stage || "new") >= 0).length;
+    const dueTotal = overdueFu.length + todayFu.length + overdueTk.length + todayTk.length;
+    return `
+      <div class="section-head"><h1>🏠 My Day${scopeMe ? "" : " — Everyone"}</h1>
+        <p>Everything that needs you ${scopeMe ? "today" : "across the team today"}: overdue &amp; today's follow-ups, plus open tasks. ${me ? `<button type="button" class="ghost-btn" id="mydayScope" style="margin-left:6px">${scopeMe ? "👥 Show everyone" : "🙋 Just me"}</button>` : ""}</p></div>
+      <div class="hq-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px">
+        <div class="stat"><b>${dueTotal}</b><span>Due now (overdue + today)</span></div>
+        <div class="stat"><b>${overdueFu.length + overdueTk.length}</b><span>Overdue</span></div>
+        <div class="stat"><b>${openLeads}</b><span>Open leads</span></div>
+        <div class="stat"><b>${tasks.length}</b><span>Open tasks</span></div>
+      </div>
+      <div class="lagenda">
+        ${section(`⚠ Overdue follow-ups (${overdueFu.length})`, "var(--bad)", overdueFu.map(fuRow), "Nothing overdue — nice.")}
+        ${section(`🔔 Today's follow-ups (${todayFu.length})`, "", todayFu.map(fuRow), "No follow-ups due today.")}
+        ${section(`⚠ Overdue tasks (${overdueTk.length})`, "var(--bad)", overdueTk.map(tkRow), "No overdue tasks.")}
+        ${section(`✅ Tasks due today (${todayTk.length})`, "", todayTk.map(tkRow), "No tasks due today.")}
+        ${section(`📋 Other open tasks (${laterTk.length})`, "", laterTk.slice(0, 25).map(tkRow), "No other open tasks.")}
+      </div>`;
+  }
+
   let leadCalYM = null;      // { y, m } month being shown
   let leadCalOwner = "";     // owner filter
   function leadCalItems() {
     const out = [];
     leadAll().filter((r) => !leadIsArchived(r.id)).forEach((l) => {
       if (leadCalOwner && (l.owner || "") !== leadCalOwner) return;
-      if (l.nextFollowUp) out.push({ date: l.nextFollowUp, kind: "task", lead: l });
+      if (l.nextFollowUp) out.push({ date: l.nextFollowUp, kind: "task", fuType: l.fuType || "task", lead: l });
       if (l.stage === "dispatched" && l.expDelivDate) out.push({ date: l.expDelivDate, kind: "delivery", lead: l });
     });
     return out;
@@ -7567,8 +7685,8 @@
   function leadCalChip(it) {
     const l = it.lead;
     const cls = it.kind === "delivery" ? "lcal-deliv" : "lst-" + (l.stage || "new");
-    const icon = it.kind === "delivery" ? "🚚" : "🔔";
-    return `<button class="lcal-item ${cls}" data-open="${esc(l.id)}" title="${esc(l.name || l.company || "lead")} — ${it.kind === "delivery" ? "Expected delivery" : "Next action"}">${icon} ${esc(l.name || l.company || l.mobile || "lead")}</button>`;
+    const meta = it.kind === "delivery" ? { icon: "🚚", label: "Expected delivery" } : leadFuMeta(it.fuType);
+    return `<button class="lcal-item ${cls}" data-open="${esc(l.id)}" title="${esc(l.name || l.company || "lead")} — ${esc(meta.label)}">${meta.icon} ${esc(l.name || l.company || l.mobile || "lead")}</button>`;
   }
   function renderLeadCalendar() {
     const now = new Date();
@@ -7602,7 +7720,7 @@
     const upcoming = items.filter((it) => it.date >= todayStr && it.date <= hzStr).sort(asc);
     const agendaRow = (it) => `<li class="lagenda-row ${it.date < todayStr ? "lagenda-over" : ""}">
       <span class="lagenda-date">${esc(fmtDate(it.date))}</span>
-      <span class="lagenda-kind">${it.kind === "delivery" ? "🚚 Delivery" : "🔔 Next action"}</span>
+      <span class="lagenda-kind">${it.kind === "delivery" ? "🚚 Delivery" : leadFuMeta(it.fuType).icon + " " + leadFuMeta(it.fuType).label}</span>
       <button class="linkish lagenda-lead" data-open="${esc(it.lead.id)}">${esc(it.lead.name || it.lead.company || it.lead.mobile || "lead")}</button>
       <span class="lagenda-stage"><span class="lead-stage-tag lst-${it.lead.stage || "new"}">${esc(LEAD_STAGE_LABEL[it.lead.stage || "new"] || "")}</span></span>
     </li>`;

@@ -1946,3 +1946,9 @@ td.empty, .empty { color: var(--muted); text-align: center; padding: 18px 10px; 
 .variant-multi option { padding: 3px 5px; border-radius: 4px; }
 .variant-multi option:checked { background: var(--accent-soft); color: var(--text); font-weight: 600; }
 .variant-hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+
+/* My Day + win/loss analytics (Casovil CRM Phase 1) */
+.lan-bar-fill.lan-bar-bad { background: var(--lst-lost, #dc2626); }
+.myday-tk-title { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.myday-tk-title b { font-weight: 600; }
+.lagenda-row .myday-tk-title input { margin: 0; }
