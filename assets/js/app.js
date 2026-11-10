@@ -6998,7 +6998,12 @@
       <div class="lead-form-grid" id="lrSoldBox"${preStage === "sold" ? "" : " hidden"}>
         <label>Deal / order value ₹ <span class="lead-req">*</span><input id="lrAmt" type="number" min="1" placeholder="required to move to Won" value="${l.soldAmount ? esc(l.soldAmount) : ""}"></label>
         <label>Sold on<input id="lrDate" type="date" value="${esc(l.soldDate || leadToday())}"></label>
-        <div class="muted-note lead-form-wide">A Won order must have an order value — the deal cannot be moved to Won without it.</div>
+        <div class="lead-form-wide">
+          <div class="lead-remark-label" style="margin-bottom:4px"><b>Invoice</b> <span class="t-muted" style="font-weight:400">— optional now, required to dispatch</span></div>
+          <div id="lrInvStatusSold" class="muted-note">${l.invoiceUrl ? `✓ Invoice on file — <a href="${esc(l.invoiceUrl)}" target="_blank" rel="noopener">view</a>` : "No invoice uploaded yet."}</div>
+          <label class="mini-btn" style="cursor:pointer;margin-top:6px">⬆ Upload invoice<input type="file" id="lrInvFileSold" hidden></label>
+        </div>
+        <div class="muted-note lead-form-wide">A Won order must have an order value — the deal cannot be moved to Won without it. Uploading the invoice now means Dispatch is one click later.</div>
       </div>
       <div class="lead-form-grid" id="lrDispBox"${preStage === "dispatched" ? "" : " hidden"}>
         <label>Courier / carrier<input id="lrCourier" type="text" placeholder="e.g. Bluedart, DTDC" value="${esc(l.courier || "")}"></label>
@@ -7041,17 +7046,18 @@
       const db2 = document.getElementById("lrDemoBox"); if (db2) db2.hidden = v !== "demo";
       const lb = document.getElementById("lrLostBox"); if (lb) lb.hidden = v !== "lost";
     };
-    // Invoice upload (required to move Closed Won → Dispatched). Stored on the
-    // lead as invoiceUrl and added to the lead's attachments.
+    // Invoice upload — available at Sold (optional) and required at Dispatch.
+    // Stored on the lead as invoiceUrl and added to the lead's attachments.
+    // Both the Sold-box and Dispatch-box uploaders share this handler and keep
+    // each other's status line in sync.
     let invoiceUrl = l.invoiceUrl || "";
-    const invFile = document.getElementById("lrInvFile");
-    if (invFile) invFile.onchange = async (e) => {
-      const f = e.target.files[0]; e.target.value = "";
+    const invStatusEls = ["lrInvStatus", "lrInvStatusSold"];
+    const setInvStatus = (html) => invStatusEls.forEach((sid) => { const el = document.getElementById(sid); if (el) el.innerHTML = html; });
+    const doInvUpload = async (f) => {
       if (!f) return;
-      const st = document.getElementById("lrInvStatus");
       if (!storage) { window.alert("⚠ File storage is not enabled yet — ask the admin to turn on Firebase Storage."); return; }
       if (f.size > 15 * 1024 * 1024) { window.alert("⚠ File too large (max 15 MB)."); return; }
-      if (st) st.textContent = "Uploading…";
+      setInvStatus("Uploading…");
       try {
         const safe = String(f.name).replace(/[^\w.\-]+/g, "_").slice(-80);
         const path = "leadfiles/" + id + "/invoice-" + Date.now() + "-" + safe;
@@ -7063,9 +7069,13 @@
         leadFilesDirty.add(fkey);
         invoiceUrl = url; leadUpdate(id, "invoiceUrl", url);
         leadDirty = true; saveEdits("Uploaded invoice");
-        if (st) st.innerHTML = "✓ Invoice uploaded — <a href=\"" + esc(url) + "\" target=\"_blank\" rel=\"noopener\">view</a>";
-      } catch (err) { if (st) st.textContent = "Upload failed — storage may not be enabled or rules block it."; }
+        setInvStatus("✓ Invoice uploaded — <a href=\"" + esc(url) + "\" target=\"_blank\" rel=\"noopener\">view</a>");
+      } catch (err) { setInvStatus("Upload failed — storage may not be enabled or rules block it."); }
     };
+    ["lrInvFile", "lrInvFileSold"].forEach((fid) => {
+      const inp = document.getElementById(fid);
+      if (inp) inp.onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; doInvUpload(f); };
+    });
     const actSel = document.getElementById("lrAct");
     const evWrap = document.getElementById("lrEvWrap");
     const callWrap = document.getElementById("lrCallWrap");
