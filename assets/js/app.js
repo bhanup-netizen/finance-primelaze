@@ -5570,7 +5570,14 @@
     "product", "device", "esth", "celluma", "owner", "notes", "link", "stage", "history", "stageSince",
     "soldAmount", "soldDate", "invoiceUrl", "courier", "awb", "dispatchDate", "expDelivDate", "deliveredDate",
     "lostReason", "lostCompetitor", "fuType",
+    "expValue", "closeDate", "prob",
     "demoProducts", "priority", "tags", "nextFollowUp", "createdBy", "createdAt", "updatedAt"];
+  // Default win-probability by stage (editable per-lead via the "Probability" field).
+  const LEAD_STAGE_PROB = { new: 10, potential: 20, contacted: 30, working: 40, demosched: 55, demo: 65, negotiation: 80, sold: 100, dispatched: 100, delivered: 100, lost: 0 };
+  const leadProb = (l) => (l && l.prob !== "" && l.prob != null && !isNaN(l.prob)) ? Math.max(0, Math.min(100, Number(l.prob))) : (LEAD_STAGE_PROB[(l && l.stage) || "new"] || 0);
+  // Expected deal value for forecasting: the booked amount once Won, else the rep's expected value.
+  const leadExpValue = (l) => (LEAD_WON.indexOf((l && l.stage) || "") >= 0) ? (Number(l.soldAmount) || 0) : (Number(l && l.expValue) || 0);
+  const leadWeighted = (l) => Math.round(leadExpValue(l) * leadProb(l) / 100);
   // Why a deal was lost (Closed-Lost) — for win/loss analysis.
   const LEAD_LOST_REASONS = ["Price too high", "Chose a competitor", "No budget", "No response / went cold", "Not interested", "Bad timing", "Not the right fit", "Bought elsewhere", "Other"];
   // Structured outcome when a call is logged.
@@ -6325,6 +6332,14 @@
         ${admin ? `<label class="ld-field"><span>Celluma model(s)</span>${cellumaMulti("ld_celluma", r.celluma || "")}</label>` : (r.celluma ? `<div class="ld-field"><span>Celluma model(s)</span><div class="ld-val">${esc(r.celluma)}</div></div>` : "")}
         ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
         ${admin ? `<label class="ld-field"><span>Priority</span><select id="ld_priority"><option value="">— None</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}"${(r.priority || "") === p.key ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>` : (r.priority ? `<div class="ld-field"><span>Priority</span><div class="ld-val">${leadPrioBadge(r)}</div></div>` : "")}
+        ${(LEAD_WON.indexOf(r.stage) < 0 && r.stage !== "lost") ? (admin ? `
+        <label class="ld-field"><span>Expected value ₹</span><input id="ld_expValue" type="number" min="0" value="${r.expValue != null ? esc(r.expValue) : ""}" placeholder="likely order size"></label>
+        <label class="ld-field"><span>Expected close</span><input id="ld_closeDate" type="date" value="${esc(r.closeDate || "")}"></label>
+        <label class="ld-field"><span>Probability %</span><input id="ld_prob" type="number" min="0" max="100" value="${(r.prob != null && r.prob !== "") ? esc(r.prob) : ""}" placeholder="auto ${leadProb(r)}% from stage"></label>` : `
+        ${r.expValue ? `<div class="ld-field"><span>Expected value</span><div class="ld-val">₹${inr(Number(r.expValue))}</div></div>` : ""}
+        ${r.closeDate ? `<div class="ld-field"><span>Expected close</span><div class="ld-val">${esc(r.closeDate)}</div></div>` : ""}
+        <div class="ld-field"><span>Probability</span><div class="ld-val">${leadProb(r)}%</div></div>`) : ""}
+        ${(LEAD_WON.indexOf(r.stage) >= 0) ? (admin ? `<label class="ld-field"><span>Won amount ₹</span><input id="ld_soldAmount" type="number" min="0" value="${r.soldAmount != null ? esc(r.soldAmount) : ""}" placeholder="order value"></label>` : `<div class="ld-field"><span>Won amount</span><div class="ld-val">₹${r.soldAmount ? inr(Number(r.soldAmount)) : "0"}</div></div>`) : ""}
         ${fText("link", "Attachment link", "https://…")}
       </div>
       <div class="ld-tags-wrap">
@@ -6421,7 +6436,7 @@
     const saveB = document.getElementById("ldSave");
     if (saveB) saveB.onclick = () => {
       let changed = 0;
-      ["name", "mobile", "company", "city", "state", "source", "product", "device", "esth", "celluma", "owner", "link", "priority"].forEach((f) => {
+      ["name", "mobile", "company", "city", "state", "source", "product", "device", "esth", "celluma", "owner", "link", "priority", "expValue", "closeDate", "prob", "soldAmount"].forEach((f) => {
         const el = document.getElementById("ld_" + f); if (!el) return;
         let v = readFieldCSV(el);
         if (f === "mobile") v = v.replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
@@ -7412,6 +7427,7 @@
       { k: "leads", label: "🎯 Leads" },
       { k: "tasks", label: "✅ Tasks" },
       { k: "corporate", label: "🏢 Corporate" },
+      { k: "forecast", label: "📈 Forecast" },
       { k: "calendar", label: "📅 Calendar" },
       { k: "activity", label: "🧾 Activity Board" },
       { k: "help", label: "📖 Help & Training" },
@@ -7419,6 +7435,7 @@
     const body = casovilView === "myday" ? renderMyDay()
       : casovilView === "tasks" ? renderTasks()
       : casovilView === "corporate" ? renderCorporate()
+      : casovilView === "forecast" ? renderForecast()
       : casovilView === "calendar" ? renderLeadCalendar()
       : casovilView === "activity" ? renderLeadActivity()
       : casovilView === "help" ? renderCasovilHelp()
@@ -7607,6 +7624,59 @@
   }
 
   // ---- Calendar: upcoming tasks / next-actions & expected deliveries --------
+  // ---- Forecast: expected close date + stage probability → weighted projection.
+  // Doubles as the standardised sales-projection format.
+  let forecastOwner = "";
+  function monthLabelOf(ym) {
+    if (ym === "Unscheduled") return "Unscheduled (no close date)";
+    const [y, m] = ym.split("-"); return new Date(+y, +m - 1, 1).toLocaleString("en-IN", { month: "short", year: "numeric" });
+  }
+  function renderForecast() {
+    const owners = leadOwners();
+    let leads = leadAll().filter((r) => !leadIsArchived(r.id));
+    if (forecastOwner) leads = leads.filter((l) => (l.owner || "") === forecastOwner);
+    const open = leads.filter((l) => LEAD_OPEN.indexOf(l.stage || "new") >= 0);
+    const won = leads.filter((l) => LEAD_WON.indexOf(l.stage) >= 0);
+    // Open pipeline grouped by expected-close month.
+    const byMonth = {};
+    open.forEach((l) => { const k = l.closeDate ? String(l.closeDate).slice(0, 7) : "Unscheduled"; (byMonth[k] = byMonth[k] || { n: 0, pipe: 0, wt: 0 }); byMonth[k].n++; byMonth[k].pipe += leadExpValue(l); byMonth[k].wt += leadWeighted(l); });
+    const months = Object.keys(byMonth).sort((a, b) => (a === "Unscheduled" ? 1 : b === "Unscheduled" ? -1 : a.localeCompare(b)));
+    const totPipe = open.reduce((s, l) => s + leadExpValue(l), 0);
+    const totWt = open.reduce((s, l) => s + leadWeighted(l), 0);
+    const wonVal = won.reduce((s, l) => s + (Number(l.soldAmount) || 0), 0);
+    const monthRows = months.map((k) => `<tr><td class="strong">${esc(monthLabelOf(k))}</td><td class="num">${byMonth[k].n}</td><td class="num">₹${inr(byMonth[k].pipe)}</td><td class="num"><b>₹${inr(byMonth[k].wt)}</b></td></tr>`).join("")
+      + `<tr class="lead-table-total"><td class="strong">Total open pipeline</td><td class="num">${open.length}</td><td class="num">₹${inr(totPipe)}</td><td class="num"><b>₹${inr(totWt)}</b></td></tr>`;
+    // By owner.
+    const om = {};
+    open.forEach((l) => { const o = l.owner || "__un"; (om[o] = om[o] || { n: 0, pipe: 0, wt: 0, won: 0 }); om[o].n++; om[o].pipe += leadExpValue(l); om[o].wt += leadWeighted(l); });
+    won.forEach((l) => { const o = l.owner || "__un"; (om[o] = om[o] || { n: 0, pipe: 0, wt: 0, won: 0 }); om[o].won += (Number(l.soldAmount) || 0); });
+    const ownerRows = Object.keys(om).sort((a, b) => om[b].wt - om[a].wt).map((o) => `<tr><td>${o === "__un" ? "<span class='t-muted'>Unassigned</span>" : esc(spLabel(o))}</td><td class="num">${om[o].n}</td><td class="num">₹${inr(om[o].pipe)}</td><td class="num"><b>₹${inr(om[o].wt)}</b></td><td class="num">₹${inr(om[o].won)}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No open deals.</td></tr>`;
+    // Won orders missing an invoice (for the old-invoice upload clean-up).
+    const noInv = won.filter((l) => !l.invoiceUrl);
+    const invRows = noInv.slice(0, 50).map((l) => `<li class="lagenda-row"><span class="lagenda-date">${esc(l.soldDate || "—")}</span><span class="lagenda-kind">₹${l.soldAmount ? inr(Number(l.soldAmount)) : "0"}</span><button class="linkish" data-open="${esc(l.id)}">${esc(l.name || l.company || l.mobile || "lead")}</button><span class="lagenda-stage"><span class="lead-stage-tag lst-${l.stage}">${esc(LEAD_STAGE_LABEL[l.stage] || "")}</span></span></li>`).join("");
+    setTimeout(() => {
+      document.querySelectorAll("#view [data-open]").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.open)));
+      const ow = document.getElementById("fcOwner"); if (ow) ow.onchange = (e) => { forecastOwner = e.target.value; casovilRepaint(); };
+    }, 0);
+    return `
+      <div class="section-head"><h1>📈 Forecast &amp; Sales Projection</h1>
+        <p>Weighted pipeline = expected value × win-probability. Set each open lead's <b>Expected value</b>, <b>Expected close date</b> and <b>Probability</b> (auto-filled from the stage, editable) in its detail panel. This is the standard sales-projection format.</p></div>
+      <div class="controls" style="align-items:center">
+        <label class="ord-field"><span>Owner</span><select id="fcOwner" class="select"><option value="">All</option>${owners.map((o) => `<option value="${esc(o)}"${o === forecastOwner ? " selected" : ""}>${esc(spLabel(o))}</option>`).join("")}</select></label>
+      </div>
+      <div class="hq-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0 14px">
+        <div class="stat"><b>${open.length}</b><span>Open deals</span></div>
+        <div class="stat"><b>₹${inr(totPipe)}</b><span>Open pipeline (full)</span></div>
+        <div class="stat"><b>₹${inr(totWt)}</b><span>Weighted forecast</span></div>
+        <div class="stat"><b>₹${inr(wonVal)}</b><span>Won value (booked)</span></div>
+      </div>
+      <h2 class="df-sec">Projection by expected close month</h2>
+      ${table(`<th>Month</th><th class="num">Open deals</th><th class="num">Pipeline ₹</th><th class="num">Weighted ₹</th>`, monthRows)}
+      <h2 class="df-sec" style="margin-top:16px">By owner (rep)</h2>
+      ${table(`<th>Owner</th><th class="num">Open</th><th class="num">Pipeline ₹</th><th class="num">Weighted ₹</th><th class="num">Won ₹</th>`, ownerRows)}
+      ${noInv.length ? `<h2 class="df-sec" style="margin-top:16px;color:var(--bad)">⚠ Won orders missing an invoice (${noInv.length})</h2><p class="muted-note">Upload the invoice from each lead's Dispatch step to clear this — covers the old-invoice clean-up.</p><ul class="lagenda-list">${invRows}</ul>` : ""}`;
+  }
+
   // ---- My Day: a rep's agenda — overdue & today's follow-ups + open tasks ----
   let myDayScope = "me";     // "me" | "all"
   let myDayTasksLoaded = false;
@@ -7752,7 +7822,8 @@
   }
 
   // ---- Activity Board: every logged activity (calls, meetings, events…) -----
-  let leadActPerson = "", leadActType = "";
+  let leadActPerson = "", leadActType = "", leadActWhen = "";
+  const localDay = (ts) => { const d = new Date(ts || 0); const p = (n) => String(n).padStart(2, "0"); return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()); };
   function leadAllActivities() {
     const out = [];
     leadAll().filter((r) => !leadIsArchived(r.id)).forEach((l) => {
@@ -7770,6 +7841,12 @@
     let rows = all;
     if (leadActPerson) rows = rows.filter((a) => a.by === leadActPerson);
     if (leadActType) rows = rows.filter((a) => (a.act || "") === leadActType);
+    if (leadActWhen) {
+      const todayD = localDay(Date.now());
+      const yD = localDay(Date.now() - 86400000);
+      const wk = Date.now() - 7 * 86400000;
+      rows = rows.filter((a) => a.at && (leadActWhen === "today" ? localDay(a.at) === todayD : leadActWhen === "yesterday" ? localDay(a.at) === yD : leadActWhen === "7d" ? a.at >= wk : true));
+    }
     const counts = {};
     rows.forEach((a) => { const k = a.act || ""; counts[k] = (counts[k] || 0) + 1; });
     const kpi = LEAD_ACTS.filter((t) => counts[t.key]).map((t) => `<span class="lact-kpi">${esc(t.label)} <b>${counts[t.key]}</b></span>`).join("");
@@ -7777,7 +7854,8 @@
       document.querySelectorAll("#view [data-open]").forEach((b) => (b.onclick = () => leadDetailDialog(b.dataset.open)));
       const p = document.getElementById("lactPerson"); if (p) p.onchange = (e) => { leadActPerson = e.target.value; casovilRepaint(); };
       const t = document.getElementById("lactType"); if (t) t.onchange = (e) => { leadActType = e.target.value; casovilRepaint(); };
-      const c = document.getElementById("lactClear"); if (c) c.onclick = () => { leadActPerson = ""; leadActType = ""; casovilRepaint(); };
+      const wn = document.getElementById("lactWhen"); if (wn) wn.onchange = (e) => { leadActWhen = e.target.value; casovilRepaint(); };
+      const c = document.getElementById("lactClear"); if (c) c.onclick = () => { leadActPerson = ""; leadActType = ""; leadActWhen = ""; casovilRepaint(); };
     }, 0);
     const body = rows.length
       ? rows.slice(0, 500).map((a) => `<tr>
@@ -7797,7 +7875,8 @@
       <div class="controls">
         <label class="ord-field"><span>Logged by</span><select id="lactPerson" class="select"><option value="">Everyone</option>${people.map((p) => `<option value="${esc(p)}"${p === leadActPerson ? " selected" : ""}>${esc(p)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Type</span><select id="lactType" class="select"><option value="">All types</option>${LEAD_ACTS.filter((a) => a.key).map((a) => `<option value="${a.key}"${a.key === leadActType ? " selected" : ""}>${esc(a.label)}</option>`).join("")}</select></label>
-        ${(leadActPerson || leadActType) ? `<button id="lactClear" class="ghost-btn" type="button">✕ Clear</button>` : ""}
+        <label class="ord-field"><span>When</span><select id="lactWhen" class="select">${[["", "All time"], ["today", "Today"], ["yesterday", "Yesterday"], ["7d", "Last 7 days"]].map(([k, lbl]) => `<option value="${k}"${k === leadActWhen ? " selected" : ""}>${esc(lbl)}</option>`).join("")}</select></label>
+        ${(leadActPerson || leadActType || leadActWhen) ? `<button id="lactClear" class="ghost-btn" type="button">✕ Clear</button>` : ""}
       </div>
       ${kpi ? `<div class="lact-kpis">${kpi}</div>` : ""}
       <p class="muted-note">${rows.length} activit${rows.length === 1 ? "y" : "ies"}${rows.length > 500 ? " (showing latest 500)" : ""}.</p>
