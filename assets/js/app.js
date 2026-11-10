@@ -151,7 +151,9 @@
     // HR
     { id: "team", label: "Team", group: "HR", render: renderTeam },
     { id: "weeklyHr", label: "Duties", group: "HR", render: () => renderWeekly("HR") },
-    { id: "hiring", label: "Hiring Protocol", group: "HR", render: renderHiring },
+    { id: "hiring", label: "Interview Protocol", group: "HR", render: renderHiring },
+    { id: "handbook", label: "Employee Handbook", group: "HR", render: renderHandbook },
+    { id: "hrsop", label: "HR SOP & Compliance", group: "HR", render: renderHrSop },
     { id: "induction", label: "Induction", group: "HR", render: renderInduction },
     { id: "attendance", label: "Attendance Protocol", group: "HR", render: renderAttendance },
     // Marketing
@@ -9901,6 +9903,481 @@
         <p>Primelaze recruitment workflow (Version 2) — from profile received to offer letter and Day 1, with turnaround times, decision gates, escalation and roles.</p></div>
       <div class="hq-actions" style="margin:0 0 10px"><button type="button" class="ghost-btn" id="hirePdf">⬇ Download PDF</button></div>
       ${hiringBody()}`;
+  }
+
+  /* ================= HR · EMPLOYEE HANDBOOK (v2) ================= */
+  function handbookBody() {
+    const t = (head, rows) => table(head.map((h) => `<th>${h}</th>`).join(""), rows);
+    const rowsOf = (arr) => arr.map((r) => `<tr>${r.map((c, i) => `<td${i === 0 ? ' class="strong"' : ""}>${c}</td>`).join("")}</tr>`).join("");
+    const li = (arr) => `<ul class="soc-addr">${arr.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+    return `
+      <div class="callout teal"><b>Version 2.0 · FY 2026–27 · Owner: Human Resources · Confidentiality: Internal use.</b> Companion document: <b>HR SOP &amp; Compliance Tracker</b>. Items marked <b>†</b> follow the applicable law and are subject to statutory change.</div>
+
+      <h2 style="margin-top:18px">About this Handbook</h2>
+      <div class="block"><p><b>Purpose.</b> This Handbook explains what Primelaze expects of you, what you can expect from us, and the policies that govern your employment. Internal HR processes sit in the separate HR SOP.</p>
+        <p style="margin-top:6px"><b>Order of precedence:</b> (1) applicable law, (2) your signed appointment letter, (3) this Handbook, (4) circulars. If this Handbook conflicts with law, the law prevails. Management may amend it for business or legal reasons; material changes are version-controlled and communicated in writing.</p>
+        ${t(["Who it applies to", "Coverage"], rowsOf([
+          ["Permanent employees (corporate, backend/support, sales/field, service engineering)", "Entire Handbook"],
+          ["Probationers", "Entire Handbook, with the probation terms in Section 2"],
+          ["Fixed-term employees", "Entire Handbook; benefits as stated in the appointment letter and applicable law"],
+          ["Interns and trainees", "Conduct, confidentiality, IT, POSH and safety sections"],
+          ["Apprentices", "Conduct, confidentiality, IT, POSH and safety sections; stipend and terms per the registered apprenticeship contract"],
+          ["Contract and third-party staff", "Conduct, confidentiality, safety, anti-bribery and POSH sections, through the contract with their employer"],
+        ]))}</div>
+
+      <h2 style="margin-top:22px">1. Our principles</h2>
+      <div class="block">${li([
+        "<b>Fairness and dignity.</b> Every employee is treated with respect and consistency.",
+        "<b>Accountability.</b> Attendance, reporting and commitments are owned by the employee and supported by the manager.",
+        "<b>Integrity.</b> We deal honestly with colleagues, doctors, clinics, customers, regulators and each other.",
+        "<b>Patient and product safety.</b> Anything that may affect the safety of a patient, user or device is reported at once.",
+        "<b>Confidentiality.</b> Company, clinic and patient information is protected.",
+        "<b>Growth.</b> Clear KRAs, regular feedback and learning opportunities.",
+      ])}</div>
+
+      <h2 style="margin-top:22px">2. Employment terms</h2>
+      <div class="block"><h3 style="margin:0 0 6px">2.1 Appointment letter</h3>
+        <p>Every employee receives a written appointment letter and signs it on or before Day 1. It states designation, reporting manager, place of work, compensation structure, probation, notice period, and any authorised deductions (for example, for unreturned company assets or incentive clawback). <b>No one starts work without a signed letter on file.</b></p>
+        <h3 style="margin:14px 0 6px">2.2 Probation</h3>
+        <p>Probation is <b>six months</b> from the date of joining. Reviews are held at Day 30, Day 60, Day 90 and a final review in Month 5, each documented with the reporting manager.</p>
+        ${t(["Period", "Employee focus", "HR focus", "Manager focus"], rowsOf([
+          ["Day 0–30", "Induction, role clarity, systems", "Documents, access, induction", "Initial targets, weekly check-in"],
+          ["Day 31–60", "Productivity, reporting discipline", "Attendance &amp; reporting review, onboarding feedback", "Capability gaps, coaching"],
+          ["Day 61–90", "Targets and consistency", "Probation feedback documented", "Readiness for confirmation"],
+          ["Month 5", "Closing the gaps", "Prepares confirmation or extension letter", "Written recommendation"],
+        ]))}
+        ${li([
+          "<b>Outcome:</b> confirmation, extension (stating reasons and the new end date) or non-confirmation, communicated in writing before probation ends.",
+          "<b>If no letter is issued:</b> the employee is <b>deemed confirmed</b> on completion of the probation period. Probation can be extended only by a written letter issued before that date.",
+          "<b>Probation leave:</b> 1 day of leave per month during probation. After confirmation, the full leave framework in Section 5 applies.",
+        ])}
+        <h3 style="margin:14px 0 6px">2.3 Retirement</h3>
+        <p>The retirement age is <b>60 years †</b>. Employment ends on the last day of the month in which the employee turns 60, unless extended in writing.</p>
+        <h3 style="margin:14px 0 6px">2.4 Nominations and personal records</h3>
+        <p>On or before joining you must provide PF Form 11, PF Form 2 nomination, an ESI declaration with family details (if applicable) and a gratuity nomination. Keep your address, bank and nominee details updated in HRone. <b>Nominations cannot be reconstructed later, so please do not delay them.</b></p></div>
+
+      <h2 style="margin-top:22px">3. Working hours, attendance &amp; time-off definitions</h2>
+      <div class="block"><h3 style="margin:0 0 6px">3.1 Working hours and weekly off</h3>
+        ${li(["Standard working hours: <b>9 hours including a break</b> (office staff). Field and service roles follow their assigned schedule and territory plan.", "Weekly off: <b>Sunday</b>."])}
+        <h3 style="margin:14px 0 6px">3.2 Definitions</h3>
+        ${t(["Term", "Meaning"], rowsOf([
+          ["Full day", "Attendance of 8 or more hours, or a completed field day with valid attendance and same-day reporting"],
+          ["Half day", "Attendance of 4 hours or more but less than 8 hours; it counts as ½ day of leave for the remaining half"],
+          ["Late mark", "Login after 15 minutes of grace beyond the start time, without approved regularisation"],
+          ["Absent", "A day on which the employee did not work and no approved leave exists"],
+          ["Regularisation (AR)", "A correction request in HRone, with a clear reason and evidence, reviewed by the manager and monitored by HR"],
+        ]))}
+        <h3 style="margin:14px 0 6px">3.3 Attendance for field and clinic staff</h3>
+        <p>Attendance must be marked from the actual clinic or field location, with the clinic board or name visible in the image. Attendance marked from the surrounding area, while travelling, or without the board/name visible is not validated. If you actually worked that day, submit an AR with evidence for HR and the manager to review. If no valid evidence exists, the day is treated as not worked.</p>
+        <h3 style="margin:14px 0 6px">3.4 Attendance regularisation</h3>
+        <p>Employees mark attendance on time and correct errors promptly. Repeated or unsupported AR requests may lead to corrective action.</p>
+        <h3 style="margin:14px 0 6px">3.5 Compensatory off (comp-off)</h3>
+        <p>Staff who work on a weekly off or a holiday for an approved exhibition, conference or similar event receive:</p>
+        ${li([
+          "1 comp-off for a full day (more than 4 hours); ½ comp-off for up to 4 hours †.",
+          "Prior approval from the reporting manager, recorded in HRone.",
+          "Comp-off must be availed within <b>1 working month</b> of the event, and lapses otherwise.",
+        ])}
+        <h3 style="margin:14px 0 6px">3.6 Calendar discipline</h3>
+        <p>Respond promptly to Google Calendar invitations and show out-of-office periods in the calendar.</p></div>
+
+      <h2 style="margin-top:22px">4. Daily reporting and non-reporting</h2>
+      <div class="block"><h3 style="margin:0 0 6px">4.1 Daily reporting</h3>
+        ${li([
+          "Sales and field staff update <b>Bigin</b> the same day with all doctor and clinic visits, interactions, follow-ups, demos and remarks, and keep visit evidence.",
+          "Backend and support staff update assigned tasks and progress in <b>Zoho Projects</b>.",
+          "Service engineers record installation and service visits and any complaint or adverse event the same day on Bigin.",
+        ])}
+        <h3 style="margin:14px 0 6px">4.2 Non-reporting is a conduct matter</h3>
+        ${t(["Stage", "Trigger", "Action"], rowsOf([
+          ["1", "First missed / late report (till 12 AM)", "Reminder and recorded counselling by the reporting manager; HR notes it. DA deduction for the day."],
+          ["2", "Two consecutive working days", "Written warning issued by HR after hearing the employee's explanation."],
+          ["3", "Three working days without valid reason/response", "Bigin and HRone access suspended pending an explanation, and a show-cause notice is issued. HR checks whether the employee worked those days; only days confirmed as not worked are treated as absence."],
+          ["4", "Repeated non-compliance after two warning letters", "Disciplinary process under Section 8 — penalties up to termination, following a fair enquiry."],
+        ]))}
+        <p class="muted-note" style="margin-top:8px"><b>During access suspension:</b> email the daily report to your reporting manager, copy HR. Access is reactivated on the manager's approval with HR's confirmation. <b>Emergency route:</b> if a genuine emergency (illness, accident, hospitalisation, bereavement, force majeure) stopped you reporting, inform your manager or HR by phone/email within 24 hours of being able to. HR can approve a regularisation and restore access even during suspension; supporting evidence may be requested afterwards.</p></div>
+
+      <h2 style="margin-top:22px">5. Leave and holidays</h2>
+      <div class="block"><h3 style="margin:0 0 6px">5.1 Leave year and entitlement</h3>
+        ${li([
+          "Leave year: the financial year, <b>1 April to 31 March †</b>.",
+          "Annual entitlement: <b>30 days = 20 Privilege Leave (PL) + 10 Sick Leave (SL)</b>.",
+          "PL accrues at 20 per year, credited half-yearly (10 days on 1 April and 10 days on 1 October).",
+          "SL of 10 days is credited on 1 April.",
+          "Mid-year joiners and leavers: PL and SL are pro-rated by completed months of service in the leave year. During probation, 1 day per month applies (Section 2.2).",
+        ])}
+        <h3 style="margin:14px 0 6px">5.2 Medical emergency leave</h3>
+        <p>In a medical emergency or hospitalisation, use SL first and then PL. Up to <b>15 days</b> of emergency medical leave per year may be drawn. A medical certificate is required for absences of more than 3 consecutive days. Statutory sick or maternity benefits under ESI or other law apply in addition where you qualify.</p>
+        <h3 style="margin:14px 0 6px">5.3 Carry-forward, lapse and encashment</h3>
+        ${t(["Leave type", "Carry-forward", "Encashment"], rowsOf([
+          ["PL", "Unused PL lapses on 31 March", "No encashment"],
+          ["SL", "Lapses on 31 March", "Not encashable"],
+          ["Comp-off", "Lapses after 60 days", "Not encashable"],
+        ]))}
+        <h3 style="margin:14px 0 6px">5.4 How to apply</h3>
+        ${li([
+          "All leave is applied for and approved in <b>HRone</b>. Verbal or WhatsApp approvals are not valid.",
+          "Apply in advance. Managers approve or reject within 48 hours.",
+          "Team reporting to Arjun must take approval from Arjun; without his approval leave will not be considered.",
+          "Long leave of 7 or more consecutive working days: inform your reporting manager at least <b>4 weeks</b> in advance, and agree work coverage.",
+          "Unapproved absence is treated as absence (loss of pay), may attract action under Section 8, and is escalated in writing in the same week.",
+          "Leave beyond your balance is treated as loss of pay.",
+        ])}
+        <h3 style="margin:14px 0 6px">5.5 Holidays</h3>
+        <p>The annual holiday list is declared before the start of each year and displayed in HRone and at the office (Annexure A). National holidays (26 January, 15 August, 2 October) are always included; festival holidays are listed by Management.</p></div>
+
+      <h2 style="margin-top:22px">6. Maternity benefit and related leave</h2>
+      <div class="block"><p>Primelaze follows the maternity law in force. The summary below applies to eligible women employees; the statute and its rules prevail.</p>
+        ${t(["Provision", "Policy"], rowsOf([
+          ["Eligibility", "Women employees who have worked at least 80 days in the 12 months before the expected delivery date"],
+          ["Paid maternity leave", "26 weeks for the first two children (up to 8 weeks before the expected delivery and the balance after); 12 weeks for the third child onward"],
+          ["Adoption / commissioning mothers", "12 weeks from the date the child is handed over"],
+          ["Miscarriage / medical termination", "6 weeks of paid leave from the date of the event, with a medical certificate"],
+          ["Tubectomy", "2 weeks of paid leave from the date of the procedure"],
+          ["Illness from pregnancy / delivery / premature birth / miscarriage", "Up to 1 month additional paid leave, with a medical certificate"],
+        ]))}
+        <p class="muted-note" style="margin-top:8px"><b>How to apply:</b> give written notice to HR as early as possible, mentioning the expected delivery date. HR handles all details confidentially. Paid maternity leave is not deducted from the 30-day leave entitlement.</p></div>
+
+      <h2 style="margin-top:22px">7. Prevention of Sexual Harassment (POSH)</h2>
+      <div class="block"><p><b>7.1 Commitment.</b> Primelaze provides a workplace free from sexual harassment, in line with the POSH Act, 2013. It covers all employees, trainees, interns, apprentices, contract workers, visitors and persons at clinics, customer sites, events and work travel, including online conduct.</p>
+        <p style="margin-top:6px"><b>7.2 What is sexual harassment.</b> Unwelcome acts or behaviour, direct or implied — physical contact or advances, a demand/request for sexual favours, sexually coloured remarks, showing pornography, or any other unwelcome physical, verbal or non-verbal conduct of a sexual nature. Quid pro quo and a hostile work environment are covered, and it applies equally to conduct by colleagues, managers, doctors, customers or vendors.</p>
+        <h3 style="margin:14px 0 6px">7.3 Internal Committee (IC)</h3>
+        ${t(["Member", "Requirement"], rowsOf([
+          ["Presiding Officer", "A senior-level woman employee"],
+          ["Internal members", "At least 2 employees committed to women's causes, with social-work or legal knowledge"],
+          ["External member", "One person from an NGO/association committed to women's causes, or familiar with these issues"],
+          ["Composition", "At least half of the members are women"],
+          ["Term", "Not more than 3 years. HR tracks the expiry date and reconstitutes the committee before it lapses"],
+        ]))}
+        <h3 style="margin:14px 0 6px">7.4 Complaint and inquiry timelines</h3>
+        ${t(["Step", "Timeline"], rowsOf([
+          ["Written complaint to the IC (HR helps if needed)", "Within 3 months of the incident / last incident; IC may extend by 3 months for sufficient reasons"],
+          ["Interim relief at the complainant's request (transfer, leave up to 3 months, restraining contact)", "During the inquiry"],
+          ["Conciliation (only at complainant's written request; no monetary settlement as the basis)", "Before inquiry begins"],
+          ["Copy of complaint to the respondent", "Within 7 days of receipt"],
+          ["Respondent's reply", "Within 10 days of receipt of the complaint"],
+          ["Inquiry completed", "Within 90 days"],
+          ["IC report to the employer and parties", "Within 10 days of completing the inquiry"],
+          ["Employer acts on the report", "Within 60 days"],
+          ["Appeal", "Within 90 days of the recommendations, as per law"],
+        ]))}
+        <p class="muted-note" style="margin-top:8px">The inquiry follows natural justice, with confidentiality. Retaliation against a complainant or witness is itself misconduct. A proven false or malicious complaint may attract action; merely failing to prove a complaint is not malicious. <b>7.5</b> HR runs awareness sessions at least yearly and at induction; the IC files the statutory annual report through HR.</p></div>
+
+      <h2 style="margin-top:22px">8. Discipline, domestic enquiry &amp; grievance</h2>
+      <div class="block"><p><b>8.1 Principles.</b> Discipline is fair, consistent, documented and follows natural justice. Performance issues (KRA review and PIP) are kept separate from misconduct, though they may overlap.</p>
+        <p style="margin-top:6px"><b>8.2 Examples of misconduct:</b> unauthorised absence or repeated attendance violations; non-reporting or false reporting; misuse of company systems, devices, assets, data or AI tools; misrepresentation, fraud or financial irregularity; sexual harassment, discrimination, bullying, violence or threats; breach of confidentiality, conflict of interest, bribery or improper gifts; concealing a device complaint/adverse event or violating safety rules; wilful disobedience and insubordination; working under the influence of alcohol/drugs, theft or damage to property.</p>
+        <h3 style="margin:14px 0 6px">8.3 Disciplinary procedure</h3>
+        ${li([
+          "Identify and document the issue and evidence.",
+          "Counselling or written warning for minor or first-time issues.",
+          "Show-cause notice stating the allegation, requiring a written reply within <b>3 working days †</b>.",
+          "Review the reply — close in writing if satisfactory; otherwise proceed to a domestic enquiry.",
+          "Charge sheet and enquiry: HR issues a charge sheet and appoints an impartial Enquiry Officer with no prior involvement; the employee gets at least <b>3 working days' †</b> notice of the enquiry date.",
+          "Fair hearing: the employee may attend, see the evidence, cross-examine witnesses, present their own witnesses and documents, and be accompanied by a co-worker; proceedings are recorded.",
+          "Findings: a reasoned report, with a copy to the employee to comment.",
+          "Decision: penalty proportionate to the misconduct, past record and law, communicated in writing with reasons.",
+          "Appeal: to Management within <b>15 days †</b>. Records are kept confidentially in the employee file.",
+        ])}
+        <p style="margin-top:6px"><b>8.4 Suspension pending enquiry</b> is not a penalty; it is by written order stating the reason, with a subsistence allowance as required by law, and the enquiry is completed without delay. <b>8.5 Penalties</b> are graded: written warning, withholding of increment/incentive (where the scheme permits), demotion, suspension without pay as permitted by law, and termination. Wage deductions are made only as permitted by law and the appointment letter.</p>
+        <p style="margin-top:6px"><b>8.6 Grievance redressal.</b> Raise a concern with your manager or HR in writing where possible. HR acknowledges within <b>2 working days †</b>, assesses urgency and risk, investigates, and closes with a written response within <b>15 working days †</b>. Escalate to the Grievance Redressal Committee (Annexure B) if unsatisfied. POSH complaints follow Section 7; whistleblower concerns follow Section 10. No one is penalised for raising a grievance in good faith.</p></div>
+
+      <h2 style="margin-top:22px">9. Statutory entitlements &amp; equal opportunity</h2>
+      <div class="block"><p><b>9.1 Appointment letters &amp; wages.</b> Every employee has a signed appointment letter. Salary is paid within the Code on Wages timeline; payslips are issued every month. Deductions are made only as permitted by law and the appointment letter. Salary structures are reviewed against the wage definition in the labour codes.</p>
+        <p style="margin-top:6px"><b>9.2 Gratuity, PF, ESI &amp; insurance</b> are applied to eligible employees as per law. Gratuity is payable on exit after the qualifying period on the nomination you provide; insurance cover is in Section 11.</p>
+        <p style="margin-top:6px"><b>9.4 Equal Opportunity Policy (RPwD Act, 2016):</b> equal opportunity with no discrimination in recruitment, pay, promotion, posting or termination on grounds of disability, gender, religion, caste, region, age or marital status. Reasonable accommodation is provided (accessible workstation, assistive tools, modified schedules). An employee who acquires a disability is not dismissed or demoted for that reason and is moved to a suitable post with the same pay and benefits where possible. The Grievance Officer for disability matters is named in Annexure B.</p>
+        <p style="margin-top:6px"><b>9.5 Apprenticeship.</b> Primelaze engages apprentices under the Apprentices Act, 1961, in the band of 2.5%–15% of total strength, with contracts registered on the national portal and returns filed on schedule. HR plans this as a talent pipeline for service, installation and operations roles.</p></div>
+
+      <h2 style="margin-top:22px">10. Code of conduct &amp; ethics</h2>
+      <div class="block">${li([
+        "<b>General conduct.</b> Be honest, punctual, respectful and professional. Do not discriminate, bully, harass or intimidate. Use company property only for company purposes. Dress and behave appropriately at clinics, hospitals and events.",
+        "<b>Conflict of interest &amp; moonlighting.</b> Disclose in writing to HR any interest that may conflict with your duties (competitor, supplier, distributor, clinic or doctor's practice dealing with Primelaze). No moonlighting: any outside engagement needs prior written approval from Management.",
+        "<b>Anti-bribery &amp; anti-corruption.</b> Zero tolerance for bribery or kickbacks, directly or through a third party, to or from any doctor, clinic, hospital, official, distributor, vendor or customer. Facilitation payments are prohibited; accurate books must be kept and false claims are fraud.",
+        "<b>Confidentiality.</b> Keep confidential, during and after employment, all non-public information (product designs, pricing, customer/doctor/clinic lists, business plans, financials, source code, service manuals, regulatory files, employee data) and all clinic/patient information. Do not store it on personal devices, personal email, messaging apps or public AI tools. Obligations survive exit.",
+        "<b>Intellectual property.</b> All work product, inventions, designs, software, data and improvements created in employment or using company resources belong to Primelaze; prior-owned IP must be disclosed in writing at joining.",
+      ])}</div>
+
+      <h2 style="margin-top:22px">11. Reimbursements, incentives &amp; insurance</h2>
+      <div class="block">${li([
+        "<b>Travel &amp; expense reimbursement.</b> Claims are submitted on Zoho expenses by month-end, with bills/tickets/receipts, purpose, doctor/clinic visited, and manager approval. Out-of-policy expenses need prior written approval; false or duplicate claims are misconduct.",
+        "<b>Vehicle &amp; fuel (field staff).</b> A valid driving licence, registration certificate, motor insurance and pollution certificate are required; a helmet is mandatory for two-wheeler riders. HR records these and tracks expiry. Report any accident immediately.",
+        "<b>Sales incentive scheme.</b> Eligible roles, targets, slabs and rates are in the Incentive Scheme Annexure (issued by Management each year). Incentives may be withheld or clawed back for mis-selling, improper discounts, undisclosed concessions or violations of the conduct rules.",
+      ])}
+        ${t(["Cover", "Eligibility", "Details"], rowsOf([
+          ["Group mediclaim", "Employees (and dependants as stated)", "Insurer, sum insured, room-rent limit, dependants"],
+          ["Group personal accident (GPA)", "Employees; field &amp; service staff in particular", "Insurer, sum insured, coverage, policy"],
+          ["ESI", "As per statute", "Employees within the wage ceiling"],
+          ["PF &amp; gratuity", "As per statute", "Employer and employee contributions"],
+          ["Maternity benefit", "Section 6", "As per statute"],
+        ]))}
+        <p class="muted-note" style="margin-top:8px">New employees are added to insurance within <b>7 days †</b> of joining. The policy document, claim process and TPA helpline are shared at induction and kept in HRone; renewals are tracked by HR each year.</p></div>
+
+      <h2 style="margin-top:22px">12. IT &amp; acceptable use (including AI tools)</h2>
+      <div class="block">${li([
+        "Company laptops, phones, email, HRone, Bigin, Zoho Projects and Google Workspace are for business use, with limited reasonable personal use; use is monitored as the law allows.",
+        "Use strong passwords and MFA. Never share credentials. Lock devices when unattended. Report loss, theft or suspected breach at once.",
+        "Do not install unauthorised software or connect unapproved storage/devices, or use company systems for unlawful, offensive or discriminatory content.",
+        "<b>AI tools:</b> use only company-approved AI tools for work. Do not enter confidential, customer, doctor, clinic, patient, employee, pricing, source-code or regulatory information into any public or unapproved AI tool. Review AI output for accuracy and bias, stay accountable for what you submit, and never present AI-generated content as verified product or clinical information.",
+        "<b>Email, social media &amp; messaging:</b> do not speak for the company, or post confidential information, clinic device images or patient-related content, unless authorised.",
+        "Company assets are issued against a signed acknowledgement and returned at exit.",
+      ])}</div>
+
+      <h2 style="margin-top:22px">13. Resignation, notice, exit &amp; absconding</h2>
+      <div class="block"><p><b>13.1 Notice period.</b> As stated in your appointment letter; the default is <b>30 days</b> during probation and confirmation. Either side may waive or buy out notice by written agreement. Leave cannot be set off against notice.</p>
+        <p style="margin-top:6px"><b>13.2 Resignation process.</b> Submit resignation in writing (email acceptable) to your manager and HR. HR acknowledges within <b>2 working days</b>, confirms the LWD and computes notice. Agree a handover plan; doctor/clinic/customer relationships are formally transferred with Bigin updated. Assets are returned progressively (not on the last day). On the LWD, assets are returned, email/SIM/system access closed, clearances completed and an exit interview held. <b>F&amp;F is paid within 45 working days of the LWD</b>; you receive a relieving letter and experience certificate, with support for PF/gratuity claims.</p>
+        <p style="margin-top:6px"><b>13.3 Asset recovery</b> runs as a separate track from F&amp;F. Wages/dues are not withheld for an unreturned asset unless the deduction is authorised in the appointment letter and within legal limits.</p>
+        <p style="margin-top:6px"><b>13.4 Absconding.</b> If absent for <b>7 or more consecutive working days †</b> without approval or contact, HR will attempt contact by phone and email, send a written notice to the registered address/email to explain and resume within 3 working days, and a second and final notice. With no response, the company may treat it as abandonment of service, record it in writing, and proceed under Section 8 with an opportunity to be heard. Statutory dues are settled.</p></div>
+
+      <h2 style="margin-top:22px">14. Employee data &amp; records</h2>
+      <div class="block"><p>Personal, compensation, medical, disciplinary and performance data are confidential and accessed only for legitimate HR and business purposes. HR stores records securely with controlled access for the period the law requires. You may request correction of your personal data. Employee information is shared only with authorised people, and only what is necessary.</p></div>
+
+      <h2 style="margin-top:22px">16. Glossary</h2>
+      <div class="block">${t(["Term", "Meaning"], rowsOf([
+        ["AR", "Attendance Regularisation request in HRone"],
+        ["Bigin", "CRM tool used for daily field and sales reporting"],
+        ["Comp-off", "Compensatory off for approved work on a weekly off or holiday"],
+        ["F&amp;F", "Full and final settlement of dues on exit"],
+        ["GPA", "Group Personal Accident insurance"],
+        ["HRone", "HR system for attendance, leave and records"],
+        ["IC", "Internal Committee under the POSH Act"],
+        ["KRA / KPI", "Key Result Area / Key Performance Indicator"],
+        ["LWD", "Last Working Day"],
+        ["PIP", "Performance Improvement Plan"],
+        ["PL / SL", "Privilege Leave / Sick Leave"],
+        ["POSH", "Prevention of Sexual Harassment"],
+        ["Adverse event", "Any injury, malfunction or unexpected event possibly related to a device"],
+        ["Moonlighting", "Outside work or business without Management approval"],
+        ["Show-cause notice", "Written notice asking an employee to explain an alleged lapse"],
+        ["Domestic enquiry", "Formal internal inquiry with a fair hearing before a disciplinary decision"],
+      ]))}</div>`;
+  }
+  function renderHandbook() {
+    setTimeout(() => {
+      const b = document.getElementById("hbPdf");
+      if (b) b.onclick = () => printDoc("Primelaze — Employee Handbook", "Employee Handbook", handbookBody());
+    }, 0);
+    return `
+      <div class="section-head"><h1>Employee Handbook</h1>
+        <p>Primelaze Employee Handbook (Version 2.0, FY 2026–27) — what we expect of you, what you can expect from us, and the policies that govern your employment.</p></div>
+      <div class="hq-actions" style="margin:0 0 10px"><button type="button" class="ghost-btn" id="hbPdf">⬇ Download PDF</button></div>
+      ${handbookBody()}`;
+  }
+
+  /* ================= HR · SOP & COMPLIANCE TRACKER (v2) ================= */
+  function hrSopBody() {
+    const t = (head, rows) => table(head.map((h) => `<th>${h}</th>`).join(""), rows);
+    const rowsOf = (arr) => arr.map((r) => `<tr>${r.map((c, i) => `<td${i === 0 ? ' class="strong"' : ""}>${c}</td>`).join("")}</tr>`).join("");
+    const li = (arr) => `<ul class="soc-addr">${arr.map((x) => `<li>${x}</li>`).join("")}</ul>`;
+    const DOW = ["#", "Task", "Due", "Owner", "Evidence"];
+    return `
+      <div class="callout teal"><b>Version 2.0 · FY 2026–27 · Owner: Human Resources.</b> Companion to the Employee Handbook. <b>Owners:</b> HR = HR lead · FIN = Finance/payroll · RM = reporting manager · IT = IT/Admin · MGT = Management. A task is <b>Done only when the evidence exists</b> in the HR shared drive (FY2026-27 / Month / Task) or the named system. Anything overdue goes in the Friday note; statutory items overdue by even a day go to MGT the same day. Items marked <b>†</b> follow applicable law.</div>
+
+      <h2 style="margin-top:18px">Part 1 · Recurring work</h2>
+      <div class="block"><h3 style="margin:0 0 6px">1.1 Daily</h3>
+        ${t(DOW, rowsOf([
+          ["D1", "Review attendance exceptions and flag to reporting managers", "By 11:00 am each working day", "HR", "HRone exception report; flag email/message"],
+          ["D2", "Follow up pending attendance regularisation (AR) requests", "By 3:00 pm", "HR", "HRone AR pending list; follow-up log"],
+          ["D3", "Identify Bigin reporting gaps and escalate the same day (Handbook 4.2)", "By 6:00 pm", "HR with RM", "Bigin gap list; escalation record"],
+          ["D4", "Action joinings, exits and disciplinary steps falling due today", "Same day", "HR", "Dated action tracker"],
+        ]))}
+        <h3 style="margin:14px 0 6px">1.2 Monthly · payroll &amp; statutory</h3>
+        ${t(DOW, rowsOf([
+          ["M1", "Freeze attendance, leave, LOP, incentives, joiners, exits and revisions; validate with managers; send to Finance", "25th", "HR with RM", "Signed-off input sheet; sent email"],
+          ["M2", "TDS on salary for the previous month deposited", "7th", "FIN", "Challan"],
+          ["M3", "PF ECR filed and contribution paid", "15th", "FIN", "ECR acknowledgement; PF challan"],
+          ["M4", "ESI contribution paid", "15th", "FIN", "ESI challan"],
+          ["M5", "Professional tax and labour welfare fund remitted", "Per state schedule †", "FIN", "Challans"],
+          ["M6", "Salary disbursed within the Code on Wages timeline", "Per Code on Wages", "HR", "Bank advice; payslips issued"],
+          ["M7", "Statutory registers updated (employees, wages, muster roll)", "Monthly, within the required period †", "HR", "Updated registers"],
+          ["M8", "Leave register closed before payroll cut-off; LOP validated with managers", "Before M1", "HR", "Closed leave register; manager sign-off"],
+        ]))}
+        <h3 style="margin:14px 0 6px">1.3 Monthly · people MIS</h3>
+        ${t(["#", "Metric", "Owner", "Evidence"], rowsOf([
+          ["P1", "Headcount, joiners, exits, attrition %", "HR", "Zoho Projects"],
+          ["P2", "Attendance and reporting compliance trend", "HR", "Zoho Projects"],
+          ["P3", "Leave utilisation and balances", "HR", "Zoho Projects"],
+          ["P4", "Probation cases falling due; confirmation letters issued", "HR", "HRone"],
+          ["P5", "PIP and disciplinary status", "HR", "Case tracker"],
+          ["P6", "Payroll variance against the previous month, with reasons", "FIN with HR", "Variance note"],
+          ["P7", "Ageing of open positions", "HR", "Hiring tracker"],
+        ]))}
+        <h3 style="margin:14px 0 6px">1.4 Annual</h3>
+        ${t(DOW, rowsOf([
+          ["A1", "Holiday list declared before the year starts and displayed", "Before 1 Jan", "HR", "Published list"],
+          ["A2", "Form 16 issued", "15 June", "FIN", "Distribution record"],
+          ["A3", "POSH annual report submitted; IC membership checked for expiry", "Per POSH Act †; IC check in Q4", "HR", "Submission proof; IC roster with end dates"],
+          ["A4", "Statutory bonus computed and paid within the statutory window", "By 30 Nov †", "FIN with HR", "Computation; payment proof"],
+          ["A5", "Annual returns under applicable labour legislation", "Per statute †", "HR", "Filing acknowledgements"],
+          ["A6", "Salary structures reviewed against the wage definition under the new codes", "Before the appraisal cycle", "HR with FIN", "Review note"],
+          ["A7", "Insurance renewals (mediclaim and GPA)", "30 days before expiry", "HR", "Renewal certificates"],
+          ["A8", "Handbook and policy review; prior-year records archived", "Before 31 March", "HR", "Version log; archive index"],
+        ]))}</div>
+
+      <h2 style="margin-top:22px">Part 2 · Employee lifecycle SOPs</h2>
+      <div class="block"><h3 style="margin:0 0 6px">2.1 Joining — nothing pending before Day 1</h3>
+        ${t(DOW, rowsOf([
+          ["J1", "Signed offer and appointment letter on file (incl. any authorised deduction clause)", "Before Day 1", "HR", "Signed letter"],
+          ["J2", "KYC, PAN, Aadhaar, bank, education and experience documents collected", "Before Day 1", "HR", "Document checklist"],
+          ["J3", "Background verification initiated", "Before Day 1", "HR", "BGV request"],
+          ["J4", "PF Form 11 &amp; Form 2, ESI declaration, gratuity nomination collected", "On/before joining", "HR", "Signed forms (cannot be reconstructed later)"],
+          ["J5", "Insurance addition processed", "Within 7 days of joining †", "HR", "Insurer endorsement"],
+          ["J6", "HRone, Bigin/Zoho, email and calendar access created", "Day 1", "IT", "Access log"],
+          ["J7", "Assets issued against signed acknowledgement", "Day 1", "IT/Admin", "Asset form"],
+          ["J8", "KRA sheet shared; reporting manager confirmed", "Day 1", "RM", "KRA sheet"],
+          ["J9", "Induction done; Handbook, Code of Conduct &amp; POSH explained and acknowledged in writing", "Day 1–7", "HR", "Acknowledgement (Annexure C)"],
+          ["J10", "Internal Committee contact details shared", "Day 1–7", "HR", "Induction record"],
+          ["J11", "Attendance, leave and reporting demonstrated live in HRone and Bigin", "Day 1–7", "HR", "Induction record"],
+          ["J12", "Documented probation reviews with RM", "Day 30, 60, 90 and Month 5", "RM with HR", "Review forms"],
+          ["J13", "Confirmation / extension letter issued before probation ends (silence = deemed confirmation)", "Before end of Month 6", "HR", "Letter on file"],
+        ]))}
+        <h3 style="margin:14px 0 6px">2.2 Resignation and exit</h3>
+        ${t(DOW, rowsOf([
+          ["E1", "Written acknowledgement; LWD confirmed; notice period computed and communicated", "Within 2 working days of resignation", "HR", "Acknowledgement letter"],
+          ["E2", "Handover plan agreed with RM and documented", "Notice period, week 1", "RM", "Handover document"],
+          ["E3", "Doctor, clinic and customer relationships transferred; Bigin updated", "Before LWD", "RM", "Bigin ownership report"],
+          ["E4", "Asset recovery started immediately (separate track)", "From the resignation date", "IT/Admin", "Asset recovery tracker"],
+          ["E5", "Access closure list prepared with IT", "Before LWD", "IT with HR", "Closure list"],
+          ["E6", "F&amp;F computation prepared in advance", "At least 3 days before LWD", "FIN with HR", "Computation sheet"],
+          ["E7", "On LWD: assets returned; SIM/email closed; access revoked same day; clearances; exit interview", "LWD", "HR/IT", "Clearance checklist; interview record"],
+          ["E8", "Full and final settlement paid", "Within 45 working days of LWD", "FIN", "Bank advice; F&amp;F statement"],
+          ["E9", "Relieving &amp; experience certificate issued; PF/gratuity claim support", "With or after F&amp;F", "HR", "Certificates; claim records"],
+          ["E10", "Exit reason recorded in attrition MIS", "By next MIS", "HR", "MIS entry"],
+        ]))}
+        <h3 style="margin:14px 0 6px">2.3 Leave and absence</h3>
+        ${t(DOW, rowsOf([
+          ["L1", "All leave applied for and approved in HRone (no verbal/WhatsApp approvals)", "Always", "RM", "HRone record"],
+          ["L2", "Leave register closed and LOP validated before payroll cut-off", "By the 24th", "HR", "Closed register"],
+          ["L3", "Leave of 7+ days tracked separately; coverage confirmed", "On application", "HR with RM", "Coverage note"],
+          ["L4", "Unapproved absence escalated in writing in the same week", "Within the week", "HR", "Written notice"],
+          ["L5", "Maternity leave handled strictly per statute (Handbook Section 6)", "As it arises", "HR", "Written confirmation to employee"],
+        ]))}</div>
+
+      <h2 style="margin-top:22px">Part 3 · Process SOPs</h2>
+      <div class="block"><h3 style="margin:0 0 6px">3.1 Roles — HR and HRBP</h3>
+        ${t(["Area", "HR responsibility", "HRBP responsibility"], rowsOf([
+          ["Workforce planning", "Maintain manpower records, vacancies, hiring workflow", "Turn business plans into manpower and capability plans"],
+          ["Recruitment", "Source, screen, coordinate, document", "Validate role fit and business need with managers"],
+          ["Onboarding", "Documentation, HRMS setup, induction", "Role clarity, manager alignment, early productivity"],
+          ["Attendance &amp; reporting", "Monitor HRone and Bigin; take corrective action", "Resolve recurring discipline/productivity gaps with managers"],
+          ["Performance", "Run appraisal and PIP documentation", "Coach managers on KRAs, KPIs and performance conversations"],
+          ["Employee relations", "Warnings, show-cause, enquiries, grievances, records", "Assess business impact and sustainable resolution"],
+          ["Engagement", "Plan HR activities and communication", "Link engagement to retention and productivity"],
+          ["Payroll", "Collect and validate inputs; coordinate closure", "Flag compensation concerns and workforce cost impact"],
+          ["Exit", "Clearance, documents, assets, F&amp;F coordination", "Capture business feedback and relationship transition"],
+          ["Analytics", "Prepare MIS and compliance dashboards", "Convert data into insight and recommendations"],
+        ]))}
+        <h3 style="margin:14px 0 6px">3.2 Recruitment procedure</h3>
+        ${li([
+          "Manpower request approved (Template A) with role, location, reporting manager, budget, KRAs and target joining date.",
+          "Job description and sourcing plan. Sales roles: assess territory, doctor and clinic coverage and reporting discipline; backend roles: define process ownership and output.",
+          "Source through approved channels; screen and shortlist.",
+          "Interviews with documented, role-relevant evaluation criteria.",
+          "Reference and background checks.",
+          "Compensation approval — do not promise compensation, designation or incentives beyond approved terms.",
+          "Offer and appointment letter with all statutory content, signed before Day 1.",
+          "Pre-joining documents (Part 2.1), onboarding and induction.",
+          "Candidate confidentiality kept, and closure communicated to all candidates.",
+        ])}
+        <h3 style="margin:14px 0 6px">3.3 Attendance and reporting SOP</h3>
+        ${li([
+          "HR runs the HRone exception report daily, validates field attendance against the clinic-board rule, and flags exceptions to RMs.",
+          "HR checks Bigin daily for same-day updates. A gap is first a reporting lapse, not an absence.",
+          "Apply the Handbook 4.2 ladder: counselling → written warning → access suspension + show-cause. Never mark absence or deduct wages for a day the employee worked; HR confirms whether work was done before any LOP entry.",
+          "Handle genuine emergencies through the exception route: HR can approve regularisation and restore access during suspension.",
+          "Record every step in the weekly compliance summary (W1).",
+        ])}
+        <h3 style="margin:14px 0 6px">3.4 Payroll SOP</h3>
+        ${li([
+          "HR freezes inputs on the last working day of the month with manager validation.",
+          "FIN processes payroll; HR reviews the draft register against the previous month's variance.",
+          "Deductions are limited to those allowed by law and the appointment letter — no fines for lateness or non-reporting.",
+          "Incentives follow the incentive scheme.",
+          "Salary is paid within the Code on Wages timeline, payslips are issued, and statutory registers/filings are completed.",
+        ])}
+        <h3 style="margin:14px 0 6px">3.5 Disciplinary &amp; domestic enquiry SOP</h3>
+        ${t(["Step", "Action", "Responsible", "Evidence"], rowsOf([
+          ["1", "Record the issue and collect evidence", "HR", "Incident note"],
+          ["2", "Counselling or written warning (minor/first issue)", "RM with HR", "Warning letter"],
+          ["3", "Show-cause notice with 3 working days to reply †", "HR", "Notice and acknowledgement"],
+          ["4", "Review the reply; close or proceed to enquiry", "HR with MGT", "Decision note"],
+          ["5", "Suspension pending enquiry, if justified, by written order with subsistence allowance per law", "MGT", "Suspension order"],
+          ["6", "Charge sheet; appoint impartial Enquiry Officer; notice of enquiry at least 3 working days ahead †", "HR", "Charge sheet; appointment letter"],
+          ["7", "Enquiry with a fair hearing (evidence, cross-examination, defence witnesses, co-worker)", "Enquiry Officer", "Enquiry proceedings, signed"],
+          ["8", "Reasoned findings; copy to employee for comment", "Enquiry Officer", "Findings report"],
+          ["9", "Penalty decision, communicated in writing with reasons", "MGT", "Order"],
+          ["10", "Appeal within 15 days †; records filed", "MGT / HR", "Appeal outcome"],
+        ]))}
+        <h3 style="margin:14px 0 6px">3.6 PIP SOP</h3>
+        ${t(["Component", "Minimum requirement"], rowsOf([
+          ["Performance gap", "Specific, factual and documented"],
+          ["Target", "Measurable and role-relevant"],
+          ["Timeline", "Defined start and end date, and review cadence"],
+          ["Support", "Coaching, training, manager guidance"],
+          ["Review", "Documented periodic review (Template C)"],
+          ["Outcome", "Close, extend with approval, or take further action"],
+        ]))}
+        <p class="muted-note" style="margin-top:6px">Performance gaps are managed through PIP; misconduct goes through the Section 3.5 SOP.</p>
+        <h3 style="margin:14px 0 6px">3.7 POSH operations</h3>
+        <p>HR keeps the IC roster (members, external member, appointment and expiry dates), runs the annual awareness session, receives complaints on the IC's behalf only to forward them without delay, tracks the statutory timelines (Handbook 7.4) in a confidential case tracker, and files the annual report (A3). HR does not take part in inquiries unless it is an IC member.</p>
+        <h3 style="margin:14px 0 6px">3.8 Grievance SOP</h3>
+        <p>Receive and log within 2 working days † → assess urgency and risk → investigate through relevant stakeholders → document findings and action → written closure within 15 working days † → follow up after 30 days.</p>
+        <h3 style="margin:14px 0 6px">3.9 Systems and controls</h3>
+        ${t(["System", "Use"], rowsOf([
+          ["HRone", "Attendance, leave, employee records, salary and revision communication"],
+          ["Bigin", "Daily sales and field reporting, doctor and clinic relationships"],
+          ["Google Calendar", "Meetings, availability, out-of-office"],
+          ["Zoho Projects", "Task tracking for backend and support teams"],
+        ]))}
+        ${t(["Control", "Owner", "Frequency", "Evidence"], rowsOf([
+          ["Employee master data", "HR", "Monthly / on change", "HRone and employee file"],
+          ["Attendance review", "HR + RM", "Daily / weekly", "HRone records"],
+          ["Sales reporting compliance", "HR + Business Manager", "Daily", "Bigin"],
+          ["Payroll inputs", "HR + FIN", "Monthly", "Payroll checklist"],
+          ["Performance review", "HR + RM", "Monthly / quarterly / annual", "KRA, KPI, PIP records"],
+          ["Policy register", "HR", "Quarterly", "Policy tracker"],
+          ["HR MIS", "HR", "Monthly", "Management dashboard"],
+        ]))}
+        <p class="muted-note" style="margin-top:6px"><b>Employee file checklist:</b> application &amp; interview record, signed appointment letter, KYC &amp; statutory documents, nominations (PF, ESI, gratuity), attendance &amp; leave records, KRA/KPI/PIP, warnings &amp; show-cause with responses, salary revisions, training, handbook acknowledgement, asset acknowledgement, and exit/clearance/F&amp;F records.</p>
+        <h3 style="margin:14px 0 6px">3.11 Accountability matrix</h3>
+        ${t(["Activity", "Employee", "Reporting Manager", "HR", "HRBP"], rowsOf([
+          ["Attendance", "Mark correctly and on time", "Review exceptions", "Monitor policy", "Identify recurring business impact"],
+          ["Daily reporting", "Update accurately", "Review quality and output", "Monitor compliance", "Coach on productivity"],
+          ["Leave", "Apply in advance", "Approve/reject within 48 hours", "Validate policy", "Assess workforce impact"],
+          ["Performance", "Own targets", "Set, review, coach", "Govern process", "Support manager effectiveness"],
+          ["PIP", "Improve and report", "Coach and review", "Document and govern", "Drive improvement"],
+          ["Grievance", "Raise concern", "Cooperate", "Handle process", "Assess people &amp; business risk"],
+          ["Hiring", "Participate", "Define need and evaluate", "Coordinate", "Validate strategy"],
+          ["Exit", "Complete handover", "Ensure transition", "Close process", "Capture business learning"],
+        ]))}
+        <p class="muted-note" style="margin-top:6px">Manager accountability is part of HR governance. HR cannot make up for repeated manager failures in communication, target setting, coaching or timely escalation.</p></div>
+
+      <h2 style="margin-top:22px">Part 4 · Templates</h2>
+      <div class="block">${li([
+        "<b>A · New Position Request:</b> department, role, location, reporting manager, reason, budget/CTC, KRAs, experience and skills, target joining date, approval.",
+        "<b>C · PIP Review Record:</b> employee, role, PIP period, gap, target, support, review date, employee feedback, manager feedback, outcome.",
+        "<b>D · Exit Clearance Checklist:</b> resignation accepted; LWD confirmed; handover completed; laptop/assets returned; mobile/SIM returned; system access closed; claims/payments checked; department clearance; F&amp;F paid; exit interview completed.",
+        "<b>E · Weekly HRBP review (Zoho Projects call):</b> headcount and vacancies; hiring; attendance and reporting; PIP cases; attrition risks; employee relations; critical talent; training needs; business support; actions and owners.",
+      ])}</div>
+
+      <h2 style="margin-top:22px">Part 5 · Implementation tracker</h2>
+      <div class="block">${t(["#", "Item", "Next step", "Owner"], rowsOf([
+        ["I1", "L&amp;D: annual learning calendar, training attendance &amp; feedback", "Build the FY 2026–27 calendar; product-safety &amp; compliance training first", "HR"],
+        ["I2", "Engagement &amp; culture: new-joiner connect, monthly pulse, manager/critical-talent connect, recognition", "Start with the monthly pulse and new-joiner connect", "HR"],
+        ["I3", "Attendance &amp; reporting compliance dashboards", "Weekly from W1", "HR"],
+        ["I4", "Labour codes", "Confirm a signed appointment letter for every employee (file audit Q3); restructure F&amp;F to the statutory window", "HR / FIN"],
+        ["I5", "Non-reporting treatment", "Update appointment letters and HRone settings so no wage deduction follows a missed report", "HR"],
+        ["I6", "Disciplinary process", "Appoint an Enquiry Officer panel; legal review of templates", "HR / MGT"],
+      ]))}</div>`;
+  }
+  function renderHrSop() {
+    setTimeout(() => {
+      const b = document.getElementById("sopPdf");
+      if (b) b.onclick = () => printDoc("Primelaze — HR SOP & Compliance Tracker", "HR SOP &amp; Compliance Tracker", hrSopBody());
+    }, 0);
+    return `
+      <div class="section-head"><h1>HR SOP &amp; Compliance Tracker</h1>
+        <p>Primelaze HR standard operating procedures &amp; compliance tracker (Version 2.0, FY 2026–27) — recurring work, lifecycle SOPs, process SOPs, templates and the implementation tracker.</p></div>
+      <div class="hq-actions" style="margin:0 0 10px"><button type="button" class="ghost-btn" id="sopPdf">⬇ Download PDF</button></div>
+      ${hrSopBody()}`;
   }
 
   /* ================= MARKETING · COVERAGE MATRIX ================= */
