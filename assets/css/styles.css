@@ -1952,3 +1952,21 @@ td.empty, .empty { color: var(--muted); text-align: center; padding: 18px 10px; 
 .myday-tk-title { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
 .myday-tk-title b { font-weight: 600; }
 .lagenda-row .myday-tk-title input { margin: 0; }
+
+/* Checkbox dropdown (Esthemax / Celluma variant pickers) — collapsed until opened */
+.vdrop { position: relative; width: 100%; min-width: 0; }
+.vdrop-toggle { width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; text-align: left; font: inherit; }
+.vdrop-toggle:hover { border-color: var(--border-strong); }
+.vdrop-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.vdrop-ph { color: var(--muted); }
+.vdrop-caret { color: var(--muted); font-size: 11px; }
+.vdrop-panel { margin-top: 6px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--card, var(--surface)); padding: 8px; box-shadow: 0 6px 20px rgba(16,24,40,.08); }
+.vdrop-search { width: 100%; box-sizing: border-box; padding: 6px 8px; margin-bottom: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 13px; }
+.vdrop-list { max-height: 230px; overflow-y: auto; }
+.vdrop-group { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 0 3px; }
+.vdrop-group:first-child { margin-top: 0; }
+.vdrop-opt { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
+.vdrop-opt:hover { background: var(--accent-soft); }
+.vdrop-opt input { margin: 0; flex-shrink: 0; }
+.vdrop-empty { color: var(--muted); font-size: 13px; padding: 6px; }

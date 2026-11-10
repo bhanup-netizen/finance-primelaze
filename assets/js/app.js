@@ -6372,6 +6372,7 @@
     document.body.appendChild(wrap);
     const close = () => wrap.remove();
     if (admin) wireStateCity("ld_state", "ld_city");
+    wireVariantDropdowns();
     const ldOwn = document.getElementById("ld_owner");
     if (ldOwn) { let lastO = ldOwn.value; ldOwn.onchange = () => { if (ldOwn.value !== "__newrep__") { lastO = ldOwn.value; return; } const nm = addNewRepPrompt(); ldOwn.innerHTML = ownerOptionsHtml(nm || lastO); ldOwn.value = nm || lastO; lastO = ldOwn.value; }; }
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
@@ -7236,6 +7237,7 @@
       });
       close(); leadRepaint();
     };
+    wireVariantDropdowns();
     setTimeout(() => { const n = document.getElementById("lfName"); if (n) n.focus(); }, 0);
   }
 
@@ -11632,24 +11634,82 @@
     return out;
   }
   const csvSet = (s) => new Set(String(s || "").split(",").map((x) => x.trim()).filter(Boolean));
-  // Multi-select of Esthemax variants (grouped). A salesperson can pick one OR
-  // MORE; value is stored as a comma-separated string.
+  // Collapsible checkbox dropdown for picking one OR MORE items, grouped.
+  // Closed by default; opens a searchable checklist. Value = comma-separated.
+  // `groups` = [{ title, items:[...] }]. Reused for Esthemax & Celluma.
+  function variantDropdown(id, groups, curCSV, placeholder) {
+    const cur = csvSet(curCSV);
+    const sel = [];
+    const body = groups.map((g) => {
+      const opts = g.items.map((v) => {
+        const on = cur.has(v); if (on) sel.push(v);
+        return `<label class="vdrop-opt"><input type="checkbox" class="vdrop-chk" value="${esc(v)}"${on ? " checked" : ""}> <span>${esc(v)}</span></label>`;
+      }).join("");
+      return g.title ? `<div class="vdrop-group">${esc(g.title)}</div>${opts}` : opts;
+    }).join("");
+    const summary = sel.length ? esc(sel.join(", ")) : `<span class="vdrop-ph">${esc(placeholder || "Select one or more…")}</span>`;
+    return `<div class="vdrop" id="${id}" data-ph="${esc(placeholder || "Select one or more…")}">
+      <button type="button" class="vdrop-toggle"><span class="vdrop-summary">${summary}</span><span class="vdrop-caret">▾</span></button>
+      <div class="vdrop-panel" hidden>
+        <input type="text" class="vdrop-search" placeholder="Type to filter…" autocomplete="off">
+        <div class="vdrop-list">${body || `<div class="vdrop-empty">No items.</div>`}</div>
+      </div>
+    </div>`;
+  }
+  // Esthemax variant picker (checkbox dropdown, grouped by product line).
   function esthVariantMulti(id, curCSV) {
-    const cur = csvSet(curCSV), groups = {};
+    const groups = {};
     esthVariants().forEach((e) => { (groups[e.group] = groups[e.group] || []).push(e.variant); });
-    const opts = Object.keys(groups).map((g) => `<optgroup label="${esc(g)}">${groups[g].map((v) => `<option value="${esc(v)}"${cur.has(v) ? " selected" : ""}>${esc(v)}</option>`).join("")}</optgroup>`).join("");
-    return `<select id="${id}" class="variant-multi" multiple size="6">${opts}</select><div class="variant-hint">Pick one or more — hold Ctrl / ⌘ (or tap) to multi-select.</div>`;
+    const arr = Object.keys(groups).map((g) => ({ title: g, items: groups[g] }));
+    return variantDropdown(id, arr, curCSV, "Select Esthemax variant(s) the customer wants…");
   }
-  // Multi-select of Celluma models (one or more).
+  // Celluma model picker (checkbox dropdown).
   function cellumaMulti(id, curCSV) {
-    const cur = csvSet(curCSV), list = cellumaVariants();
-    const opts = list.map((v) => `<option value="${esc(v)}"${cur.has(v) ? " selected" : ""}>${esc(v)}</option>`).join("");
-    const sz = Math.min(6, Math.max(3, list.length || 3));
-    return `<select id="${id}" class="variant-multi" multiple size="${sz}">${opts}</select><div class="variant-hint">Pick one or more — hold Ctrl / ⌘ (or tap) to multi-select.</div>`;
+    return variantDropdown(id, [{ title: "", items: cellumaVariants() }], curCSV, "Select Celluma model(s)…");
   }
-  // Read a field: joins all selected options for a multi-select, else the value.
+  // Refresh a checkbox-dropdown's closed summary from its ticked boxes.
+  function vdropSync(d) {
+    const sel = [...d.querySelectorAll("input.vdrop-chk:checked")].map((i) => i.value);
+    const sm = d.querySelector(".vdrop-summary");
+    if (sm) sm.innerHTML = sel.length ? esc(sel.join(", ")) : `<span class="vdrop-ph">${esc(d.dataset.ph || "Select one or more…")}</span>`;
+  }
+  // Wire every checkbox-dropdown on screen (open/close, filter, summary).
+  function wireVariantDropdowns() {
+    document.querySelectorAll(".vdrop:not([data-wired])").forEach((d) => {
+      d.dataset.wired = "1";
+      const panel = d.querySelector(".vdrop-panel");
+      const tog = d.querySelector(".vdrop-toggle");
+      if (tog) tog.onclick = (e) => {
+        e.stopPropagation();
+        const willOpen = panel.hidden;
+        document.querySelectorAll(".vdrop-panel").forEach((p) => { if (p !== panel) p.hidden = true; });
+        panel.hidden = !willOpen;
+        if (willOpen) { const s = d.querySelector(".vdrop-search"); if (s) setTimeout(() => s.focus(), 0); }
+      };
+      d.querySelectorAll("input.vdrop-chk").forEach((c) => (c.onchange = () => vdropSync(d)));
+      const search = d.querySelector(".vdrop-search");
+      if (search) search.oninput = () => {
+        const q = search.value.trim().toLowerCase();
+        d.querySelectorAll(".vdrop-opt").forEach((o) => { o.style.display = (!q || o.textContent.toLowerCase().includes(q)) ? "" : "none"; });
+        d.querySelectorAll(".vdrop-group").forEach((g) => {
+          let any = false, n = g.nextElementSibling;
+          while (n && n.classList && n.classList.contains("vdrop-opt")) { if (n.style.display !== "none") any = true; n = n.nextElementSibling; }
+          g.style.display = any ? "" : "none";
+        });
+      };
+    });
+    if (!window.__vdropDocClose) {
+      window.__vdropDocClose = true;
+      document.addEventListener("click", (e) => {
+        document.querySelectorAll(".vdrop-panel:not([hidden])").forEach((p) => { if (!p.closest(".vdrop").contains(e.target)) p.hidden = true; });
+      });
+    }
+  }
+  // Read a field's value: checked boxes of a checkbox-dropdown, selected options
+  // of a <select multiple>, else the input value.
   function readFieldCSV(el) {
     if (!el) return "";
+    if (el.classList && el.classList.contains("vdrop")) return [...el.querySelectorAll("input.vdrop-chk:checked")].map((i) => i.value).join(", ");
     if (el.multiple) return [...el.selectedOptions].map((o) => o.value).join(", ");
     return (el.value || "").trim();
   }
