@@ -1966,7 +1966,14 @@ td.empty, .empty { color: var(--muted); text-align: center; padding: 18px 10px; 
 .vdrop-list { max-height: 230px; overflow-y: auto; }
 .vdrop-group { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 0 3px; }
 .vdrop-group:first-child { margin-top: 0; }
-.vdrop-opt { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
-.vdrop-opt:hover { background: var(--accent-soft); }
-.vdrop-opt input { margin: 0; flex-shrink: 0; }
+/* Option rows must stay clean horizontal rows even inside .lead-form-grid /
+   .ld-grid, whose `label { flex-direction: column }` would otherwise stack
+   and shrink them. Higher specificity (.vdrop .vdrop-opt) wins. */
+.vdrop .vdrop-opt { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 13.5px; font-weight: 400; color: var(--text); }
+.vdrop .vdrop-opt:hover { background: var(--accent-soft); }
+.vdrop .vdrop-opt input { margin: 0; flex-shrink: 0; width: auto; }
+.vdrop .vdrop-opt span { font-weight: 400; color: var(--text); font-size: 13.5px; }
+/* Field wrapper (not a <label>, so the dropdown isn't nested in a label) */
+.lead-form-grid .vdrop-field, .ld-grid .vdrop-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); min-width: 0; }
+.vdrop-field > span { font-weight: 600; }
 .vdrop-empty { color: var(--muted); font-size: 13px; padding: 6px; }

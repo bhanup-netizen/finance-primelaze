@@ -6328,8 +6328,8 @@
         ${fSelect("source", "Source", allLeadSources(), "")}
         ${fSelect("product", "Product", LEAD_PRODUCTS, "—")}
         ${admin ? `<label class="ld-field"><span>Device</span><input id="ld_device" list="ldDevList" value="${val(r.device)}" placeholder="Select or type a device"><datalist id="ldDevList">${taskDevices().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>` : (r.device ? `<div class="ld-field"><span>Device</span><div class="ld-val">${esc(r.device)}</div></div>` : "")}
-        ${admin ? `<label class="ld-field"><span>Esthemax variant(s)</span>${esthVariantMulti("ld_esth", r.esth || "")}</label>` : (r.esth ? `<div class="ld-field"><span>Esthemax variant(s)</span><div class="ld-val">${esc(r.esth)}</div></div>` : "")}
-        ${admin ? `<label class="ld-field"><span>Celluma model(s)</span>${cellumaMulti("ld_celluma", r.celluma || "")}</label>` : (r.celluma ? `<div class="ld-field"><span>Celluma model(s)</span><div class="ld-val">${esc(r.celluma)}</div></div>` : "")}
+        ${admin ? `<div class="ld-field"><span>Esthemax variant(s)</span>${esthVariantMulti("ld_esth", r.esth || "")}</div>` : (r.esth ? `<div class="ld-field"><span>Esthemax variant(s)</span><div class="ld-val">${esc(r.esth)}</div></div>` : "")}
+        ${admin ? `<div class="ld-field"><span>Celluma model(s)</span>${cellumaMulti("ld_celluma", r.celluma || "")}</div>` : (r.celluma ? `<div class="ld-field"><span>Celluma model(s)</span><div class="ld-val">${esc(r.celluma)}</div></div>` : "")}
         ${admin ? `<label class="ld-field"><span>Owner (rep)</span><select id="ld_owner">${ownerOptionsHtml(r.owner || "")}</select></label>` : `<div class="ld-field"><span>Owner (rep)</span><div class="ld-val">${r.owner ? esc(spLabel(r.owner)) : "—"}</div></div>`}
         ${admin ? `<label class="ld-field"><span>Priority</span><select id="ld_priority"><option value="">— None</option>${LEAD_PRIORITIES.map((p) => `<option value="${p.key}"${(r.priority || "") === p.key ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>` : (r.priority ? `<div class="ld-field"><span>Priority</span><div class="ld-val">${leadPrioBadge(r)}</div></div>` : "")}
         ${(LEAD_WON.indexOf(r.stage) < 0 && r.stage !== "lost") ? (admin ? `
@@ -6441,6 +6441,14 @@
         const el = document.getElementById("ld_" + f); if (!el) return;
         let v = readFieldCSV(el);
         if (f === "mobile") v = v.replace(/[^0-9]/g, "").replace(/^91(?=\d{10}$)/, "");
+        // Money / number fields are stored as real numbers so totals (Won value,
+        // weighted forecast) update correctly — not as strings.
+        if (f === "soldAmount" || f === "expValue" || f === "prob") {
+          const num = (v === "") ? "" : (parseFloat(v.replace(/[^0-9.]/g, "")) || 0);
+          const cur = (r[f] == null) ? "" : r[f];
+          if (String(num) !== String(cur)) { leadUpdate(id, f, num); changed++; }
+          return;
+        }
         if (v !== (r[f] || "")) { leadUpdate(id, f, v); changed++; }
       });
       close(); leadRepaint();
@@ -7178,8 +7186,8 @@
         <label>Source<select id="lfSource">${allLeadSources().map((s) => `<option>${esc(s)}</option>`).join("")}<option value="__new__">＋ Add new source…</option></select></label>
         <label>Product interest<select id="lfProduct"><option value="">—</option>${LEAD_PRODUCTS.map((s) => `<option>${esc(s)}</option>`).join("")}</select></label>
         <label>Device<input id="lfDevice" list="lfDeviceList" placeholder="Select or type a device"><datalist id="lfDeviceList">${taskDevices().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
-        <label>Esthemax variant(s)${esthVariantMulti("lfEsth", "")}</label>
-        <label>Celluma model(s)${cellumaMulti("lfCelluma", "")}</label>
+        <div class="vdrop-field"><span>Esthemax variant(s)</span>${esthVariantMulti("lfEsth", "")}</div>
+        <div class="vdrop-field"><span>Celluma model(s)</span>${cellumaMulti("lfCelluma", "")}</div>
         <label>Owner (rep)<select id="lfOwner">${ownerOptionsHtml("")}</select></label>
         <label class="lead-form-wide">Opening remark<input id="lfRemark" type="text" placeholder="how the lead came in / first note"></label>
       </div>
