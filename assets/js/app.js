@@ -6382,7 +6382,7 @@
     if (ldTask) ldTask.onclick = () => { close(); taskModal({ title: "Follow up: " + (r.name || r.company || ""), owner: r.owner || "", leadId: r.id, device: r.device || "", esth: r.esth || "", priority: "Medium", status: "open" }); };
     // One-click: move this lead into Corporate (prefilled from the lead).
     const ldCorp = document.getElementById("ldCorp");
-    if (ldCorp) ldCorp.onclick = () => { close(); corpModal({ name: r.company || r.name || "", contact: r.name || "", phone: r.mobile || "", location: [r.city, r.state].filter(Boolean).join(", "), owner: r.owner || "", deal: [r.product, r.device, r.esth, r.celluma].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", fromLeadId: r.id }); };
+    if (ldCorp) ldCorp.onclick = () => { close(); corpModal({ name: r.company || r.name || "", contact: r.name || "", phone: r.mobile || "", location: [r.city, r.state].filter(Boolean).join(", "), owner: r.owner || "", deal: [r.product, r.device, r.esth, r.celluma].filter(Boolean).join(" · "), type: "Salon chain", status: "Prospect", fromLeadId: r.id }); };
     // Other pipelines for this contact: open, create, and merged timeline.
     wrap.querySelectorAll(".lead-sib[data-open]").forEach((b) => (b.onclick = () => { close(); leadDetailDialog(b.dataset.open); }));
     const newPipe = document.getElementById("ldNewPipe");
@@ -7232,7 +7232,7 @@
       if (dest === "corp") {
         // Add straight into Corporate (chain / hospital) — not into Leads.
         const now = Date.now(), by = (sessionUser && sessionUser.email) || "";
-        const cdata = { name: company || name, contact: name, phone: mobile, location: [v("lfCity"), v("lfState")].filter(Boolean).join(", "), owner: v("lfOwner"), deal: [v("lfProduct"), v("lfDevice"), mv("lfEsth"), mv("lfCelluma")].filter(Boolean).join(" · "), type: "Clinic chain", status: "Prospect", notes: remark, fromLeadId: "", createdAt: now, createdBy: by, updatedAt: now, updatedBy: by };
+        const cdata = { name: company || name, contact: name, phone: mobile, location: [v("lfCity"), v("lfState")].filter(Boolean).join(", "), owner: v("lfOwner"), deal: [v("lfProduct"), v("lfDevice"), mv("lfEsth"), mv("lfCelluma")].filter(Boolean).join(" · "), type: "Salon chain", status: "Prospect", notes: remark, fromLeadId: "", createdAt: now, createdBy: by, updatedAt: now, updatedBy: by };
         try { const store = corpStore(); if (store) await store.add(cdata); else { cdata.id = "c" + now; localCorp.push(cdata); } toast("✓ Added to Corporate"); } catch (e) { console.warn(e); toast("Save failed", "warn"); }
         close(); casovilView = "corporate"; go("leads"); return;
       }
@@ -7540,9 +7540,9 @@
       <p>The <b><a class="linkish" data-cv="corporate">🏢 Corporate</a></b> tab holds hospitals, clinic chains and multi-centre salon/spa accounts — <b>separate from regular leads</b> (a client is in one place only). Two ways to add:</p>
       <ul class="df-list">
         <li><b>New corporate client:</b> on the Add-lead form pick <b>Add to: 🏢 Corporate</b>, or in the Corporate tab click <b>＋ Add client</b>.</li>
-        <li><b>Move an existing lead:</b> open the lead → <b>🏢 → Corporate</b>. It prefills the client (type = Clinic chain) and <b>moves</b> the lead out of the active list (archived, recoverable) so it isn't in two places.</li>
+        <li><b>Move an existing lead:</b> open the lead → <b>🏢 → Corporate</b>. It prefills the client (type = Salon chain — change it to the right segment) and <b>moves</b> the lead out of the active list (archived, recoverable) so it isn't in two places.</li>
       </ul>
-      ${ex("a chain", "“Glow Skin” turns out to be a 4-branch chain. Open the lead → <b>🏢 → Corporate</b> → confirm → Save. It now lives only in Corporate, marked <b>Clinic chain</b>.")}
+      ${ex("a chain", "“Glow Skin” turns out to be a 4-branch chain. Open the lead → <b>🏢 → Corporate</b> → confirm → Save. It now lives only in Corporate, marked <b>Salon chain</b> (change the Type to the right segment).")}
 
       <h2 class="df-sec" id="h-stages">④ Pipeline stages</h2>
       <p>Move a lead by opening it and choosing a new stage in <b>＋ Add update</b> (you'll always add a note + next action at the same time).</p>
@@ -11515,21 +11515,22 @@
      Hospitals, clinic chains and corporate accounts and their deals. Each client
      is one document in the Firestore "corpClients" collection. */
   function corpStore() { return db ? db.collection("corpClients") : null; }
-  let localCorp = [], corpCache = [];
-  const CORP_TYPES = ["Hospital", "Clinic chain", "Corporate", "Distributor", "Government", "Other"];
+  let localCorp = [], corpCache = [], corpTypeFilter = "";
+  const CORP_TYPES = ["Salon chain", "Spa chain", "Hotel / resort group", "Aesthetic Clinic chain (skin, hair and aesthetic)", "Medi-spa chain", "Wellness & recovery chain", "Holistic / Ayurveda group", "Academy / training institute group", "Corporate wellness", "Distributor / dealer", "Other"];
+  const CORP_TYPE_DEFAULT = "Salon chain";
   const CORP_STATUSES = ["Prospect", "In discussion", "Won", "On hold", "Lost"];
   const corpCanEdit = () => roleIsAdmin() || isSuperAdmin() || hasAnyEditGrant();
   const corpBadge = (s) => { const m = { "Won": "b-good", "Lost": "b-bad", "In discussion": "b-info", "On hold": "b-warn", "Prospect": "b-neutral" }; return `<span class="badge ${m[s] || "b-neutral"}">${esc(s || "—")}</span>`; };
   function corpModal(existing) {
-    const c = existing || { type: "Hospital", status: "Prospect" };
+    const c = existing || { type: CORP_TYPE_DEFAULT, status: "Prospect" };
     const isEdit = !!(existing && existing.id);
     const wrap = document.createElement("div"); wrap.className = "lead-modal";
     const crmLeads = (typeof leadAll === "function" ? leadAll() : []).filter((l) => typeof leadIsArchived !== "function" || !leadIsArchived(l.id));
     wrap.innerHTML = `<div class="lead-modal-card"><h3>${isEdit ? "Edit client" : "Add corporate client"}</h3>
       <div class="lead-form-grid">
         ${(isEdit || c.fromLeadId) ? "" : `<label class="lead-form-wide">Move from an existing lead (optional)<select id="cpFromLead"><option value="">— new client / none —</option>${crmLeads.map((l) => `<option value="${esc(l.id)}">${esc(l.company || l.name || l.mobile || l.id)}${l.city ? " · " + esc(l.city) : ""}</option>`).join("")}</select></label>`}
-        <label class="lead-form-wide">Client / organization<input id="cpName" value="${esc(c.name || "")}" placeholder="Hospital / chain / company"></label>
-        <label>Type<select id="cpType">${CORP_TYPES.map((x) => `<option${x === (c.type || "Hospital") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
+        <label class="lead-form-wide">Client / organization<input id="cpName" value="${esc(c.name || "")}" placeholder="Salon / spa / chain / company"></label>
+        <label>Type<select id="cpType">${(CORP_TYPES.indexOf(c.type) < 0 && c.type ? [c.type] : []).concat(CORP_TYPES).map((x) => `<option${x === (c.type || CORP_TYPE_DEFAULT) ? " selected" : ""}>${esc(x)}</option>`).join("")}</select></label>
         <label>Status<select id="cpStatus">${CORP_STATUSES.map((x) => `<option${x === (c.status || "Prospect") ? " selected" : ""}>${x}</option>`).join("")}</select></label>
         <label>Contact person<input id="cpContact" value="${esc(c.contact || "")}"></label>
         <label>Phone<input id="cpPhone" value="${esc(c.phone || "")}"></label>
@@ -11553,7 +11554,7 @@
       set("cpLoc", [l.city, l.state].filter(Boolean).join(", "));
       set("cpOwner", l.owner || "");
       set("cpDeal", [l.product, l.device, l.esth, l.celluma].filter(Boolean).join(" · "));
-      const ts = document.getElementById("cpType"); if (ts) ts.value = "Clinic chain";
+      const ts = document.getElementById("cpType"); if (ts) ts.value = "Salon chain";
     };
     document.getElementById("cpSave").onclick = async () => {
       const name = document.getElementById("cpName").value.trim(); if (!name) { toast("Enter a name", "warn"); return; }
@@ -11577,7 +11578,8 @@
   function renderCorpList() {
     const main = document.getElementById("corpMain"); if (!main) return;
     const ed = corpCanEdit();
-    const rows = corpCache.slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const rows = corpCache.slice().filter((c) => !corpTypeFilter || (c.type || "") === corpTypeFilter).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    const cnt = document.getElementById("corpCount"); if (cnt) cnt.textContent = rows.length + (corpTypeFilter ? " of " + corpCache.length : "") + " client" + (rows.length === 1 ? "" : "s");
     main.innerHTML = rows.length ? rows.map((c) => `<tr>
       <td><b>${esc(c.name)}</b>${c.deal ? `<div class="tk-notes">${esc(c.deal)}</div>` : ""}</td>
       <td>${esc(c.type || "—")}</td>
@@ -11591,9 +11593,19 @@
     main.querySelectorAll(".cp-del").forEach((b) => b.onclick = () => corpDelete(b.dataset.id));
   }
   function renderCorporate() {
-    setTimeout(() => { const ab = document.getElementById("corpAdd"); if (ab) ab.onclick = () => corpModal(null); loadCorp(); }, 0);
-    return `<div class="section-head"><h1>🏢 Corporate Clients</h1><p>Hospitals, clinic chains and corporate / institutional accounts and their deals. ${corpCanEdit() ? "Editable — saves for everyone." : "Read-only."}</p></div>
-      <div class="controls" style="margin-top:8px">${corpCanEdit() ? `<button id="corpAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add client</button>` : ""}</div>
+    setTimeout(() => {
+      const ab = document.getElementById("corpAdd"); if (ab) ab.onclick = () => corpModal(null);
+      const ts = document.getElementById("corpTypeSel"); if (ts) ts.onchange = (e) => { corpTypeFilter = e.target.value; renderCorpList(); };
+      loadCorp();
+    }, 0);
+    // Segment filter options = standard types + any legacy types still in the data.
+    const segs = CORP_TYPES.concat(corpCache.map((c) => c.type).filter((t) => t && CORP_TYPES.indexOf(t) < 0));
+    return `<div class="section-head"><h1>🏢 Corporate Clients</h1><p>Salon, spa, clinic, wellness chains and corporate-wellness accounts and their deals. ${corpCanEdit() ? "Editable — saves for everyone." : "Read-only."}</p></div>
+      <div class="controls" style="margin-top:8px;align-items:center">
+        <label class="ord-field"><span>Segment</span><select id="corpTypeSel" class="select"><option value="">All segments</option>${segs.map((t) => `<option value="${esc(t)}"${t === corpTypeFilter ? " selected" : ""}>${esc(t)}</option>`).join("")}</select></label>
+        <span id="corpCount" class="muted-note"></span>
+        ${corpCanEdit() ? `<button id="corpAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add client</button>` : ""}
+      </div>
       <div class="table-wrap" style="margin-top:10px"><table class="cov-table"><thead><tr><th>Client</th><th>Type</th><th>Contact</th><th>Location</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody id="corpMain"></tbody></table></div>`;
   }
 
