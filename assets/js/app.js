@@ -7484,9 +7484,11 @@
         <b>Jump to:</b>
         <a href="#h-start">Quick start</a> ·
         <a href="#h-pages">The pages</a> ·
+        <a href="#h-myday">My Day</a> ·
         <a href="#h-add">Add a lead</a> ·
         <a href="#h-tasks">Tasks</a> ·
         <a href="#h-corp">Corporate</a> ·
+        <a href="#h-forecast">Forecast</a> ·
         <a href="#h-views">Views (Table / Board / Analytics)</a> ·
         <a href="#h-prio">Priority &amp; tags</a> ·
         <a href="#h-bulk">Bulk actions</a> ·
@@ -7504,7 +7506,7 @@
 
       <div class="help-cards">
         <div class="help-card help-new"><h3>🙋 New here?</h3><p>Start with the <a href="#h-start">5-minute quick start</a> below, then read <a href="#h-stages">Pipeline stages</a> and <a href="#h-activity">Log an activity</a>. That covers 90% of daily work.</p></div>
-        <div class="help-card help-exist"><h3>🔁 Already using it?</h3><p>What's new: a <b>✅ Tasks</b> board and a <b>🏢 Corporate</b> section (both inside Casovil CRM); <b>Device</b> &amp; <b>Esthemax variant</b> on each lead; three board <b>views</b> (Table / <b>Kanban Board</b> / <b>Analytics</b>), lead <b>Priority</b> (🔥/🌤/❄️) &amp; <b>Tags</b>, and <b>Bulk actions</b>. Also: a <b>Calendar</b>, an <b>Activity Board</b>, and multiple orders per contact. See the sections below.</p></div>
+        <div class="help-card help-exist"><h3>🔁 Already using it?</h3><p><b>Newest (Nov 2026):</b> a <b>🏠 My Day</b> agenda and a <b>📈 Forecast</b> (sales projection) tab; <b>Esthemax variant(s)</b> &amp; <b>Celluma model(s)</b> are now <b>searchable checkbox dropdowns</b> (pick one or more); moving to <b>Sold needs a deal value</b> and to <b>Dispatch needs an invoice</b> (you can upload it already at Sold); <b>Lost needs a reason</b>; logging a <b>Call</b> captures an outcome; the <b>Activity Board</b> has a Today/Yesterday filter; and <b>Analytics</b> shows Lost reasons. Earlier additions: <b>✅ Tasks</b>, <b>🏢 Corporate</b>, board <b>views</b> (Table / Kanban / Analytics), <b>Priority</b> &amp; <b>Tags</b>, <b>Bulk actions</b>, Calendar, Activity Board, multiple orders per contact.</p></div>
       </div>
 
       <h2 class="df-sec" id="h-start">① Quick start (5 minutes)</h2>
@@ -7513,22 +7515,35 @@
         ${step(2, "Find your leads: click <b>👤 My leads</b>, or use the search and the Owner / Stage / State filters.")}
         ${step(3, "Open a lead to see its full detail &amp; history. Use <b>＋ Add update</b> to log what happened (call, meeting, etc.) and set the next action.")}
         ${step(4, "Move the lead along the pipeline as it progresses — New → Potential customer → Contacted → … → <b>Sold</b> → Dispatched → Delivered. Use the Stage dropdown's <b>🗄 Archive</b> option to clean out a dead lead with no updates.")}
-        ${step(5, "Check the <a class='linkish' data-cv='calendar'>Calendar</a> every morning for today's follow-ups, and log every call so it shows on the <a class='linkish' data-cv='activity'>Activity Board</a>.")}
+        ${step(5, "Every morning, open <a class='linkish' data-cv='myday'>🏠 My Day</a> for your overdue &amp; today's follow-ups and open tasks. Log every call so it shows on the <a class='linkish' data-cv='activity'>Activity Board</a>, and check the <a class='linkish' data-cv='forecast'>📈 Forecast</a> for your projected numbers.")}
       </div>
 
       <h2 class="df-sec" id="h-pages">② The pages</h2>
       <ul class="df-list">
-        <li><b><a class="linkish" data-cv="leads">Casovil Sale</a></b> — the main lead board: add, filter, open and move leads.</li>
-        <li><b><a class="linkish" data-cv="calendar">Calendar</a></b> — every lead's next task/action date and expected deliveries in a month view + an upcoming/overdue list.</li>
+        <li><b><a class="linkish" data-cv="myday">🏠 My Day</a></b> — your daily agenda: overdue &amp; today's follow-ups plus your open tasks, with a <b>Just me / Everyone</b> toggle. Start here each morning.</li>
+        <li><b><a class="linkish" data-cv="leads">🎯 Leads (Casovil Sale)</a></b> — the main lead board: add, filter, open and move leads.</li>
         <li><b><a class="linkish" data-cv="tasks">✅ Tasks</a></b> — team to-dos &amp; follow-ups (like Bigin): owner, due date, priority, status; optionally link a task to a lead.</li>
-        <li><b><a class="linkish" data-cv="corporate">🏢 Corporate</a></b> — hospitals, clinic chains &amp; multi-centre salon/spa accounts, kept separate from regular leads.</li>
-        <li><b><a class="linkish" data-cv="activity">Activity Board</a></b> — every activity logged across all leads, filter by person &amp; type (e.g. all of one salesperson's calls).</li>
+        <li><b><a class="linkish" data-cv="corporate">🏢 Corporate</a></b> — salon, spa, clinic, wellness chains &amp; corporate-wellness accounts, kept separate from regular leads.</li>
+        <li><b><a class="linkish" data-cv="forecast">📈 Forecast</a></b> — the sales projection: weighted pipeline (value × win-probability) by month and by owner, Won value, and a list of Won orders missing an invoice.</li>
+        <li><b><a class="linkish" data-cv="calendar">📅 Calendar</a></b> — every lead's next task/action date and expected deliveries in a month view + an upcoming/overdue list.</li>
+        <li><b><a class="linkish" data-cv="activity">🧾 Activity Board</a></b> — every activity logged across all leads; filter by person, type and <b>when</b> (Today / Yesterday / last 7 days).</li>
         <li><b>📖 Help &amp; Training</b> — this page.</li>
       </ul>
 
+      <h2 class="df-sec" id="h-myday">🏠 My Day — start here every morning</h2>
+      <p>The <b><a class="linkish" data-cv="myday">🏠 My Day</a></b> tab is your to-do list for today. It pulls together, for you:</p>
+      <ul class="df-list">
+        <li><b>⚠ Overdue follow-ups</b> — leads whose next-action date has passed.</li>
+        <li><b>🔔 Today's follow-ups</b> — leads due today.</li>
+        <li><b>⚠ Overdue tasks</b> and <b>✅ Tasks due today</b> — from the Tasks board, tick to mark done.</li>
+      </ul>
+      <p>Use the <b>🙋 Just me / 👥 Everyone</b> button to switch between your own work and the whole team's. The counters at the top show how much is due now.</p>
+      ${ex("working your day", "Open <b>🏠 My Day</b>. You have 3 overdue follow-ups and 2 tasks due today. Clear each one — open the lead, log the call, set the next date — and the item drops off the list.")}
+
       <h2 class="df-sec" id="h-add">③ Add a lead</h2>
-      <p>On <b>Casovil Sale</b>, click <b>＋ Add lead</b> (or the ＋ button). At the top choose <b>Add to: 🎯 Leads</b> (normal) or <b>🏢 Corporate</b> (a chain / hospital — goes straight to the Corporate section). Fill the name, <b>mobile (required)</b>, salon/clinic, city/state, source, product, and — where relevant — the <b>Device</b> and the exact <b>Esthemax variant</b>, then owner. Save.</p>
-      <p>You can also edit the <b>Device</b> and <b>Esthemax variant</b> later: open any existing lead and update them in the detail panel, then <b>Save details</b>.</p>
+      <p>On <b>Casovil Sale</b>, click <b>＋ Add lead</b> (or the ＋ button). At the top choose <b>Add to: 🎯 Leads</b> (normal) or <b>🏢 Corporate</b> (a chain — goes straight to the Corporate section). Fill the name, <b>mobile (required)</b>, salon/clinic, city/state, source, product, and — where relevant — the <b>Device</b>, the <b>Esthemax variant(s)</b> and <b>Celluma model(s)</b> the customer wants, then owner. Save.</p>
+      <p><b>Picking variants:</b> the <b>Esthemax variant(s)</b> and <b>Celluma model(s)</b> fields are <b>dropdowns with checkboxes</b> — click to open, type in the filter box to find one fast, and <b>tick one or more</b> (a customer can want several). Click outside to close; the field then shows what you picked.</p>
+      <p>You can edit all of these later too: open any existing lead and update them in the detail panel, then <b>Save details</b>.</p>
       ${ex("a new enquiry", "Dr. Meera calls asking about Celluma. Add lead → Name <b>Dr. Meera</b>, Mobile <b>98xxxxxx21</b>, Company <b>Glow Skin Clinic</b>, City <b>Pune</b>, Source <b>Phone</b>, Product <b>Celluma</b>, Owner <b>you</b> → Save. It appears on the board at stage <b>New</b>.")}
 
       <h2 class="df-sec" id="h-tasks">✅ Tasks</h2>
@@ -7543,6 +7558,17 @@
         <li><b>Move an existing lead:</b> open the lead → <b>🏢 → Corporate</b>. It prefills the client (type = Salon chain — change it to the right segment) and <b>moves</b> the lead out of the active list (archived, recoverable) so it isn't in two places.</li>
       </ul>
       ${ex("a chain", "“Glow Skin” turns out to be a 4-branch chain. Open the lead → <b>🏢 → Corporate</b> → confirm → Save. It now lives only in Corporate, marked <b>Salon chain</b> (change the Type to the right segment).")}
+      <p>Each client has a <b>Type (segment)</b>: Salon chain, Spa chain, Hotel / resort group, Aesthetic Clinic chain, Medi-spa chain, Wellness &amp; recovery chain, Holistic / Ayurveda group, Academy / training institute group, Corporate wellness, Distributor / dealer, or Other. Use the <b>Segment</b> filter at the top of the Corporate tab to see just one segment.</p>
+
+      <h2 class="df-sec" id="h-forecast">📈 Forecast (sales projection)</h2>
+      <p>The <b><a class="linkish" data-cv="forecast">📈 Forecast</a></b> tab turns your open pipeline into a money projection. For every <b>open</b> lead, open it and set (in the detail panel):</p>
+      <ul class="df-list">
+        <li><b>Expected value ₹</b> — the likely order size.</li>
+        <li><b>Expected close date</b> — when you think it will close (this groups it into a month).</li>
+        <li><b>Probability %</b> — chance of winning. It <b>auto-fills from the stage</b> (e.g. Negotiation ≈ 80%); you can override it.</li>
+      </ul>
+      <p>The tab then shows the <b>weighted forecast = value × probability</b>, grouped <b>by expected-close month</b> and <b>by owner</b>, plus the <b>Won value</b> already booked. It also lists <b>Won orders missing an invoice</b> so old invoices can be uploaded. Use the <b>Owner</b> filter for one rep.</p>
+      ${ex("a projection", "A ₹2,00,000 deal at <b>Negotiation</b> (80%) closing this month counts as <b>₹1,60,000</b> weighted this month. Set its Expected value, close date and probability on the lead, and it appears in the Forecast for that month.")}
 
       <h2 class="df-sec" id="h-stages">④ Pipeline stages</h2>
       <p>Move a lead by opening it and choosing a new stage in <b>＋ Add update</b> (you'll always add a note + next action at the same time).</p>
@@ -7552,25 +7578,27 @@
         <li><b>Contacted</b> → you've reached them.</li>
         <li><b>Actively working / Demo scheduled / Demo done</b> → in progress.</li>
         <li><b>Negotiation</b> → discussing price/close.</li>
-        <li><b>Sold ✓</b> → order confirmed (enter deal value).</li>
-        <li><b>Dispatched 🚚</b> → machine sent (enter courier + AWB).</li>
+        <li><b>Sold ✓</b> → order confirmed. <b>A deal value is required</b> to move here; you can also upload the <b>invoice</b> now (optional).</li>
+        <li><b>Dispatched 🚚</b> → machine sent (enter courier + AWB). <b>The invoice is required</b> to dispatch (already done if you uploaded it at Sold).</li>
         <li><b>Delivered ✅</b> → received by customer.</li>
-        <li><b>Lost</b> → didn't convert (still kept in the database).</li>
+        <li><b>Lost</b> → didn't convert. <b>A lost reason is required</b> (price, competitor, no budget, …) so we can learn from it. The lead is still kept in the database and can be reopened.</li>
       </ul>
 
       <h2 class="df-sec" id="h-activity">⑤ Log an activity (the important one)</h2>
       <p>Open a lead → <b>＋ Add update</b>. Pick an <b>Activity type</b>: 📝 Note, ✅ Task, 📞 Call, 📅 Event, 🤝 Meeting, 💬 WhatsApp, ✉️ Email. If you pick <b>Event</b> or <b>Meeting</b>, choose an <b>Event type</b> (Face-to-face meeting, Clinic visit, Demo, Conference/expo, Other).</p>
       <p><b>Two fields are mandatory every time:</b> a <b>Description</b> (what happened / what to do) and the <b>Next task / action date</b>.</p>
+      <p>If you pick <b>📞 Call</b>, also set the <b>Call outcome</b> (Connected, No answer, Busy, …) — it's saved on the timeline. The <b>type</b> of your next action (call back / event / meeting / task) shows with its own icon on the <b>Calendar</b> and in <b>My Day</b>, so you know at a glance what each item is.</p>
       ${ex("logging a call", "You call Dr. Meera. Open her lead → ＋ Add update → Type <b>📞 Call</b> → Description “<i>Explained Celluma, sending brochure on WhatsApp</i>” → Next action date <b>in 3 days</b> → (optionally move stage to <b>Contacted</b>) → Save. The call now shows in her Journey and on the Activity Board.")}
       ${ex("a clinic visit", "Type <b>📅 Event</b> → Event type <b>Clinic visit</b> → Description “<i>Visited clinic, demoed Celluma, decision maker interested</i>” → Next action <b>next Monday</b> → stage <b>Demo done</b> → Save.")}
 
-      <h2 class="df-sec" id="h-sold">⑥ Marking Sold, Dispatched &amp; Delivered</h2>
+      <h2 class="df-sec" id="h-sold">⑥ Marking Sold, Dispatched, Delivered &amp; Lost</h2>
       <ul class="df-list">
-        <li><b>Sold:</b> move stage to <b>Sold</b> → enter the <b>deal value</b> and date.</li>
-        <li><b>Dispatched:</b> move to <b>Dispatched</b> → enter <b>Courier</b>, <b>AWB/tracking</b>, dispatch date and expected delivery. It auto-moves to <b>Delivered</b> on the expected date (you can confirm sooner).</li>
+        <li><b>Sold:</b> move stage to <b>Sold</b> → enter the <b>deal value (required)</b> and date. You can also <b>⬆ Upload invoice</b> here (optional). The deal value can be corrected later from the lead detail's <b>Won amount</b> field.</li>
+        <li><b>Dispatched:</b> move to <b>Dispatched</b> → <b>upload the invoice (required)</b> if not done at Sold, then enter <b>Courier</b>, <b>AWB/tracking</b>, dispatch date and expected delivery. It auto-moves to <b>Delivered</b> on the expected date (you can confirm sooner).</li>
+        <li><b>Lost:</b> move to <b>Lost</b> → pick a <b>lost reason (required)</b> and, if useful, the competitor. It feeds the Lost-reasons report in Analytics.</li>
         <li>After a lead is <b>Sold</b>, any change (dispatch, AWB, etc.) automatically emails the PO / Admin / Calls team.</li>
       </ul>
-      ${ex("closing a deal", "Dr. Meera confirms. Open lead → ＋ Add update → stage <b>Sold ✓</b> → Deal value <b>₹1,20,000</b> → Save. Later, move to <b>Dispatched</b> → Courier <b>DTDC</b>, AWB <b>123456</b> → Save. PO/Admin/Calls get an email automatically.")}
+      ${ex("closing a deal", "Dr. Meera confirms. Open lead → ＋ Add update → stage <b>Sold ✓</b> → Deal value <b>₹1,20,000</b> → (optionally ⬆ Upload invoice) → Save. Later, move to <b>Dispatched</b> → invoice already attached → Courier <b>DTDC</b>, AWB <b>123456</b> → Save. PO/Admin/Calls get an email automatically.")}
 
       <h2 class="df-sec" id="h-contact">⑦ Same customer, another order (multiple pipelines)</h2>
       <p>If an existing customer orders a <b>different product</b>, don't overwrite their lead — open a <b>new pipeline under the same contact</b>. Open the existing lead → <b>＋ New order / pipeline for this contact</b>. Contact details are copied; pick the new product and work it like any lead. In the detail you'll see all of that contact's pipelines, and “show all pipelines” merges their activities.</p>
@@ -7588,15 +7616,15 @@
       <p>The <a class="linkish" data-cv="calendar">Calendar</a> shows each lead's next action date and expected deliveries. Use ◀ ▶ to change month, <b>Today</b> to jump back, and the <b>Owner</b> filter for one person. Below the grid, <b>Overdue actions</b> and the <b>next 21 days</b> are listed — click any item to open the lead.</p>
 
       <h2 class="df-sec" id="h-board">⑩ Activity Board</h2>
-      <p>The <a class="linkish" data-cv="activity">Activity Board</a> lists every logged activity. Filter <b>Logged by</b> a person and <b>Type</b> to review work.</p>
-      ${ex("tracking a salesperson's calls", "To see all of Ashutosh's calls: Activity Board → Logged by <b>Ashutosh</b> → Type <b>📞 Call</b>. You get every call he logged, with the lead, note and date.")}
+      <p>The <a class="linkish" data-cv="activity">Activity Board</a> lists every logged activity. Filter <b>Logged by</b> a person, <b>Type</b>, and <b>When</b> (Today / Yesterday / Last 7 days) to review work — e.g. to check what the team actually did yesterday.</p>
+      ${ex("tracking a salesperson's calls", "To see all of Ashutosh's calls yesterday: Activity Board → Logged by <b>Ashutosh</b> → Type <b>📞 Call</b> → When <b>Yesterday</b>. You get every call he logged, with the lead, note and date.")}
 
       <h2 class="df-sec" id="h-views">⭐ Views — Table, Board &amp; Analytics</h2>
       <p>Top-right of <b>Casovil Sale</b> you can switch how the leads are shown. The search, filters and KPI cards stay active in every view.</p>
       <ul class="df-list">
         <li><b>☰ Table</b> — the classic list. Best for editing owner/stage inline, bulk actions and download/upload.</li>
         <li><b>▦ Board (Kanban)</b> — leads shown as cards in stage columns (New → Delivered). <b>Drag a card into another column to move its stage</b> — it asks for a remark just like the normal stage change, so the move is logged. Click a card to open the full lead.</li>
-        <li><b>📊 Analytics</b> — a read-only dashboard over the leads matching your current filters: totals, win rate, won value, the pipeline funnel, leads by source / state / priority, a per-rep table (leads / won / win %) and a new-leads trend for the last 8 weeks. Tip: filter to one state or owner first and the analytics update to match.</li>
+        <li><b>📊 Analytics</b> — a read-only dashboard over the leads matching your current filters: totals, win rate, <b>Lost count &amp; loss-rate</b>, won value, the pipeline funnel, leads by source / state / priority, a <b>Lost reasons</b> breakdown, a per-rep table (leads / won / win %) and a new-leads trend for the last 8 weeks. Tip: filter to one state or owner first and the analytics update to match.</li>
       </ul>
       ${ex("working the board", "Switch to <b>▦ Board</b>. You see a column of <b>New</b> cards. You call one and it's promising — drag its card into <b>Potential customer</b>, add the remark “<i>checked Instagram, active clinic</i>” and a next-action date. The card moves across and the funnel in Analytics updates.")}
 
@@ -7638,6 +7666,9 @@
         <li><b>A lead “disappeared”.</b> First check the <b>Archived</b> view (it's kept, not deleted). Still missing? Tell the admin — every lead is backed up daily and can be restored from <b>🛟 Backups</b>.</li>
         <li><b>Call &amp; WhatsApp buttons</b> — open any lead; tap 📞 Call (opens your dialer) or 💬 WhatsApp. Call <i>recording</i> isn't available in the dashboard.</li>
         <li><b>Two of us edited together — whose wins?</b> Both are kept; the system merges changes per lead, so nothing is lost.</li>
+        <li><b>The variant list won't let me pick.</b> The Esthemax / Celluma fields are checkbox dropdowns — <b>click them to open</b>, then tick one or more (use the filter box to search). Click outside to close.</li>
+        <li><b>It won't let me move to Sold / Dispatch / Lost.</b> That's by design: <b>Sold</b> needs a deal value, <b>Dispatch</b> needs an invoice uploaded, and <b>Lost</b> needs a reason. Fill the required field and it will save.</li>
+        <li><b>Where do I set the forecast value?</b> Open the lead — <b>Expected value</b>, <b>Expected close date</b> and <b>Probability</b> are in the detail panel (for open leads). They drive the <a class="linkish" data-cv="forecast">📈 Forecast</a> tab.</li>
       </ul>
 
       <p class="muted-note" style="margin-top:20px">Questions or something unclear? Tell the admin and we'll improve this page.</p>`;
