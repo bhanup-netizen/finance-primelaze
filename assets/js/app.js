@@ -12323,14 +12323,48 @@
   const INVENTORY_LINES = [
     { id: "esthemax", label: "Esthemax", ready: true },
     { id: "devices", label: "Machines (Devices)", ready: true, simple: true },
+    { id: "consumables", label: "Device Consumables", ready: true, consumables: true },
     { id: "celluma", label: "Celluma", ready: true, simple: true },
   ];
   const INV_STATUS = ["In stock", "Low stock", "Reorder", "Out of stock"];
+  // "Compatible Device" dropdown options for the consumables line.
+  const CONSUMABLE_DEVICES = ["Bi Axis", "Mileman A", "Cellina Pro", "Magic Pulse", "HIFU Utims", "Exofacial", "Torr RF", "Vossman Compact", "Inno Plus", "General Surgical Items"];
+  // Device consumables stock (from the Consumables Stock recording sheet, 14.11.26).
+  // qty = Quantity in Stock PDY, used = OLD / USED, compat = Compatible Device
+  // (pre-filled only where the item name makes it unambiguous; editable in-app).
+  const CONSUMABLES_SEED = [
+    { name: "MNRF TIPS", qty: 87, used: 0, compat: "" },
+    { name: "INSULATED TIPS", qty: 0, used: 0, compat: "" },
+    { name: "MATRIX TIPS", qty: 15, used: 0, compat: "" },
+    { name: "MATRIX TIPS (OLD BATCH)", qty: 60, used: 0, compat: "" },
+    { name: "MATRIX TIPS (ROUND)", qty: 100, used: 0, compat: "" },
+    { name: "21 G CANNULAS", qty: 110, used: 0, compat: "General Surgical Items" },
+    { name: "23 G CANNULAS", qty: 14, used: 23, compat: "General Surgical Items" },
+    { name: "19 G CANNULAS", qty: 0, used: 0, compat: "General Surgical Items" },
+    { name: "33 G CANNULAS", qty: 26, used: 0, compat: "General Surgical Items" },
+    { name: "15 G CANNULAS", qty: 1, used: 0, compat: "General Surgical Items" },
+    { name: "VT PROBE", qty: 16, used: 2, compat: "" },
+    { name: "VT EARTH PATCH", qty: 15, used: 0, compat: "" },
+    { name: "RF EARTH PATCH", qty: 21, used: 0, compat: "Torr RF" },
+    { name: "RF PEN", qty: 0, used: 1, compat: "Torr RF" },
+    { name: "RF PEN CABLE", qty: 0, used: 2, compat: "Torr RF" },
+    { name: "RF EARTH PATCH CABLE", qty: 0, used: 0, compat: "Torr RF" },
+    { name: "RF DUAL CABLE", qty: 0, used: 1, compat: "Torr RF" },
+    { name: "VT EARTH PATCH CABLE", qty: 0, used: 0, compat: "" },
+    { name: "VT PROBE CABLE", qty: 0, used: 0, compat: "" },
+    { name: "MAGIC PULSE DOCTORS GOGGLES", qty: 6, used: 0, compat: "Magic Pulse" },
+    { name: "MAGIC PULSE EYEWEAR", qty: 8, used: 0, compat: "Magic Pulse" },
+    { name: "VOSSMAN BLEND DOCTORS GOGGLES", qty: 3, used: 0, compat: "Vossman Compact" },
+    { name: "VOSSMAN BLEND EYEWEAR", qty: 0, used: 0, compat: "Vossman Compact" },
+    { name: "BI AXIS DOCTORS GOGGLES", qty: 0, used: 0, compat: "Bi Axis" },
+    { name: "BI AXIS CARBON PASTE", qty: 5, used: 0, compat: "Bi Axis" },
+  ];
+  const CONSUMABLES_SEED_MAP = {}; CONSUMABLES_SEED.forEach((c) => (CONSUMABLES_SEED_MAP[c.name] = c));
   let inventoryLine = "esthemax";
 
   // ---- Admin-managed inventory items (add / edit / delete), saved for everyone ----
-  const invAdds = { esthemax: [], devices: [], celluma: [] };     // custom items
-  const invRemovals = { esthemax: [], devices: [], celluma: [] }; // hidden base items (by name)
+  const invAdds = { esthemax: [], devices: [], celluma: [], consumables: [] };     // custom items
+  const invRemovals = { esthemax: [], devices: [], celluma: [], consumables: [] }; // hidden base items (by name)
   const esthOverrides = {};                                       // base Esthemax field edits, by name
   let esthBaseItems = null;                                       // pristine Esthemax item list
 
@@ -12369,6 +12403,7 @@
   }
   // Base item-name list for a simple line (Celluma / Devices).
   function invSimpleBase(lineId) {
+    if (lineId === "consumables") return CONSUMABLES_SEED.map((c) => c.name);
     return lineId === "celluma"
       ? (D.costs && D.costs.celluma ? D.costs.celluma.map((c) => c.model).filter(Boolean) : [])
       : deviceNames();
@@ -12565,6 +12600,7 @@
       `<option value="${l.id}" ${l.id === inventoryLine ? "selected" : ""}>${esc(l.label)}${l.ready ? "" : " — no data yet"}</option>`).join("");
     const line = INVENTORY_LINES.find((l) => l.id === inventoryLine) || INVENTORY_LINES[0];
 
+    if (line.consumables) return renderConsumablesInventory(line);
     if (line.simple) return renderSimpleInventory(line);
 
     setTimeout(() => {
@@ -12864,6 +12900,67 @@
         <tbody id="simpleInvBody">${simpleInvRows(items, data, orderState.q, admin)}</tbody>
       </table></div>
       ${admin ? `<div class="muted-note"><b>Pondy</b> + <b>Zirakpur</b> = current stock in hand at each office (Total adds them). <b>Dmg·Py / Dmg·Zk</b> = damaged (non-usable) at each office; <b>Usable</b> = Total − Non-usable. Use <b>＋ Add</b>, or <b>Edit</b> / <b>Delete</b> per row. Saved for everyone.</div>` : ""}`;
+  }
+
+  // ---- Device Consumables: Product · Quantity in Stock · Old/Used · Compatible Device ----
+  function consumablesRows(items, data, q, admin) {
+    const val = (d, seed, f, sf) => (d[f] != null && d[f] !== "") ? d[f] : (seed && seed[sf] != null ? seed[sf] : "");
+    return items.filter((n) => !q || n.toLowerCase().includes(q)).map((name) => {
+      const d = data[name] || {}, seed = CONSUMABLES_SEED_MAP[name] || {};
+      const qty = val(d, seed, "qty", "qty");
+      const used = val(d, seed, "oldUsed", "used");
+      const compat = (d.compat != null) ? d.compat : (seed.compat || "");
+      if (!admin) {
+        return `<tr><td class="t-name">${esc(name)}</td><td class="num">${qty === "" ? "—" : esc(qty)}</td><td class="num">${used === "" ? "—" : esc(used)}</td><td>${compat ? esc(compat) : "—"}</td></tr>`;
+      }
+      const numIn = (f, v) => `<input class="cons-in" data-item="${esc(name)}" data-f="${f}" type="number" min="0" value="${esc(v === "" ? "" : v)}" style="max-width:70px" placeholder="0">`;
+      const compatSel = `<select class="cons-in demo-select" data-item="${esc(name)}" data-f="compat" style="max-width:190px"><option value="">—</option>${CONSUMABLE_DEVICES.map((x) => `<option${compat === x ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>`;
+      return `<tr><td class="t-name">${esc(name)}</td>
+        <td class="num">${numIn("qty", qty)}</td>
+        <td class="num">${numIn("oldUsed", used)}</td>
+        <td>${compatSel}</td>
+        <td style="white-space:nowrap"><button class="ghost-btn cons-edit" data-item="${esc(name)}">Edit</button> <button class="ghost-btn danger cons-del" data-item="${esc(name)}">Delete</button></td></tr>`;
+    }).join("") || `<tr><td colspan="${admin ? 5 : 4}" class="empty">No items.</td></tr>`;
+  }
+  function wireConsumables() {
+    const admin = isAdmin();
+    const data = orderState.lineData.consumables = orderState.lineData.consumables || {};
+    document.querySelectorAll(".cons-in").forEach((el) => {
+      el.onchange = () => {
+        const rec = data[el.dataset.item] = data[el.dataset.item] || {};
+        const numF = (el.dataset.f === "qty" || el.dataset.f === "oldUsed");
+        rec[el.dataset.f] = numF ? (el.value === "" ? "" : Math.max(0, parseFloat(el.value) || 0)) : el.value;
+        invDirty = true; saveEdits(`Consumable · ${el.dataset.item} · ${el.dataset.f} → ${el.value || "—"}`);
+      };
+    });
+    const addBtn = document.getElementById("invAddBtn");
+    if (addBtn) addBtn.onclick = () => invAddSimple("consumables");
+    document.querySelectorAll(".cons-edit").forEach((b) => (b.onclick = () => invEditSimple("consumables", b.dataset.item)));
+    document.querySelectorAll(".cons-del").forEach((b) => (b.onclick = () => invDeleteSimple("consumables", b.dataset.item)));
+  }
+  function renderConsumablesInventory(line) {
+    const admin = isAdmin();
+    const items = invSimpleItems(line.id);
+    const data = orderState.lineData[line.id] = orderState.lineData[line.id] || {};
+    const lineOpts = INVENTORY_LINES.map((l) => `<option value="${l.id}"${l.id === inventoryLine ? " selected" : ""}>${esc(l.label)}</option>`).join("");
+    setTimeout(() => {
+      const lineSel = document.getElementById("invLine");
+      if (lineSel) lineSel.onchange = (e) => { inventoryLine = e.target.value; renderTab("order"); };
+      const s = document.getElementById("ordSearch");
+      if (s) s.oninput = (e) => { orderState.q = e.target.value.toLowerCase(); const b = document.getElementById("consInvBody"); if (b) { b.innerHTML = consumablesRows(invSimpleItems(line.id), data, orderState.q, admin); wireConsumables(); } };
+      wireConsumables();
+    }, 0);
+    return `
+      <div class="section-head"><h1>Inventory — ${esc(line.label)}</h1><p>Device consumables stock (from the Consumables Stock recording sheet). Set the <b>Compatible Device</b> for each item from the dropdown. ${admin ? "Editable — saves for everyone." : "Read-only."}</p></div>
+      <div class="controls">
+        <label class="inv-line"><span>Inventory line</span><select id="invLine" class="select">${lineOpts}</select></label>
+      </div>
+      <div class="controls"><input id="ordSearch" class="search" type="search" placeholder="Search consumable…" value="${esc(orderState.q)}">${admin ? `<button id="invAddBtn" class="dl-btn" type="button">＋ Add consumable</button>` : ""}</div>
+      <div class="table-wrap"><table class="inv-table">
+        <thead><tr><th>Product</th><th class="num">Quantity in Stock</th><th class="num">Old / Used</th><th>Compatible Device</th>${admin ? "<th></th>" : ""}</tr></thead>
+        <tbody id="consInvBody">${consumablesRows(items, data, orderState.q, admin)}</tbody>
+      </table></div>
+      ${admin ? `<div class="muted-note"><b>Quantity in Stock</b> &amp; <b>Old / Used</b> are per-item counts; <b>Compatible Device</b> is the machine the consumable is used with. Use <b>＋ Add consumable</b>, or <b>Edit</b> / <b>Delete</b> per row. Saved for everyone.</div>` : ""}`;
   }
 
   // Model backing the movement dialog for an Esthemax item (index i, name nm).
@@ -13523,7 +13620,7 @@
       // Rebuild admin-managed inventory items BEFORE stock/eta (which key by name→index).
       // Skip while this session has unsaved inventory edits so a live refresh
       // can't drop a just-added item before it's saved (merge-on-save reconciles).
-      if (!invDirty) ["esthemax", "devices", "celluma"].forEach((k) => {
+      if (!invDirty) ["esthemax", "devices", "celluma", "consumables"].forEach((k) => {
         if (e.invAdds && Array.isArray(e.invAdds[k])) invAdds[k] = e.invAdds[k];
         if (e.invRemovals && Array.isArray(e.invRemovals[k])) invRemovals[k] = e.invRemovals[k];
       });
