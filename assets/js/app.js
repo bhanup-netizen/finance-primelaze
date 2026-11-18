@@ -165,6 +165,7 @@
     // Admin & Logistics
     { id: "registration", label: "Registration", group: "Admin & Logistics", render: renderReg },
     { id: "order", label: "Inventory", group: "Admin & Logistics", render: renderOrder },
+    { id: "assets", label: "Asset Register", group: "Admin & Logistics", render: renderAssets },
     { id: "demo", label: "Demo Machines", group: "Admin & Logistics", render: renderDemo },
     { id: "demoflow", label: "Demo Process", group: "Admin & Logistics", render: renderDemoFlow },
     { id: "challan", label: "Delivery Challan", group: "Admin & Logistics", render: renderChallan },
@@ -11638,6 +11639,166 @@
         ${corpCanEdit() ? `<button id="corpAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add client</button>` : ""}
       </div>
       <div class="table-wrap" style="margin-top:10px"><table class="cov-table"><thead><tr><th>Client</th><th>Type</th><th>Contact</th><th>Location</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody id="corpMain"></tbody></table></div>`;
+  }
+
+  /* ================= ASSET REGISTER (Admin & Logistics) =================
+     One document per physical asset in the Firestore "assets" collection.
+     Seeded once from window.ASSET_SEED, then maintained in-app. */
+  function assetStore() { return db ? db.collection("assets") : null; }
+  let localAssets = [], assetCache = [], assetSeeding = false;
+  let assetFilter = { category: "", status: "", location: "", q: "" };
+  const ASSET_CATEGORIES = ["Laptop", "Desktop", "Mobile Phone", "SIM Card", "Tablet", "Monitor", "Printer / Scanner", "Accessory", "Other Electronics"];
+  const ASSET_STATUSES = ["In Use", "Not In Use", "In Office (Spare)", "Under Repair", "To Verify", "Disconnected", "Lost / Missing", "Retired / Scrapped"];
+  const ASSET_CONDITIONS = ["New", "Good", "Fair", "Damaged", "Not Working", "Missing", "Not Checked"];
+  const ASSET_LOCATIONS = ["Zirakpur Office", "Pondicherry Office", "Mumbai", "Chandigarh / Punjab", "Tamil Nadu (Field)", "Hyderabad", "Field / Remote", "Repair Centre", "To Confirm"];
+  const ASSET_CARRIERS = ["Airtel", "Jio", "Vi", "BSNL"];
+  const assetCanEdit = () => roleIsAdmin() || isSuperAdmin() || canEditPage("assets") || hasAnyEditGrant();
+  const assetStatusBadge = (s) => {
+    const m = { "In Use": "b-good", "In Office (Spare)": "b-info", "Not In Use": "b-neutral", "Under Repair": "b-warn", "To Verify": "b-warn", "Disconnected": "b-bad", "Lost / Missing": "b-bad", "Retired / Scrapped": "b-neutral" };
+    return `<span class="badge ${m[s] || "b-neutral"}">${esc(s || "—")}</span>`;
+  };
+  const selOpts = (list, cur, allowOther) => (allowOther && cur && list.indexOf(cur) < 0 ? [cur] : []).concat(list).map((x) => `<option${x === cur ? " selected" : ""}>${esc(x)}</option>`).join("");
+  async function loadAssets() {
+    let list = [];
+    try {
+      const store = assetStore();
+      if (store) {
+        const snap = await store.get();
+        let hasMeta = false;
+        snap.forEach((d) => { if (d.id === "__meta") { hasMeta = true; return; } list.push({ id: d.id, ...d.data() }); });
+        // One-time seed from the uploaded Asset Register (admins/editors only).
+        if (!hasMeta && list.length === 0 && !assetSeeding && assetCanEdit() && Array.isArray(window.ASSET_SEED) && window.ASSET_SEED.length) {
+          assetSeeding = true;
+          try {
+            const now = Date.now(), by = (sessionUser && sessionUser.email) || "";
+            const batch = db.batch();
+            window.ASSET_SEED.forEach((a) => { const id = String(a.assetId || "").trim() || ("AST-" + Math.random().toString(36).slice(2, 8)); batch.set(store.doc(id), Object.assign({}, a, { createdAt: now, createdBy: by })); });
+            batch.set(store.doc("__meta"), { seeded: true, at: now, by });
+            await batch.commit();
+            const s2 = await store.get(); list = []; s2.forEach((d) => { if (d.id !== "__meta") list.push({ id: d.id, ...d.data() }); });
+          } catch (se) { console.warn("asset seed failed", se); }
+          assetSeeding = false;
+        }
+      } else list = localAssets.slice();
+    } catch (e) { console.warn("assets load failed", e); list = localAssets.slice(); }
+    assetCache = list;
+    if (document.getElementById("assetMain")) renderAssetList();
+  }
+  async function assetDelete(id) {
+    if (!window.confirm("Remove this asset from the register?")) return;
+    try { const store = assetStore(); if (store) await store.doc(id).delete(); else localAssets = localAssets.filter((x) => x.id !== id); } catch (e) { console.warn(e); }
+    loadAssets();
+  }
+  function assetModal(existing) {
+    const a = existing || { status: "In Use", condition: "Not Checked", location: "To Confirm" };
+    const isEdit = !!(existing && existing.id);
+    const wrap = document.createElement("div"); wrap.className = "lead-modal";
+    const F = (id, label, val, wide) => `<label class="${wide ? "lead-form-wide" : ""}">${label}<input id="${id}" value="${esc(val || "")}"></label>`;
+    const S = (id, label, list, cur) => `<label>${label}<select id="${id}"><option value="">—</option>${selOpts(list, cur || "", true)}</select></label>`;
+    wrap.innerHTML = `<div class="lead-modal-card"><h3>${isEdit ? "Edit asset" : "Add asset"}</h3>
+      <div class="lead-form-grid">
+        ${F("asId", "Asset ID <span class='lead-req'>*</span>", a.assetId, false)}
+        ${S("asCat", "Category", ASSET_CATEGORIES, a.category)}
+        ${F("asName", "Asset Name", a.name, true)}
+        ${F("asModel", "Brand / Model", a.model, true)}
+        ${F("asSerial", "Serial No. / IMEI", a.serial)}
+        ${F("asMobile", "Mobile No. (SIM)", a.mobile)}
+        ${S("asCarrier", "Carrier", ASSET_CARRIERS, a.carrier)}
+        ${F("asAssigned", "Assigned To", a.assignedTo)}
+        ${F("asEmp", "Employee Code", a.empCode)}
+        ${F("asDept", "Department / Designation", a.dept)}
+        ${S("asLoc", "Location", ASSET_LOCATIONS, a.location)}
+        ${S("asStatus", "Status", ASSET_STATUSES, a.status)}
+        ${S("asCond", "Condition", ASSET_CONDITIONS, a.condition)}
+        <label>Issue Date<input id="asIssue" type="date" value="${esc(a.issueDate || "")}"></label>
+        <label>Last Verified On<input id="asVerified" type="date" value="${esc(a.lastVerified || "")}"></label>
+        ${F("asRemarks", "Remarks", a.remarks, true)}
+      </div>
+      <div class="lead-modal-actions"><button type="button" class="ghost-btn" id="asCancel">Cancel</button><button type="button" class="dl-btn" id="asSave">${isEdit ? "Save" : "Add"}</button></div></div>`;
+    document.body.appendChild(wrap); const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    document.getElementById("asCancel").onclick = close;
+    document.getElementById("asSave").onclick = async () => {
+      const g = (id) => (document.getElementById(id).value || "").trim();
+      const assetId = g("asId");
+      if (!assetId) { toast("Enter an Asset ID", "warn"); return; }
+      // Asset ID must be unique across the register.
+      const dup = assetCache.find((x) => (x.assetId || "").toLowerCase() === assetId.toLowerCase() && x.id !== (existing && existing.id));
+      if (dup) { toast("That Asset ID already exists", "warn"); return; }
+      const data = {
+        assetId, category: g("asCat"), name: g("asName"), model: g("asModel"), serial: g("asSerial"),
+        mobile: g("asMobile"), carrier: g("asCarrier"), assignedTo: g("asAssigned"), empCode: g("asEmp"),
+        dept: g("asDept"), location: g("asLoc"), status: g("asStatus"), condition: g("asCond"),
+        issueDate: g("asIssue"), lastVerified: g("asVerified"), remarks: g("asRemarks"),
+        updatedAt: Date.now(), updatedBy: (sessionUser && sessionUser.email) || "",
+      };
+      try {
+        const store = assetStore();
+        if (existing && existing.id) { if (store) await store.doc(existing.id).set(data, { merge: true }); else { const i = localAssets.findIndex((x) => x.id === existing.id); if (i >= 0) localAssets[i] = Object.assign(localAssets[i], data); } }
+        else { data.createdAt = Date.now(); if (store) await store.doc(assetId).set(data); else { data.id = assetId; localAssets.push(data); } }
+        close(); toast("✓ Saved"); loadAssets();
+      } catch (e) { console.warn("asset save failed", e); toast("Save failed", "warn"); }
+    };
+  }
+  function renderAssetList() {
+    const main = document.getElementById("assetMain"); if (!main) return;
+    const ed = assetCanEdit();
+    const q = (assetFilter.q || "").toLowerCase();
+    const rows = assetCache.slice()
+      .filter((a) => !assetFilter.category || a.category === assetFilter.category)
+      .filter((a) => !assetFilter.status || a.status === assetFilter.status)
+      .filter((a) => !assetFilter.location || a.location === assetFilter.location)
+      .filter((a) => !q || [a.assetId, a.name, a.model, a.serial, a.mobile, a.assignedTo, a.empCode, a.dept, a.remarks].join(" ").toLowerCase().includes(q))
+      .sort((x, y) => (x.assetId || "").localeCompare(y.assetId || "", undefined, { numeric: true }));
+    const cnt = document.getElementById("assetCount"); if (cnt) cnt.textContent = rows.length + (rows.length !== assetCache.length ? " of " + assetCache.length : "") + " asset" + (rows.length === 1 ? "" : "s");
+    main.innerHTML = rows.length ? rows.map((a) => `<tr>
+      <td><b>${esc(a.assetId || "—")}</b>${a.name ? `<div class="tk-notes">${esc(a.name)}</div>` : ""}</td>
+      <td>${esc(a.category || "—")}</td>
+      <td>${esc(a.model || "—")}${(a.serial || a.mobile) ? `<div class="tk-notes">${esc([a.serial, a.mobile && ("📱 " + a.mobile + (a.carrier ? " · " + a.carrier : ""))].filter(Boolean).join(" · "))}</div>` : ""}</td>
+      <td>${esc(a.assignedTo || "—")}${(a.empCode || a.dept) ? `<div class="tk-notes">${esc([a.empCode, a.dept].filter(Boolean).join(" · "))}</div>` : ""}</td>
+      <td>${esc(a.location || "—")}</td>
+      <td>${assetStatusBadge(a.status)}</td>
+      <td>${esc(a.condition || "—")}</td>
+      <td class="tk-act">${ed ? `<button class="linkish as-edit" data-id="${esc(a.id)}">Edit</button> <button class="linkish as-del" data-id="${esc(a.id)}" title="Remove">✕</button>` : ""}</td>
+    </tr>`).join("") : `<tr><td colspan="8" class="empty">No assets match.</td></tr>`;
+    main.querySelectorAll(".as-edit").forEach((b) => b.onclick = () => { const a = assetCache.find((x) => x.id === b.dataset.id); if (a) assetModal(a); });
+    main.querySelectorAll(".as-del").forEach((b) => b.onclick = () => assetDelete(b.dataset.id));
+  }
+  function renderAssets() {
+    if (!canSeePage("assets")) return `<div class="section-head"><h1>💻 Asset Register</h1><p>You don't have access to this page.</p></div>`;
+    const ed = assetCanEdit();
+    setTimeout(() => {
+      const ab = document.getElementById("assetAdd"); if (ab) ab.onclick = () => assetModal(null);
+      const wire = (id, k) => { const el = document.getElementById(id); if (el) el.onchange = (e) => { assetFilter[k] = e.target.value; renderAssetList(); }; };
+      wire("asFCat", "category"); wire("asFStatus", "status"); wire("asFLoc", "location");
+      const s = document.getElementById("asSearch"); if (s) s.oninput = (e) => { assetFilter.q = e.target.value; renderAssetList(); };
+      const cl = document.getElementById("asClear"); if (cl) cl.onclick = () => { assetFilter = { category: "", status: "", location: "", q: "" }; renderTab("assets"); };
+      loadAssets();
+    }, 0);
+    const byCat = {}; const byStat = {};
+    assetCache.forEach((a) => { byCat[a.category || "—"] = (byCat[a.category || "—"] || 0) + 1; byStat[a.status || "—"] = (byStat[a.status || "—"] || 0) + 1; });
+    const kpi = (v, l) => `<div class="stat"><b>${v}</b><span>${esc(l)}</span></div>`;
+    const attention = assetCache.filter((a) => a.status === "To Verify" || a.condition === "Missing" || a.condition === "Not Checked" || a.condition === "Not Working" || a.condition === "Damaged").length;
+    return `
+      <div class="section-head"><h1>💻 Asset Register</h1><p>Company IT assets — laptops, desktops, phones, SIMs and more. ${ed ? "Editable — saves for everyone." : "Read-only."}</p></div>
+      <div class="hq-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:8px 0 14px">
+        ${kpi(assetCache.length, "Total assets")}
+        ${kpi(byStat["In Use"] || 0, "In Use")}
+        ${kpi(byCat["Laptop"] || 0, "Laptops")}
+        ${kpi(byCat["Mobile Phone"] || 0, "Phones")}
+        ${kpi(byCat["SIM Card"] || 0, "SIMs")}
+        ${kpi(attention, "Need attention")}
+      </div>
+      <div class="controls" style="align-items:center;flex-wrap:wrap;gap:8px">
+        <input id="asSearch" class="search" type="search" placeholder="Search ID, name, serial, phone, person…" value="${esc(assetFilter.q)}" style="min-width:220px">
+        <label class="ord-field"><span>Category</span><select id="asFCat" class="select"><option value="">All</option>${ASSET_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === assetFilter.category ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Status</span><select id="asFStatus" class="select"><option value="">All</option>${ASSET_STATUSES.map((c) => `<option value="${esc(c)}"${c === assetFilter.status ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+        <label class="ord-field"><span>Location</span><select id="asFLoc" class="select"><option value="">All</option>${ASSET_LOCATIONS.map((c) => `<option value="${esc(c)}"${c === assetFilter.location ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+        ${(assetFilter.category || assetFilter.status || assetFilter.location || assetFilter.q) ? `<button id="asClear" class="ghost-btn" type="button">✕ Clear</button>` : ""}
+        <span id="assetCount" class="muted-note"></span>
+        ${ed ? `<button id="assetAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add asset</button>` : ""}
+      </div>
+      <div class="table-wrap" style="margin-top:10px"><table class="cov-table"><thead><tr><th>Asset ID</th><th>Category</th><th>Brand / Model</th><th>Assigned To</th><th>Location</th><th>Status</th><th>Condition</th><th></th></tr></thead><tbody id="assetMain"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody></table></div>`;
   }
 
   /* ================= TASKS — Bigin-style task board =================
