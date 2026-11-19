@@ -11645,7 +11645,7 @@
      One document per physical asset in the Firestore "assets" collection.
      Seeded once from window.ASSET_SEED, then maintained in-app. */
   function assetStore() { return db ? db.collection("assets") : null; }
-  let localAssets = [], assetCache = [], assetSeeding = false;
+  let localAssets = [], assetCache = [], assetSeeding = false, assetUiHydrated = false;
   let assetFilter = { status: "", location: "", q: "" };
   let assetView = "all"; // category sub-tab: all | Laptop | Desktop | Mobile Phone | SIM Card | __other
   const ASSET_PRIMARY_CATS = ["Laptop", "Desktop", "Mobile Phone", "SIM Card"];
@@ -11686,7 +11686,13 @@
       } else list = localAssets.slice();
     } catch (e) { console.warn("assets load failed", e); list = localAssets.slice(); }
     assetCache = list;
-    if (document.getElementById("assetMain")) renderAssetList();
+    if (document.getElementById("assetMain")) {
+      // First time data arrives, re-render the whole view so the KPI tiles and
+      // the category tab counts (built synchronously, when the cache was still
+      // empty) reflect the loaded assets — then just refresh the list after.
+      if (!assetUiHydrated && list.length) { assetUiHydrated = true; renderTab("assets"); }
+      else renderAssetList();
+    }
   }
   async function assetDelete(id) {
     if (!window.confirm("Remove this asset from the register?")) return;
@@ -11791,7 +11797,8 @@
     const attention = assetCache.filter((a) => a.status === "To Verify" || a.condition === "Missing" || a.condition === "Not Checked" || a.condition === "Not Working" || a.condition === "Damaged").length;
     // Category sub-tabs (hide a tab with no items, except All).
     const SEGS = [["all", "🗂 All"], ["Laptop", "💻 Laptops"], ["Desktop", "🖥 Desktops"], ["Mobile Phone", "📱 Mobiles"], ["SIM Card", "📶 SIMs"], ["__other", "🧩 Other"]];
-    const segBar = `<div class="seg casovil-seg" style="margin:4px 0 12px;flex-wrap:wrap">${SEGS.filter(([k]) => k === "all" || assetViewCount(k) > 0).map(([k, l]) => `<button type="button" data-av="${esc(k)}" class="${assetView === k ? "active" : ""}">${l} <span class="t-muted">${assetViewCount(k)}</span></button>`).join("")}</div>`;
+    // Always show the main category tabs; show "Other" only if it has items.
+    const segBar = `<div class="seg casovil-seg" style="margin:4px 0 12px;flex-wrap:wrap">${SEGS.filter(([k]) => k !== "__other" || assetViewCount("__other") > 0).map(([k, l]) => `<button type="button" data-av="${esc(k)}" class="${assetView === k ? "active" : ""}">${l} <span class="t-muted">${assetViewCount(k)}</span></button>`).join("")}</div>`;
     return `
       <div class="section-head"><h1>💻 Asset Register</h1><p>Company IT assets — laptops, desktops, phones, SIMs and more. Use the tabs to switch category. ${ed ? "Editable — saves for everyone." : "Read-only."}</p></div>
       <div class="hq-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:8px 0 14px">
