@@ -11646,7 +11646,11 @@
      Seeded once from window.ASSET_SEED, then maintained in-app. */
   function assetStore() { return db ? db.collection("assets") : null; }
   let localAssets = [], assetCache = [], assetSeeding = false;
-  let assetFilter = { category: "", status: "", location: "", q: "" };
+  let assetFilter = { status: "", location: "", q: "" };
+  let assetView = "all"; // category sub-tab: all | Laptop | Desktop | Mobile Phone | SIM Card | __other
+  const ASSET_PRIMARY_CATS = ["Laptop", "Desktop", "Mobile Phone", "SIM Card"];
+  const assetInView = (a) => assetView === "all" ? true : assetView === "__other" ? ASSET_PRIMARY_CATS.indexOf(a.category) < 0 : a.category === assetView;
+  const assetViewCount = (v) => assetCache.filter((a) => v === "all" ? true : v === "__other" ? ASSET_PRIMARY_CATS.indexOf(a.category) < 0 : a.category === v).length;
   const ASSET_CATEGORIES = ["Laptop", "Desktop", "Mobile Phone", "SIM Card", "Tablet", "Monitor", "Printer / Scanner", "Accessory", "Other Electronics"];
   const ASSET_STATUSES = ["In Use", "Not In Use", "In Office (Spare)", "Under Repair", "To Verify", "Disconnected", "Lost / Missing", "Retired / Scrapped"];
   const ASSET_CONDITIONS = ["New", "Good", "Fair", "Damaged", "Not Working", "Missing", "Not Checked"];
@@ -11745,7 +11749,7 @@
     const ed = assetCanEdit();
     const q = (assetFilter.q || "").toLowerCase();
     const rows = assetCache.slice()
-      .filter((a) => !assetFilter.category || a.category === assetFilter.category)
+      .filter(assetInView)
       .filter((a) => !assetFilter.status || a.status === assetFilter.status)
       .filter((a) => !assetFilter.location || a.location === assetFilter.location)
       .filter((a) => !q || [a.assetId, a.name, a.model, a.serial, a.mobile, a.assignedTo, a.empCode, a.dept, a.remarks].join(" ").toLowerCase().includes(q))
@@ -11769,32 +11773,41 @@
     const ed = assetCanEdit();
     setTimeout(() => {
       const ab = document.getElementById("assetAdd"); if (ab) ab.onclick = () => assetModal(null);
+      // Category sub-tabs.
+      document.querySelectorAll("#view [data-av]").forEach((b) => (b.onclick = () => {
+        assetView = b.dataset.av;
+        document.querySelectorAll("#view [data-av]").forEach((x) => x.classList.toggle("active", x.dataset.av === assetView));
+        renderAssetList();
+      }));
       const wire = (id, k) => { const el = document.getElementById(id); if (el) el.onchange = (e) => { assetFilter[k] = e.target.value; renderAssetList(); }; };
-      wire("asFCat", "category"); wire("asFStatus", "status"); wire("asFLoc", "location");
+      wire("asFStatus", "status"); wire("asFLoc", "location");
       const s = document.getElementById("asSearch"); if (s) s.oninput = (e) => { assetFilter.q = e.target.value; renderAssetList(); };
-      const cl = document.getElementById("asClear"); if (cl) cl.onclick = () => { assetFilter = { category: "", status: "", location: "", q: "" }; renderTab("assets"); };
+      const cl = document.getElementById("asClear"); if (cl) cl.onclick = () => { assetFilter = { status: "", location: "", q: "" }; renderAssetList(); renderTab("assets"); };
       loadAssets();
     }, 0);
-    const byCat = {}; const byStat = {};
-    assetCache.forEach((a) => { byCat[a.category || "—"] = (byCat[a.category || "—"] || 0) + 1; byStat[a.status || "—"] = (byStat[a.status || "—"] || 0) + 1; });
+    const byStat = {};
+    assetCache.forEach((a) => { byStat[a.status || "—"] = (byStat[a.status || "—"] || 0) + 1; });
     const kpi = (v, l) => `<div class="stat"><b>${v}</b><span>${esc(l)}</span></div>`;
     const attention = assetCache.filter((a) => a.status === "To Verify" || a.condition === "Missing" || a.condition === "Not Checked" || a.condition === "Not Working" || a.condition === "Damaged").length;
+    // Category sub-tabs (hide a tab with no items, except All).
+    const SEGS = [["all", "🗂 All"], ["Laptop", "💻 Laptops"], ["Desktop", "🖥 Desktops"], ["Mobile Phone", "📱 Mobiles"], ["SIM Card", "📶 SIMs"], ["__other", "🧩 Other"]];
+    const segBar = `<div class="seg casovil-seg" style="margin:4px 0 12px;flex-wrap:wrap">${SEGS.filter(([k]) => k === "all" || assetViewCount(k) > 0).map(([k, l]) => `<button type="button" data-av="${esc(k)}" class="${assetView === k ? "active" : ""}">${l} <span class="t-muted">${assetViewCount(k)}</span></button>`).join("")}</div>`;
     return `
-      <div class="section-head"><h1>💻 Asset Register</h1><p>Company IT assets — laptops, desktops, phones, SIMs and more. ${ed ? "Editable — saves for everyone." : "Read-only."}</p></div>
+      <div class="section-head"><h1>💻 Asset Register</h1><p>Company IT assets — laptops, desktops, phones, SIMs and more. Use the tabs to switch category. ${ed ? "Editable — saves for everyone." : "Read-only."}</p></div>
       <div class="hq-metrics" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:8px 0 14px">
         ${kpi(assetCache.length, "Total assets")}
         ${kpi(byStat["In Use"] || 0, "In Use")}
-        ${kpi(byCat["Laptop"] || 0, "Laptops")}
-        ${kpi(byCat["Mobile Phone"] || 0, "Phones")}
-        ${kpi(byCat["SIM Card"] || 0, "SIMs")}
+        ${kpi(assetViewCount("Laptop"), "Laptops")}
+        ${kpi(assetViewCount("Mobile Phone"), "Phones")}
+        ${kpi(assetViewCount("SIM Card"), "SIMs")}
         ${kpi(attention, "Need attention")}
       </div>
+      ${segBar}
       <div class="controls" style="align-items:center;flex-wrap:wrap;gap:8px">
         <input id="asSearch" class="search" type="search" placeholder="Search ID, name, serial, phone, person…" value="${esc(assetFilter.q)}" style="min-width:220px">
-        <label class="ord-field"><span>Category</span><select id="asFCat" class="select"><option value="">All</option>${ASSET_CATEGORIES.map((c) => `<option value="${esc(c)}"${c === assetFilter.category ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Status</span><select id="asFStatus" class="select"><option value="">All</option>${ASSET_STATUSES.map((c) => `<option value="${esc(c)}"${c === assetFilter.status ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
         <label class="ord-field"><span>Location</span><select id="asFLoc" class="select"><option value="">All</option>${ASSET_LOCATIONS.map((c) => `<option value="${esc(c)}"${c === assetFilter.location ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
-        ${(assetFilter.category || assetFilter.status || assetFilter.location || assetFilter.q) ? `<button id="asClear" class="ghost-btn" type="button">✕ Clear</button>` : ""}
+        ${(assetFilter.status || assetFilter.location || assetFilter.q) ? `<button id="asClear" class="ghost-btn" type="button">✕ Clear</button>` : ""}
         <span id="assetCount" class="muted-note"></span>
         ${ed ? `<button id="assetAdd" class="dl-btn" type="button" style="margin-left:auto">＋ Add asset</button>` : ""}
       </div>
